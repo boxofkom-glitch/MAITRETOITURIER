@@ -18,7 +18,7 @@ const CONSERVER_JUSTIF = "Le contrôle visuel renseigné indique un bon état. A
 const CONSERVER_OBJECTIF = "préserver les éléments en état de service et éviter des travaux sans justification constatée.";
 
 function freshPoint(){
-  return { etat:"Non contrôlé", observation:"", decision:"Contrôle complémentaire", pourquoi:"", travaux:"", photos:0 };
+  return { etat:"Non contrôlé", observation:"", decision:"Contrôle complémentaire", pourquoi:"", travaux:"", photos:[] };
 }
 function freshDiagnostic(){
   const points = {};
@@ -39,7 +39,7 @@ function claireDiagnostic(){
     decision:"Réparer",
     pourquoi:"Le désordre décrit est localisé. Une reprise ciblée est proposée ; aucun constat documenté ne justifie une rénovation complète de la couverture.",
     travaux:"Remplacer les éléments fissurés identifiés et contrôler les raccords de la zone concernée.",
-    photos:2
+    photos:[{name:"photo-1.jpg"},{name:"photo-2.jpg"}]
   };
   d.points["Étanchéité"] = {
     etat:"Défaut constaté",
@@ -47,7 +47,7 @@ function claireDiagnostic(){
     decision:"Contrôle complémentaire",
     pourquoi:"L’origine exacte du passage d’eau doit être confirmée avant de définir la réparation.",
     travaux:"Contrôler le raccord accessible et compléter les observations avant chiffrage.",
-    photos:1
+    photos:[{name:"photo-1.jpg"}]
   };
   POINTS.forEach(p=>{
     if(p==="Couverture et état des tuiles"||p==="Étanchéité") return;
@@ -517,7 +517,7 @@ function renderDossierInfo(d){
     <div class="card-header"><h3>Historique de la toiture</h3></div>
     ${d.diagnostic.rapportPret ? `
       <div class="row-item">
-        <div><div class="row-title">Diagnostic du ${esc(d.visiteDate)}</div><div class="row-sub">Version 1 · ${esc(d.technicien)} · ${Object.values(d.diagnostic.points).reduce((s,p)=>s+p.photos,0)} photo(s)</div></div>
+        <div><div class="row-title">Diagnostic du ${esc(d.visiteDate)}</div><div class="row-sub">Version 1 · ${esc(d.technicien)} · ${Object.values(d.diagnostic.points).reduce((s,p)=>s+p.photos.length,0)} photo(s)</div></div>
         <div style="display:flex;align-items:center;gap:10px">
           ${badge(d.diagnostic.rapportPartage?"Partagé (démo)":"Interne", d.diagnostic.rapportPartage?"green":"gray")}
           <button class="btn-ghost" data-action="dossier-tab" data-tab="rapport">Télécharger</button>
@@ -593,7 +593,7 @@ function renderDossierDiagnostic(d){
       <div class="form-field"><label>Pourquoi ce choix ? — ${esc(pointName)}</label><textarea id="ptPourquoi" placeholder="Ce point n’a pas pu être contrôlé complètement. Aucune conclusion de bon état ou de remplacement ne peut être établie.">${esc(p.pourquoi)}</textarea></div>
       <div class="form-field"><label>Travaux proposés — ${esc(pointName)}</label><textarea id="ptTravaux" placeholder="Réparation ciblée, remplacement et périmètre, ou entretien conseillé…">${esc(p.travaux)}</textarea></div>
       <div class="form-help">La justification doit correspondre aux constats. Un défaut localisé ne justifie pas automatiquement une rénovation complète.</div>
-      <div class="form-help" style="margin-top:6px">${p.photos} photo(s) rattachée(s) à ce point de contrôle.</div>
+      <div class="form-help" style="margin-top:6px">${p.photos.length} photo(s) rattachée(s) à ce point de contrôle.</div>
       <div class="modal-actions">
         <button class="btn-secondary" data-action="diag-save-point" data-id="${d.id}" data-step="${step}">Enregistrer le brouillon</button>
         <button class="btn-primary" data-action="diag-next" data-id="${d.id}" data-step="${step}">Suivant →</button>
@@ -601,12 +601,20 @@ function renderDossierDiagnostic(d){
     </div>
     <div class="diag-side">
       <div class="card">
-        <h3 style="margin:0 0 10px;font-size:14.5px">Photos de ce contrôle</h3>
-        <div class="row-sub" style="margin-bottom:10px">0 / 24</div>
-        <div class="form-field"><label>Rattacher les prochaines photos à</label><select disabled>${POINTS.map(n=>`<option>${n}</option>`).join("")}</select></div>
-        <button class="btn-secondary btn-sm" disabled style="width:100%;margin-bottom:8px">Ajouter depuis la galerie</button>
+        <h3 style="margin:0 0 10px;font-size:14.5px">Photos de ce point</h3>
+        <div class="row-sub" style="margin-bottom:10px">${p.photos.length} / 24</div>
+        ${p.photos.length ? `<div class="photo-grid">
+          ${p.photos.map((ph,i)=>`
+            <div class="photo-thumb">
+              ${ph.dataUrl ? `<img src="${ph.dataUrl}" alt="">` : `<div class="photo-placeholder">🖼</div>`}
+              <button class="photo-remove" data-action="remove-photo" data-id="${d.id}" data-step="${step}" data-idx="${i}">✕</button>
+            </div>`).join("")}
+        </div>` : ""}
+        <input type="file" id="photoGalleryInput" accept="image/*" multiple style="display:none" data-id="${d.id}" data-step="${step}">
+        <input type="file" id="photoCameraInput" accept="image/*" capture="environment" style="display:none" data-id="${d.id}" data-step="${step}">
+        <button class="btn-secondary btn-sm" style="width:100%;margin-bottom:8px" data-action="trigger-file" data-target="photoGalleryInput">Ajouter depuis la galerie</button>
         <div class="form-help" style="margin-bottom:10px">JPG, PNG, WebP · 10 Mo par photo · 24 par visite</div>
-        <button class="btn-secondary btn-sm" disabled style="width:100%">Prendre une photo</button>
+        <button class="btn-secondary btn-sm" style="width:100%" data-action="trigger-file" data-target="photoCameraInput">Prendre une photo</button>
       </div>
       <div class="card">
         <h3 style="margin:0 0 10px;font-size:14.5px">Assistance photo par IA</h3>
@@ -1240,6 +1248,14 @@ document.addEventListener("DOMContentLoaded", ()=>{
       state.modal=null; render();
       return;
     }
+    if(action==="trigger-file"){ document.getElementById(t.dataset.target).click(); return; }
+    if(action==="remove-photo"){
+      const d = byId(t.dataset.id);
+      const pointName = POINTS[parseInt(t.dataset.step,10)-1];
+      d.diagnostic.points[pointName].photos.splice(parseInt(t.dataset.idx,10),1);
+      render();
+      return;
+    }
     if(action==="agenda-day"){ state.agendaDay = parseInt(t.dataset.day,10); render(); return; }
     if(action==="kanban-stage"){ state.kanbanStage = t.dataset.stage; render(); return; }
     if(action==="diag-step"){ state.diagStep = parseInt(t.dataset.step,10); render(); return; }
@@ -1299,6 +1315,22 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(e.target.id==="agendaMemberSelect"){
       state.agendaMember = e.target.value;
       render();
+    }
+    if(e.target.id==="photoGalleryInput" || e.target.id==="photoCameraInput"){
+      const files = Array.from(e.target.files || []);
+      if(!files.length) return;
+      const d = byId(e.target.dataset.id);
+      const pointName = POINTS[parseInt(e.target.dataset.step,10)-1];
+      const point = d.diagnostic.points[pointName];
+      Promise.all(files.slice(0, Math.max(0, 24 - point.photos.length)).map(file=>new Promise(resolve=>{
+        const reader = new FileReader();
+        reader.onload = ()=>resolve({name:file.name, dataUrl:reader.result});
+        reader.onerror = ()=>resolve(null);
+        reader.readAsDataURL(file);
+      }))).then(results=>{
+        results.filter(Boolean).forEach(photo=>point.photos.push(photo));
+        render();
+      });
     }
   });
 });
