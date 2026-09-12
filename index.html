@@ -248,12 +248,18 @@ tr:last-child td{border-bottom:none}
 .photo-remove{position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:rgba(12,14,18,.75);border:none;color:#fff;font-size:10px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center}
 .point-title{font-size:16px;font-weight:700;margin-bottom:4px}
 .point-sub{font-size:12px;color:var(--muted);margin-bottom:16px}
-.preset-grid{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
-.preset-chip{flex:0 0 auto;padding:8px 13px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--text);font-size:12px;font-weight:600;cursor:pointer;text-align:left;transition:background-color .15s var(--ease),border-color .15s var(--ease)}
+.preset-grid{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;max-width:100%}
+.preset-chip{width:100%;max-width:100%;box-sizing:border-box;padding:10px 13px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--text);font-size:12.5px;line-height:1.4;font-weight:600;cursor:pointer;text-align:left;white-space:normal;overflow-wrap:anywhere;transition:background-color .15s var(--ease),border-color .15s var(--ease)}
 .preset-chip:hover{border-color:var(--gold-line)}
 .preset-chip.active{background:linear-gradient(155deg,var(--gold),var(--gold2));color:#fff;border-color:transparent;box-shadow:var(--shadow-gold)}
-.risk-field textarea{background:var(--red-bg);border-color:rgba(192,52,42,.25);color:#7a2019}
-.risk-field label{color:var(--red)}
+.custom-tag{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:8px 12px;border-radius:10px;background:var(--gold-soft);border:1px solid var(--gold-line);color:var(--gold2);font-size:12.5px;font-weight:600;width:100%;box-sizing:border-box;overflow-wrap:anywhere}
+.custom-tag button{background:none;border:none;color:var(--gold2);cursor:pointer;font-size:12px;padding:0;line-height:1.4;flex-shrink:0}
+.custom-add-row{display:flex;gap:8px;margin-top:8px}
+.custom-add-row input{flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:9px 10px;border-radius:9px;font-size:13px}
+.risk-group{background:var(--red-bg);border:1px solid rgba(192,52,42,.2);border-radius:12px;padding:12px 14px;margin-top:14px}
+.risk-group label{color:var(--red)}
+.risk-group .preset-chip{background:#fff}
+.risk-group .preset-chip.active{background:linear-gradient(155deg,var(--red),#8f251d)}
 .rd-risk{font-size:12px;color:var(--red);background:var(--red-bg);border-radius:8px;padding:8px 10px;margin-top:6px}
 .rd-photos-point{margin-top:8px}
 .rd-photos-point .rd-photo-title{font-size:12px;font-weight:700;margin-bottom:6px}
