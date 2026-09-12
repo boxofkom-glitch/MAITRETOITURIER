@@ -950,6 +950,20 @@ function renderEntretiens(){
       </tbody>
     </table>`}
   </div>
+
+  <div class="mobile-list">
+    ${contracts.length===0 ? `<div class="empty-note">Aucun contrat d’entretien pour les dossiers visibles.</div>` : contracts.map(c=>`
+      <div class="list-card">
+        <div class="lc-top">
+          <div><div class="lc-name">${esc(c.client)}</div><div class="lc-sub">${esc(c.ville)}</div></div>
+          ${badge(c.statut,"green")}
+        </div>
+        <div class="lc-motif">${esc(c.prestations)}<br>${esc(c.frequence)} · Prochaine visite : ${esc(c.prochaineVisite)}</div>
+        <div class="lc-foot">
+          <button class="btn-secondary btn-sm" style="width:100%" data-action="open-dossier" data-id="${c.dossierId}">Voir le dossier</button>
+        </div>
+      </div>`).join("")}
+  </div>
   <p class="form-help">Suivi de démonstration : ces fiches ne constituent pas des contrats signés. La visite d’entretien est une échéance à planifier avec un technicien.</p>
   `;
 }
@@ -959,7 +973,10 @@ function renderEntretiens(){
 function renderDiagnosticsList(){
   const list = visibleDossiers();
   return `
-  <div class="page-header"><div><h1>Diagnostics de toiture</h1><p>Vos contrôles terrain, photos et rapports PDF.</p></div></div>
+  <div class="page-header">
+    <div><h1>Diagnostics de toiture</h1><p>Vos contrôles terrain, photos et rapports PDF.</p></div>
+    ${diagEditable() ? `<button class="btn-primary" data-action="modal-new-diag">+ Nouveau diagnostic</button>` : ""}
+  </div>
   <div class="filters-row">
     <input type="text" placeholder="Rechercher un client, une ville, un dossier…" disabled>
     <select disabled><option>Tous les statuts</option></select>
@@ -1001,7 +1018,7 @@ function renderDiagnosticsList(){
 function renderCommercialKanban(){
   const list = visibleDossiers();
   const stages = ["À contacter","Devis à préparer","Devis envoyé","Gagné","Perdu"];
-  const actives = list.filter(d=>d.commercialStage!=="Perdu");
+  const actives = list.filter(d=>d.commercialStage!=="Perdu" && d.commercialStage!=="Gagné");
   const devisEnvoyes = list.filter(d=>d.commercialStage==="Devis envoyé").length;
   const montantGagne = list.filter(d=>d.commercialStage==="Gagné").reduce((s,d)=>s+d.montant,0);
   const relancesRetard = list.filter(d=>d.prochaineRelance).length;
@@ -1089,6 +1106,20 @@ function renderParrainages(){
         </tr>`).join("")}
       </tbody>
     </table>`}
+  </div>
+
+  <div class="mobile-list">
+    ${list.length===0 ? `<div class="empty-note">Aucun parrainage enregistré.</div>` : list.map((p,i)=>`
+      <div class="list-card">
+        <div class="lc-top">
+          <div><div class="lc-name">${esc(p.parrain)}</div><div class="lc-sub">${esc(p.date)}</div></div>
+          ${badge(p.suivi,"blue")}
+        </div>
+        <div class="lc-motif">A parrainé ${esc(p.clientApporte)} · ${esc(p.affaire)}<br>Récompense prévue : ${p.recompense} €</div>
+        <div class="lc-foot">
+          <button class="btn-secondary btn-sm" style="width:100%" data-action="mark-remise" data-idx="${i}">Marquer remise</button>
+        </div>
+      </div>`).join("")}
   </div>`;
 }
 
@@ -1299,6 +1330,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(action==="open-dossier"){ state.section="dossiers"; state.dossierId=t.dataset.id; state.dossierTab=t.dataset.tab||"info"; state.diagStep=1; render(); return; }
     if(action==="dossier-tab"){ state.dossierTab=t.dataset.tab; state.diagStep=1; render(); return; }
     if(action==="modal-new"){ state.modal={type:"new"}; render(); return; }
+    if(action==="modal-new-diag"){ state.modal={type:"new", toDiagnostic:true}; render(); return; }
     if(action==="modal-edit"){ state.modal={type:"edit", id:t.dataset.id}; render(); return; }
     if(action==="modal-affect"){ state.modal={type:"affect", id:t.dataset.id}; render(); return; }
     if(action==="modal-choose"){ state.modal={type:"choose"}; render(); return; }
@@ -1344,7 +1376,12 @@ document.addEventListener("DOMContentLoaded", ()=>{
         visiteDate:null, visiteHeure:null, diagnostic:freshDiagnostic()
       };
       DOSSIERS.unshift(newD);
-      state.modal=null; render();
+      const toDiagnostic = state.modal && state.modal.toDiagnostic;
+      state.modal=null;
+      if(toDiagnostic){
+        state.section="dossiers"; state.dossierId=newD.id; state.dossierTab="diagnostic"; state.diagStep=1;
+      }
+      render();
       return;
     }
     if(action==="submit-edit"){
