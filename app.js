@@ -2,23 +2,167 @@
 
 const POINTS = [
   "Couverture et état des tuiles",
-  "Faîtages, arêtiers et rives",
-  "Zinguerie, solins, noues et gouttières",
+  "Éléments de finition et zinguerie",
   "Étanchéité",
   "Charpente",
-  "Isolation",
-  "Ventilation",
+  "Isolation et ventilation",
   "Humidité et infiltrations",
   "État général et sécurité",
-  "Encrassement, mousses et lichens",
-  "Besoin de nettoyage ou d’hydrofuge"
+  "Entretien, mousses et lichens"
 ];
 
 const CONSERVER_JUSTIF = "Le contrôle visuel renseigné indique un bon état. Aucun remplacement n’est justifié par les constats de cette visite, sous réserve des limites d’accès.";
 const CONSERVER_OBJECTIF = "préserver les éléments en état de service et éviter des travaux sans justification constatée.";
 
+const POINT_PRESETS = {
+  "Couverture et état des tuiles":[
+    { label:"Tuiles fissurées localisées", etat:"Défaut constaté", decision:"Réparer",
+      pourquoi:"Fissures identifiées sur un nombre limité de tuiles, sans désordre généralisé sur le pan de toiture.",
+      travaux:"Remplacement ciblé des tuiles fissurées et contrôle des supports (liteaux) sous la zone concernée.",
+      risque:"Une tuile fissurée non traitée laisse progressivement passer l’eau vers la charpente et les combles, avec un risque d’infiltration qui s’aggrave à chaque épisode de pluie ou de gel." },
+    { label:"Tuiles déplacées / glissées", etat:"Défaut constaté", decision:"Réparer",
+      pourquoi:"Plusieurs tuiles désaxées ou glissées sont visibles, probablement liées au vent ou à un défaut de fixation d’origine.",
+      travaux:"Repositionnement et fixation des tuiles déplacées, vérification des crochets et clous de fixation sur la zone.",
+      risque:"Une tuile mal positionnée crée un point d’entrée d’eau direct et peut se détacher complètement lors d’un prochain épisode de vent fort, avec un risque de chute." },
+    { label:"Usure généralisée de la couverture", etat:"Défaut constaté", decision:"Remplacer",
+      pourquoi:"L’ensemble du pan de couverture présente une usure diffuse (porosité, tuiles gélives) cohérente avec l’ancienneté constatée.",
+      travaux:"Prévoir une réfection complète de la couverture sur la zone concernée, non limitée à une réparation ponctuelle.",
+      risque:"Une couverture généralement usée perd son étanchéité de façon diffuse : les infiltrations peuvent apparaître à tout endroit du pan, rendant les réparations ponctuelles inefficaces dans la durée." },
+    { label:"Bon état, aucune anomalie", etat:"Bon état", decision:"Conserver",
+      pourquoi:"Aucune tuile cassée, fissurée ou déplacée n’a été observée sur les zones accessibles.",
+      travaux:"",
+      risque:"Aucun risque identifié à ce jour, sous réserve du maintien d’un entretien courant et d’un contrôle après tempête." }
+  ],
+  "Éléments de finition et zinguerie":[
+    { label:"Faîtage / arêtier désolidarisé", etat:"Défaut constaté", decision:"Réparer",
+      pourquoi:"Le faîtage (ou l’arêtier) présente des éléments descellés ou désolidarisés du support, sans désordre affectant l’ensemble de la ligne de faîtage.",
+      travaux:"Rescellement des éléments de faîtage/arêtier concernés et contrôle de la ventilation sous faîtage.",
+      risque:"Un faîtage désolidarisé laisse l’eau s’infiltrer directement en pied de charpente lors de pluies battantes, et les éléments peuvent se détacher en cas de vent fort." },
+    { label:"Gouttière encombrée ou désaxée", etat:"Défaut constaté", decision:"Réparer",
+      pourquoi:"La gouttière présente un encombrement (feuilles, mousses) et/ou une pente insuffisante entraînant une évacuation imparfaite des eaux pluviales.",
+      travaux:"Nettoyage complet de la gouttière et des descentes, contrôle et reprise de la pente et des crochets de fixation.",
+      risque:"Une gouttière obstruée ou mal inclinée provoque des débordements répétés qui ruissellent le long des façades et peuvent s’infiltrer sous la couverture ou dans les fondations." },
+    { label:"Solin ou noue dégradé", etat:"Défaut constaté", decision:"Remplacer",
+      pourquoi:"Le solin (ou la noue) présente une dégradation visible du matériau d’étanchéité, avec un risque de passage d’eau au point singulier.",
+      travaux:"Remplacement du solin/de la noue sur la zone concernée et reprise de l’étanchéité au raccordement avec la maçonnerie.",
+      risque:"Les points singuliers concentrent les écoulements d’eau : une dégradation à cet endroit précis entraîne des infiltrations rapides et ciblées, souvent visibles à l’intérieur avant même d’être détectées en toiture." },
+    { label:"Bon état", etat:"Bon état", decision:"Conserver",
+      pourquoi:"Faîtages, arêtiers, rives, solins et gouttières sont en bon état apparent, sans désordre ni encombrement notable.",
+      travaux:"",
+      risque:"Aucun risque identifié à ce jour ; un entretien courant (nettoyage des gouttières notamment) permettra de conserver cet état." }
+  ],
+  "Étanchéité":[
+    { label:"Traces d’infiltration ponctuelles", etat:"Défaut constaté", decision:"Contrôle complémentaire",
+      pourquoi:"Des traces d’humidité ponctuelles sont visibles au droit d’un point singulier, sans que l’origine exacte du passage d’eau soit confirmée à ce stade.",
+      travaux:"Contrôler l’étanchéité au droit de la zone identifiée et compléter les observations avant de chiffrer une réparation définitive.",
+      risque:"Sans identification précise de l’origine, l’humidité peut continuer à progresser dans les matériaux (bois, isolant) et provoquer des dégâts cachés plus importants que la fuite visible." },
+    { label:"Membrane ou raccord défaillant", etat:"Défaut constaté", decision:"Réparer",
+      pourquoi:"La membrane d’étanchéité ou le raccord présente un défaut identifié (déchirure, décollement) sur une zone localisée.",
+      travaux:"Reprise ou remplacement de la membrane/du raccord sur la zone concernée, avec contrôle de l’adhérence sur le pourtour.",
+      risque:"Un défaut d’étanchéité localisé s’aggrave avec les cycles de dilatation et les intempéries ; non traité, il finit par générer une infiltration continue vers l’intérieur du bâtiment." },
+    { label:"Défaut d’étanchéité généralisé", etat:"Défaut constaté", decision:"Remplacer",
+      pourquoi:"Plusieurs zones d’étanchéité présentent des signes de vieillissement avancé, incompatibles avec une réparation ponctuelle durable.",
+      travaux:"Prévoir la reprise complète de l’étanchéité sur les zones concernées (toiture terrasse, relevés, points singuliers).",
+      risque:"Une étanchéité généralisée en fin de vie expose à des infiltrations multiples et imprévisibles, avec un risque de dégradation de la charpente et de l’isolation avant même l’apparition de traces visibles à l’intérieur." },
+    { label:"Bon état", etat:"Bon état", decision:"Conserver",
+      pourquoi:"Aucune trace d’infiltration ni de défaut d’étanchéité visible sur les zones accessibles.",
+      travaux:"",
+      risque:"Aucun risque identifié à ce jour, sous réserve du maintien d’un contrôle périodique des points singuliers." }
+  ],
+  "Charpente":[
+    { label:"Trace d’humidité localisée", etat:"Défaut constaté", decision:"Contrôle complémentaire",
+      pourquoi:"Une trace d’humidité (ou de développement fongique) est visible sur une pièce de charpente, sans qu’un affaiblissement structurel soit constaté à ce stade.",
+      travaux:"Prévoir un contrôle complémentaire (sondage) de la pièce concernée avant de définir un traitement ou un remplacement.",
+      risque:"Une humidité persistante en charpente favorise le développement de champignons lignivores qui fragilisent le bois dans la durée et peuvent compromettre la solidité de la structure si rien n’est traité." },
+    { label:"Élément fissuré ou fléchissant", etat:"Défaut constaté", decision:"Réparer",
+      pourquoi:"Un élément de charpente (chevron, panne) présente une fissure ou un fléchissement localisé, sans désordre affectant l’ensemble de la structure.",
+      travaux:"Renforcement ou remplacement de l’élément concerné, à réaliser par un professionnel qualifié.",
+      risque:"Un élément de charpente fragilisé reporte les charges sur les éléments voisins ; sans intervention, le désordre peut s’étendre et affecter la stabilité de la couverture au-dessus." },
+    { label:"Attaque de xylophages", etat:"Défaut constaté", decision:"Remplacer",
+      pourquoi:"Des traces d’attaque de xylophages (trous d’envol, sciure, bois friable) sont visibles sur plusieurs éléments de charpente.",
+      travaux:"Traitement curatif de la charpente et remplacement des éléments trop dégradés, à réaliser par une entreprise spécialisée.",
+      risque:"Une attaque de xylophages non traitée continue de se propager aux pièces de bois saines avoisinantes et peut, à terme, compromettre la portance de la toiture." },
+    { label:"Bon état", etat:"Bon état", decision:"Conserver",
+      pourquoi:"Aucune trace d’humidité, de fissure ou d’attaque de xylophages sur les éléments de charpente accessibles.",
+      travaux:"",
+      risque:"Aucun risque identifié à ce jour ; une bonne ventilation des combles permettra de préserver cet état." }
+  ],
+  "Isolation et ventilation":[
+    { label:"Isolation tassée ou insuffisante", etat:"Défaut constaté", decision:"Remplacer",
+      pourquoi:"L’isolant en place est tassé ou d’épaisseur insuffisante au regard des standards actuels, réduisant sa performance thermique.",
+      travaux:"Prévoir un complément ou un remplacement de l’isolation des combles pour restaurer une épaisseur efficace.",
+      risque:"Une isolation insuffisante entraîne des déperditions de chaleur importantes et peut favoriser la formation de condensation en sous-face de toiture, avec un risque d’humidité dans les combles." },
+    { label:"Défaut de ventilation des combles", etat:"Défaut constaté", decision:"Surveiller",
+      pourquoi:"La ventilation des combles apparaît insuffisante (entrées/sorties d’air obstruées ou absentes), sans dégât constaté à ce jour.",
+      travaux:"Rétablir une ventilation continue des combles (chatières, grilles en égout de toiture) pour limiter les risques de condensation.",
+      risque:"Un comble mal ventilé accumule l’humidité ambiante, ce qui favorise à terme la condensation sur la sous-face de la couverture et la dégradation de la charpente et de l’isolant." },
+    { label:"Isolant dégradé par l’humidité", etat:"Défaut constaté", decision:"Remplacer",
+      pourquoi:"L’isolant présente des zones tassées ou dégradées par une humidité constatée, avec perte de performance sur la zone concernée.",
+      travaux:"Remplacement de l’isolant dégradé après traitement de la source d’humidité identifiée.",
+      risque:"Un isolant humide perd la quasi-totalité de sa performance thermique et peut devenir un foyer de moisissures affectant la qualité de l’air dans les combles et les pièces sous toiture." },
+    { label:"Bon état", etat:"Bon état", decision:"Conserver",
+      pourquoi:"L’isolation et la ventilation des combles sont en bon état et conformes à l’usage constaté.",
+      travaux:"",
+      risque:"Aucun risque identifié à ce jour." }
+  ],
+  "Humidité et infiltrations":[
+    { label:"Traces d’humidité en sous-face", etat:"Défaut constaté", decision:"Contrôle complémentaire",
+      pourquoi:"Des traces d’humidité sont visibles en sous-face de toiture ou en plafond, sans que la source exacte soit confirmée à ce stade.",
+      travaux:"Compléter les observations par un contrôle ciblé avant de définir la réparation adaptée.",
+      risque:"Sans identification de la source, l’humidité peut continuer à se propager et endommager silencieusement l’isolant, la charpente ou les plafonds intérieurs." },
+    { label:"Infiltration active constatée", etat:"Défaut constaté", decision:"Réparer",
+      pourquoi:"Une infiltration active est constatée lors de la visite, avec une origine identifiée sur un point singulier ou une zone de couverture.",
+      travaux:"Traiter en urgence le point d’entrée d’eau identifié et contrôler l’absence de dégâts associés (isolant, charpente, plafond).",
+      risque:"Une infiltration active non traitée s’aggrave à chaque épisode pluvieux et peut entraîner des dégâts des eaux visibles à l’intérieur du logement, voire un développement de moisissures." },
+    { label:"Anciennes traces, pas d’humidité active", etat:"Défaut constaté", decision:"Surveiller",
+      pourquoi:"Des traces d’humidité anciennes sont visibles mais aucune infiltration active n’est constatée le jour de la visite.",
+      travaux:"Surveiller l’évolution de la zone lors des prochaines pluies ; aucune intervention urgente à ce stade.",
+      risque:"Une trace ancienne peut réapparaître si la cause initiale n’a pas été totalement traitée ; un contrôle après un épisode de forte pluie est recommandé pour confirmer l’absence de récidive." },
+    { label:"Aucune trace", etat:"Bon état", decision:"Conserver",
+      pourquoi:"Aucune trace d’humidité ni d’infiltration constatée sur les zones accessibles.",
+      travaux:"",
+      risque:"Aucun risque identifié à ce jour." }
+  ],
+  "État général et sécurité":[
+    { label:"Accès difficile ou dangereux", etat:"Non accessible", decision:"Contrôle complémentaire",
+      pourquoi:"Certaines zones de la toiture n’ont pas pu être contrôlées dans des conditions de sécurité suffisantes (accès, pente, hauteur).",
+      travaux:"Prévoir un contrôle complémentaire avec un équipement adapté (nacelle, ligne de vie) pour inspecter les zones non accessibles.",
+      risque:"Les zones non contrôlées peuvent dissimuler des désordres non détectés lors de cette visite ; l’absence de contrôle ne signifie pas absence de défaut." },
+    { label:"Élément dangereux (risque de chute)", etat:"Défaut constaté", decision:"Réparer",
+      pourquoi:"Un élément instable présentant un risque de chute (tuile, faîtage, antenne) a été identifié sur la toiture.",
+      travaux:"Sécuriser ou déposer en urgence l’élément instable identifié, dans l’attente d’une intervention définitive.",
+      risque:"Un élément instable en hauteur représente un risque immédiat de chute pouvant blesser des personnes ou endommager des biens en contrebas." },
+    { label:"Équipements de sécurité absents", etat:"Défaut constaté", decision:"Surveiller",
+      pourquoi:"Les équipements de sécurité (garde-corps, ligne de vie, crochets) sont absents ou non conformes aux standards actuels.",
+      travaux:"Prévoir la mise en conformité des équipements de sécurité avant toute intervention future en toiture.",
+      risque:"L’absence d’équipement de sécurité conforme complique et rend plus risquée toute intervention future en toiture, pour les techniciens comme pour d’éventuels intervenants." },
+    { label:"Bon état général, aucun risque", etat:"Bon état", decision:"Conserver",
+      pourquoi:"L’état général de la toiture ne présente pas de risque de sécurité identifié lors de cette visite.",
+      travaux:"",
+      risque:"Aucun risque identifié à ce jour." }
+  ],
+  "Entretien, mousses et lichens":[
+    { label:"Mousses et lichens localisés", etat:"Défaut constaté", decision:"Surveiller",
+      pourquoi:"Des mousses et lichens sont présents de façon localisée, sans encrassement généralisé de la couverture.",
+      travaux:"Un nettoyage ciblé peut être envisagé à titre préventif ; aucune intervention urgente à ce stade.",
+      risque:"Les mousses retiennent l’humidité au contact des tuiles ; laissées sans traitement, elles accélèrent le vieillissement du matériau et peuvent favoriser des infiltrations à terme." },
+    { label:"Encrassement généralisé", etat:"Défaut constaté", decision:"Réparer",
+      pourquoi:"L’ensemble de la couverture présente un encrassement généralisé (mousses, lichens, dépôts), nécessitant un entretien complet.",
+      travaux:"Nettoyage complet de la couverture (démoussage) et application d’un traitement hydrofuge pour limiter la reprise de mousse.",
+      risque:"Un encrassement généralisé maintient une humidité permanente sur la couverture, ce qui accélère la porosité des tuiles et augmente le risque d’infiltration diffuse dans la durée." },
+    { label:"Besoin d’hydrofuge (couverture poreuse)", etat:"Défaut constaté", decision:"Surveiller",
+      pourquoi:"La couverture commence à devenir poreuse et absorbe l’humidité, sans désordre d’infiltration constaté à ce jour.",
+      travaux:"Application d’un traitement hydrofuge recommandée pour limiter l’absorption d’eau et prolonger la durée de vie de la couverture.",
+      risque:"Une couverture poreuse non traitée absorbe davantage d’eau à chaque pluie, ce qui accélère son vieillissement et peut, à terme, favoriser l’apparition d’infiltrations." },
+    { label:"Bon état, aucun entretien nécessaire", etat:"Bon état", decision:"Conserver",
+      pourquoi:"Aucun encrassement notable, la couverture ne présente pas de besoin d’entretien particulier à ce jour.",
+      travaux:"",
+      risque:"Aucun risque identifié à ce jour." }
+  ]
+};
+
 function freshPoint(){
-  return { etat:"Non contrôlé", observation:"", decision:"Contrôle complémentaire", pourquoi:"", travaux:"", photos:[] };
+  return { etat:"Non contrôlé", observation:"", decision:"Contrôle complémentaire", pourquoi:"", travaux:"", risque:"", photos:[] };
 }
 function savePointFieldsFromDOM(){
   const etatEl = document.getElementById("ptEtat");
@@ -33,6 +177,7 @@ function savePointFieldsFromDOM(){
   p.decision = document.getElementById("ptDecision").value;
   p.pourquoi = document.getElementById("ptPourquoi").value;
   p.travaux = document.getElementById("ptTravaux").value;
+  p.risque = document.getElementById("ptRisque").value;
 }
 function freshDiagnostic(){
   const points = {};
@@ -53,6 +198,7 @@ function claireDiagnostic(){
     decision:"Réparer",
     pourquoi:"Le désordre décrit est localisé. Une reprise ciblée est proposée ; aucun constat documenté ne justifie une rénovation complète de la couverture.",
     travaux:"Remplacer les éléments fissurés identifiés et contrôler les raccords de la zone concernée.",
+    risque:"Une tuile fissurée non traitée laisse progressivement passer l’eau vers la charpente et les combles, avec un risque d’infiltration qui s’aggrave à chaque épisode de pluie ou de gel.",
     photos:[{name:"photo-1.jpg"},{name:"photo-2.jpg"}]
   };
   d.points["Étanchéité"] = {
@@ -61,11 +207,12 @@ function claireDiagnostic(){
     decision:"Contrôle complémentaire",
     pourquoi:"L’origine exacte du passage d’eau doit être confirmée avant de définir la réparation.",
     travaux:"Contrôler le raccord accessible et compléter les observations avant chiffrage.",
+    risque:"Sans identification précise de l’origine, l’humidité peut continuer à progresser dans les matériaux et provoquer des dégâts cachés plus importants que la fuite visible.",
     photos:[{name:"photo-1.jpg"}]
   };
   POINTS.forEach(p=>{
     if(p==="Couverture et état des tuiles"||p==="Étanchéité") return;
-    d.points[p] = { etat:"Bon état", observation:"", decision:"Conserver", pourquoi:CONSERVER_JUSTIF, travaux:"", photos:[] };
+    d.points[p] = { etat:"Bon état", observation:"", decision:"Conserver", pourquoi:CONSERVER_JUSTIF, travaux:"", risque:"Aucun risque identifié à ce jour, sous réserve du maintien d’un entretien courant.", photos:[] };
   });
   d.synthese = {
     typeCouverture:"Tuiles terre cuite",
@@ -82,7 +229,7 @@ function claireDiagnostic(){
 function marcDiagnostic(){
   const d = freshDiagnostic();
   POINTS.forEach(p=>{
-    d.points[p] = { etat:"Bon état", observation:"", decision:"Conserver", pourquoi:CONSERVER_JUSTIF, travaux:"", photos:[] };
+    d.points[p] = { etat:"Bon état", observation:"", decision:"Conserver", pourquoi:CONSERVER_JUSTIF, travaux:"", risque:"Aucun risque identifié à ce jour, sous réserve du maintien d’un entretien courant.", photos:[] };
   });
   d.synthese = {
     typeCouverture:"Tuiles béton",
@@ -627,6 +774,11 @@ function renderDossierDiagnostic(d){
   <div class="card">
     <div class="point-title">${esc(pointName)}</div>
     <div class="point-sub">Renseignez uniquement ce qui a pu être observé. Précisez les zones non accessibles.</div>
+    ${(POINT_PRESETS[pointName]||[]).length ? `
+    <div style="font-weight:600;font-size:13px;margin-bottom:8px">Réponses rapides</div>
+    <div class="preset-grid">
+      ${POINT_PRESETS[pointName].map((preset,i)=>`<button type="button" class="preset-chip" data-action="apply-preset" data-id="${d.id}" data-step="${step}" data-idx="${i}">${esc(preset.label)}</button>`).join("")}
+    </div>` : ""}
     <div class="form-field"><label>État — ${esc(pointName)}</label>
       <select id="ptEtat">
         ${["Non contrôlé","Bon état","À surveiller","Défaut constaté","Non accessible"].map(o=>`<option ${p.etat===o?"selected":""}>${o}</option>`).join("")}
@@ -642,6 +794,8 @@ function renderDossierDiagnostic(d){
     <div class="form-field"><label>Pourquoi ce choix ? — ${esc(pointName)}</label><textarea id="ptPourquoi" placeholder="Ce point n’a pas pu être contrôlé complètement. Aucune conclusion de bon état ou de remplacement ne peut être établie.">${esc(p.pourquoi)}</textarea></div>
     <div class="form-field"><label>Travaux proposés — ${esc(pointName)}</label><textarea id="ptTravaux" placeholder="Réparation ciblée, remplacement et périmètre, ou entretien conseillé…">${esc(p.travaux)}</textarea></div>
     <div class="form-help">La justification doit correspondre aux constats. Un défaut localisé ne justifie pas automatiquement une rénovation complète.</div>
+
+    <div class="form-field risk-field" style="margin-top:14px"><label>⚠ Risques associés à ce constat — ${esc(pointName)}</label><textarea id="ptRisque" placeholder="Généré automatiquement selon la réponse rapide choisie, modifiable librement…">${esc(p.risque)}</textarea></div>
 
     <div style="font-weight:600;font-size:13px;margin:18px 0 10px">Photos de ce point</div>
     <div class="row-sub" style="margin-bottom:10px">${p.photos.length} / 24</div>
@@ -693,19 +847,26 @@ function renderReportDoc(d){
     <div class="rd-section"><h4>Préconisations</h4><div class="rd-quote">« ${esc(s.preconisations)} »</div></div>
 
     <div class="rd-section"><h4>Les choix expliqués</h4>
-      ${POINTS.map(p=>{
+      ${POINTS.filter(p=>d.diagnostic.points[p].etat!=="Non contrôlé").map(p=>{
         const pt = d.diagnostic.points[p];
         return `<div class="rd-choice">
           <div class="rc-head">${esc(p)} — ${esc(pt.decision)}</div>
-          <div class="rd-quote">« ${esc(pt.pourquoi)} »</div>
+          ${pt.pourquoi?`<div class="rd-quote">« ${esc(pt.pourquoi)} »</div>`:""}
           ${pt.travaux?`<div style="font-size:12.5px">Travaux proposés : ${esc(pt.travaux)}</div>`:""}
           <div style="font-size:12.5px;color:var(--muted)">Objectif : ${pt.decision==="Conserver"?CONSERVER_OBJECTIF:"traiter les constats identifiés dans l’intérêt du client."}</div>
+          ${pt.risque?`<div class="rd-risk">⚠ Risques : ${esc(pt.risque)}</div>`:""}
         </div>`;
-      }).join("")}
+      }).join("") || `<div class="empty-note">Aucun point contrôlé à ce jour.</div>`}
     </div>
 
     <div class="rd-section"><h4>Photos de l’inspection</h4>
-      <div class="rd-quote">« Visuel illustratif · Illustration issue du site de Maître Toiturier. Ce visuel ne représente pas les constats fictifs du dossier. »</div>
+      ${POINTS.filter(p=>d.diagnostic.points[p].photos.length).map(p=>{
+        const pt = d.diagnostic.points[p];
+        return `<div class="rd-photos-point">
+          <div class="rd-photo-title">${esc(p)}</div>
+          <div class="rd-photo-grid">${pt.photos.map(ph=>ph.dataUrl?`<img src="${ph.dataUrl}" alt="">`:"").join("")}</div>
+        </div>`;
+      }).join("") || `<div class="empty-note">Aucune photo ajoutée pour cette visite.</div>`}
     </div>
 
     <div class="rd-footer">Document de démonstration. Contrôle visuel des zones accessibles, selon les observations renseignées par le technicien. Ce rapport n’est pas une certification.</div>
@@ -1482,6 +1643,18 @@ document.addEventListener("DOMContentLoaded", ()=>{
     }
     if(action==="kanban-stage"){ state.kanbanStage = t.dataset.stage; render(); return; }
     if(action==="diag-step"){ state.diagStep = parseInt(t.dataset.step,10); render(); return; }
+    if(action==="apply-preset"){
+      const d = byId(t.dataset.id);
+      const pointName = POINTS[parseInt(t.dataset.step,10)-1];
+      const preset = (POINT_PRESETS[pointName]||[])[parseInt(t.dataset.idx,10)];
+      if(preset){
+        const p = d.diagnostic.points[pointName];
+        p.etat = preset.etat; p.decision = preset.decision; p.pourquoi = preset.pourquoi;
+        p.travaux = preset.travaux; p.risque = preset.risque;
+      }
+      render();
+      return;
+    }
     if(action==="diag-save-point" || action==="diag-next"){
       if(action==="diag-next") state.diagStep = Math.min(POINTS.length+1, parseInt(t.dataset.step,10)+1);
       render();
