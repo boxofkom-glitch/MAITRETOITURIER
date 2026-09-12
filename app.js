@@ -251,22 +251,15 @@ const POINT_RISKS = {
 };
 
 const CHOICE_FIELDS = {
-  obs:{choices:"obsChoices", custom:"obsCustom", options:POINT_OBS, label:"Observation"},
-  cause:{choices:"causeChoices", custom:"causeCustom", options:POINT_CAUSES, label:"Pourquoi ce choix ?"},
-  sol:{choices:"solChoices", custom:"solCustom", options:POINT_SOLUTIONS, label:"Travaux proposés"},
-  risk:{choices:"riskChoices", custom:"riskCustom", options:POINT_RISKS, label:"Risques associés"}
+  obs:{target:"observation", options:POINT_OBS, label:"Observation"},
+  cause:{target:"pourquoi", options:POINT_CAUSES, label:"Pourquoi ce choix ?"},
+  sol:{target:"travaux", options:POINT_SOLUTIONS, label:"Travaux proposés"},
+  risk:{target:"risque", options:POINT_RISKS, label:"Risques associés"}
 };
-
-function recomputePointText(p){
-  p.observation = [...p.obsChoices, ...p.obsCustom].join(" ");
-  p.pourquoi = [...p.causeChoices, ...p.causeCustom].join(" ");
-  p.travaux = [...p.solChoices, ...p.solCustom].join(" ");
-  p.risque = [...p.riskChoices, ...p.riskCustom].join(" ");
-}
+const CHOICE_SELECT_IDS = {selObs:"obs", selCause:"cause", selSol:"sol", selRisk:"risk"};
 
 function freshPoint(){
-  return { etat:"Non contrôlé", observation:"", decision:"Contrôle complémentaire", pourquoi:"", travaux:"", risque:"", photos:[],
-    obsChoices:[], obsCustom:[], causeChoices:[], causeCustom:[], solChoices:[], solCustom:[], riskChoices:[], riskCustom:[] };
+  return { etat:"Non contrôlé", observation:"", decision:"Contrôle complémentaire", pourquoi:"", travaux:"", risque:"", photos:[] };
 }
 function savePointFieldsFromDOM(){
   const etatEl = document.getElementById("ptEtat");
@@ -278,6 +271,10 @@ function savePointFieldsFromDOM(){
   const p = d.diagnostic.points[pointName];
   p.etat = etatEl.value;
   p.decision = document.getElementById("ptDecision").value;
+  Object.keys(CHOICE_FIELDS).forEach(fieldKey=>{
+    const customEl = document.getElementById("custom-"+fieldKey);
+    if(customEl) p[CHOICE_FIELDS[fieldKey].target] = customEl.value;
+  });
 }
 function freshDiagnostic(){
   const points = {};
@@ -299,8 +296,7 @@ function claireDiagnostic(){
     pourquoi:"Le désordre décrit est localisé. Une reprise ciblée est proposée ; aucun constat documenté ne justifie une rénovation complète de la couverture.",
     travaux:"Remplacer les éléments fissurés identifiés et contrôler les raccords de la zone concernée.",
     risque:"Une tuile fissurée non traitée laisse progressivement passer l’eau vers la charpente et les combles, avec un risque d’infiltration qui s’aggrave à chaque épisode de pluie ou de gel.",
-    photos:[{name:"photo-1.jpg"},{name:"photo-2.jpg"}],
-    obsChoices:[], obsCustom:[], causeChoices:[], causeCustom:[], solChoices:[], solCustom:[], riskChoices:[], riskCustom:[]
+    photos:[{name:"photo-1.jpg"},{name:"photo-2.jpg"}]
   };
   d.points["Étanchéité"] = {
     etat:"Défaut constaté",
@@ -309,13 +305,11 @@ function claireDiagnostic(){
     pourquoi:"L’origine exacte du passage d’eau doit être confirmée avant de définir la réparation.",
     travaux:"Contrôler le raccord accessible et compléter les observations avant chiffrage.",
     risque:"Sans identification précise de l’origine, l’humidité peut continuer à progresser dans les matériaux et provoquer des dégâts cachés plus importants que la fuite visible.",
-    photos:[{name:"photo-1.jpg"}],
-    obsChoices:[], obsCustom:[], causeChoices:[], causeCustom:[], solChoices:[], solCustom:[], riskChoices:[], riskCustom:[]
+    photos:[{name:"photo-1.jpg"}]
   };
   POINTS.forEach(p=>{
     if(p==="Couverture et état des tuiles"||p==="Étanchéité") return;
-    d.points[p] = { etat:"Bon état", observation:"", decision:"Conserver", pourquoi:CONSERVER_JUSTIF, travaux:"", risque:"Aucun risque identifié à ce jour, sous réserve du maintien d’un entretien courant.", photos:[],
-      obsChoices:[], obsCustom:[], causeChoices:[], causeCustom:[], solChoices:[], solCustom:[], riskChoices:[], riskCustom:[] };
+    d.points[p] = { etat:"Bon état", observation:"", decision:"Conserver", pourquoi:CONSERVER_JUSTIF, travaux:"", risque:"Aucun risque identifié à ce jour, sous réserve du maintien d’un entretien courant.", photos:[] };
   });
   d.synthese = {
     typeCouverture:"Tuiles terre cuite",
@@ -332,8 +326,7 @@ function claireDiagnostic(){
 function marcDiagnostic(){
   const d = freshDiagnostic();
   POINTS.forEach(p=>{
-    d.points[p] = { etat:"Bon état", observation:"", decision:"Conserver", pourquoi:CONSERVER_JUSTIF, travaux:"", risque:"Aucun risque identifié à ce jour, sous réserve du maintien d’un entretien courant.", photos:[],
-      obsChoices:[], obsCustom:[], causeChoices:[], causeCustom:[], solChoices:[], solCustom:[], riskChoices:[], riskCustom:[] };
+    d.points[p] = { etat:"Bon état", observation:"", decision:"Conserver", pourquoi:CONSERVER_JUSTIF, travaux:"", risque:"Aucun risque identifié à ce jour, sous réserve du maintien d’un entretien courant.", photos:[] };
   });
   d.synthese = {
     typeCouverture:"Tuiles béton",
@@ -828,25 +821,24 @@ function renderDossierInfo(d){
   `;
 }
 
+const CHOICE_SELECT_ID = {obs:"selObs", cause:"selCause", sol:"selSol", risk:"selRisk"};
+
 function renderChoiceGroup(fieldKey, pointName, p, d, step){
   const cfg = CHOICE_FIELDS[fieldKey];
   const options = cfg.options[pointName] || [];
-  const choices = p[cfg.choices];
-  const customs = p[cfg.custom];
+  const current = p[cfg.target];
+  const matchIdx = options.indexOf(current);
+  const isCustom = !!(p.customFlags && p.customFlags[fieldKey]) || (current !== "" && matchIdx === -1);
   const groupClass = fieldKey==="risk" ? "risk-group" : "form-field";
   return `
   <div class="${groupClass}">
     <label>${fieldKey==="risk"?"⚠ ":""}${cfg.label} — ${esc(pointName)}</label>
-    <div class="preset-grid">
-      ${options.map((opt,i)=>`<button type="button" class="preset-chip ${choices.includes(opt)?"active":""}" data-action="toggle-choice" data-id="${d.id}" data-step="${step}" data-field="${fieldKey}" data-idx="${i}">${esc(opt)}</button>`).join("")}
-    </div>
-    ${customs.length?`<div class="preset-grid" style="margin-top:6px">
-      ${customs.map((c,i)=>`<span class="custom-tag">${esc(c)}<button type="button" data-action="remove-custom" data-id="${d.id}" data-step="${step}" data-field="${fieldKey}" data-idx="${i}">✕</button></span>`).join("")}
-    </div>`:""}
-    <div class="custom-add-row">
-      <input type="text" id="custom-${fieldKey}" placeholder="Ajouter une précision qui n’est pas dans la liste…">
-      <button type="button" class="btn-secondary btn-sm" data-action="add-custom" data-id="${d.id}" data-step="${step}" data-field="${fieldKey}">+ Ajouter</button>
-    </div>
+    <select id="${CHOICE_SELECT_ID[fieldKey]}">
+      <option value="">— Sélectionner —</option>
+      ${options.map((opt,i)=>`<option value="${i}" ${matchIdx===i?"selected":""}>${esc(opt)}</option>`).join("")}
+      <option value="custom" ${isCustom?"selected":""}>Autre (préciser)…</option>
+    </select>
+    ${isCustom?`<textarea id="custom-${fieldKey}" placeholder="Précisez…" style="margin-top:8px">${esc(current)}</textarea>`:""}
   </div>`;
 }
 
@@ -899,7 +891,7 @@ function renderDossierDiagnostic(d){
   ${stepsNav}
   <div class="card">
     <div class="point-title">${esc(pointName)}</div>
-    <div class="point-sub">Sélectionnez les cases qui correspondent, aucune saisie n’est obligatoire.</div>
+    <div class="point-sub">Choisissez dans les menus déroulants, aucune saisie n’est obligatoire.</div>
     <div class="form-field"><label>État — ${esc(pointName)}</label>
       <select id="ptEtat">
         ${["Non contrôlé","Bon état","À surveiller","Défaut constaté","Non accessible"].map(o=>`<option ${p.etat===o?"selected":""}>${o}</option>`).join("")}
@@ -1764,40 +1756,6 @@ document.addEventListener("DOMContentLoaded", ()=>{
     }
     if(action==="kanban-stage"){ state.kanbanStage = t.dataset.stage; render(); return; }
     if(action==="diag-step"){ state.diagStep = parseInt(t.dataset.step,10); render(); return; }
-    if(action==="toggle-choice"){
-      const d = byId(t.dataset.id);
-      const pointName = POINTS[parseInt(t.dataset.step,10)-1];
-      const p = d.diagnostic.points[pointName];
-      const cfg = CHOICE_FIELDS[t.dataset.field];
-      const opt = (cfg.options[pointName]||[])[parseInt(t.dataset.idx,10)];
-      const list = p[cfg.choices];
-      const pos = list.indexOf(opt);
-      if(pos===-1) list.push(opt); else list.splice(pos,1);
-      recomputePointText(p);
-      render();
-      return;
-    }
-    if(action==="add-custom"){
-      const d = byId(t.dataset.id);
-      const pointName = POINTS[parseInt(t.dataset.step,10)-1];
-      const p = d.diagnostic.points[pointName];
-      const cfg = CHOICE_FIELDS[t.dataset.field];
-      const input = document.getElementById("custom-"+t.dataset.field);
-      const val = input.value.trim();
-      if(val){ p[cfg.custom].push(val); recomputePointText(p); }
-      render();
-      return;
-    }
-    if(action==="remove-custom"){
-      const d = byId(t.dataset.id);
-      const pointName = POINTS[parseInt(t.dataset.step,10)-1];
-      const p = d.diagnostic.points[pointName];
-      const cfg = CHOICE_FIELDS[t.dataset.field];
-      p[cfg.custom].splice(parseInt(t.dataset.idx,10),1);
-      recomputePointText(p);
-      render();
-      return;
-    }
     if(action==="diag-save-point" || action==="diag-next"){
       if(action==="diag-next") state.diagStep = Math.min(POINTS.length+1, parseInt(t.dataset.step,10)+1);
       render();
@@ -1847,6 +1805,24 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(e.target.id==="agendaMemberSelect"){
       state.agendaMember = e.target.value;
       render();
+    }
+    if(CHOICE_SELECT_IDS[e.target.id]){
+      const fieldKey = CHOICE_SELECT_IDS[e.target.id];
+      const cfg = CHOICE_FIELDS[fieldKey];
+      const d = byId(state.dossierId);
+      const pointName = POINTS[state.diagStep-1];
+      const p = d.diagnostic.points[pointName];
+      const val = e.target.value;
+      p.customFlags = p.customFlags || {};
+      if(val==="custom"){
+        p.customFlags[fieldKey] = true;
+        if(!(p[cfg.target] && cfg.options[pointName].indexOf(p[cfg.target])===-1)) p[cfg.target] = "";
+      } else {
+        p.customFlags[fieldKey] = false;
+        p[cfg.target] = val==="" ? "" : cfg.options[pointName][parseInt(val,10)];
+      }
+      render();
+      if(val==="custom") document.getElementById("custom-"+fieldKey)?.focus();
     }
     if(e.target.id==="photoGalleryInput" || e.target.id==="photoCameraInput"){
       const files = Array.from(e.target.files || []);
