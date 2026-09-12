@@ -20,6 +20,20 @@ const CONSERVER_OBJECTIF = "préserver les éléments en état de service et év
 function freshPoint(){
   return { etat:"Non contrôlé", observation:"", decision:"Contrôle complémentaire", pourquoi:"", travaux:"", photos:[] };
 }
+function savePointFieldsFromDOM(){
+  const etatEl = document.getElementById("ptEtat");
+  if(!etatEl || !state.dossierId) return;
+  const d = byId(state.dossierId);
+  if(!d) return;
+  const pointName = POINTS[state.diagStep-1];
+  if(!pointName) return;
+  const p = d.diagnostic.points[pointName];
+  p.etat = etatEl.value;
+  p.observation = document.getElementById("ptObs").value;
+  p.decision = document.getElementById("ptDecision").value;
+  p.pourquoi = document.getElementById("ptPourquoi").value;
+  p.travaux = document.getElementById("ptTravaux").value;
+}
 function freshDiagnostic(){
   const points = {};
   POINTS.forEach(p=>points[p]=freshPoint());
@@ -51,7 +65,7 @@ function claireDiagnostic(){
   };
   POINTS.forEach(p=>{
     if(p==="Couverture et état des tuiles"||p==="Étanchéité") return;
-    d.points[p] = { etat:"Bon état", observation:"", decision:"Conserver", pourquoi:CONSERVER_JUSTIF, travaux:"", photos:0 };
+    d.points[p] = { etat:"Bon état", observation:"", decision:"Conserver", pourquoi:CONSERVER_JUSTIF, travaux:"", photos:[] };
   });
   d.synthese = {
     typeCouverture:"Tuiles terre cuite",
@@ -68,7 +82,7 @@ function claireDiagnostic(){
 function marcDiagnostic(){
   const d = freshDiagnostic();
   POINTS.forEach(p=>{
-    d.points[p] = { etat:"Bon état", observation:"", decision:"Conserver", pourquoi:CONSERVER_JUSTIF, travaux:"", photos:0 };
+    d.points[p] = { etat:"Bon état", observation:"", decision:"Conserver", pourquoi:CONSERVER_JUSTIF, travaux:"", photos:[] };
   });
   d.synthese = {
     typeCouverture:"Tuiles béton",
@@ -1321,6 +1335,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
     const t = e.target.closest("[data-action]");
     if(!t) return;
     const action = t.dataset.action;
+    savePointFieldsFromDOM();
 
     if(action==="modal-overlay"){ if(e.target===t){ state.modal=null; render(); } return; }
     if(action==="modal-close"){ state.modal=null; render(); return; }
@@ -1468,14 +1483,6 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(action==="kanban-stage"){ state.kanbanStage = t.dataset.stage; render(); return; }
     if(action==="diag-step"){ state.diagStep = parseInt(t.dataset.step,10); render(); return; }
     if(action==="diag-save-point" || action==="diag-next"){
-      const d = byId(t.dataset.id);
-      const pointName = POINTS[parseInt(t.dataset.step,10)-1];
-      const p = d.diagnostic.points[pointName];
-      p.etat = document.getElementById("ptEtat").value;
-      p.observation = document.getElementById("ptObs").value;
-      p.decision = document.getElementById("ptDecision").value;
-      p.pourquoi = document.getElementById("ptPourquoi").value;
-      p.travaux = document.getElementById("ptTravaux").value;
       if(action==="diag-next") state.diagStep = Math.min(POINTS.length+1, parseInt(t.dataset.step,10)+1);
       render();
       return;
@@ -1514,6 +1521,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
   });
 
   document.getElementById("app").addEventListener("change", (e)=>{
+    savePointFieldsFromDOM();
     if(e.target.id==="roleSelect"){
       state.role = e.target.value;
       state.section = NAV[state.role][0][0];
