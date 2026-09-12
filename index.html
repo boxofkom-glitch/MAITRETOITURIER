@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Maître Toiturier — Diagnostic & CRM</title>
 <meta name="description" content="Demandes, diagnostics de toiture et suivi commercial dans un seul dossier.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230c0e12'/%3E%3Cpath d='M12 34 L32 16 L52 34' stroke='%23e8bf69' stroke-width='4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M18 32 V48 H46 V32' stroke='%23e8bf69' stroke-width='4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
@@ -29,17 +29,21 @@ button,select,input,textarea{font-family:inherit}
 .sidebar-footer{border-top:1px solid var(--line);padding-top:14px;margin-top:14px;font-size:11.5px;color:var(--muted)}
 .reset-btn{margin-top:10px;width:100%;padding:8px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer;font-size:11.5px}
 .reset-btn:hover{color:var(--text);border-color:var(--muted)}
+.sidebar-close{display:none}
+.sidebar-backdrop{display:none}
 
 .main{flex:1;min-width:0;display:flex;flex-direction:column}
-.topbar{display:flex;justify-content:space-between;align-items:center;padding:18px 32px;border-bottom:1px solid var(--line);gap:16px;flex-wrap:wrap}
+.topbar{display:flex;justify-content:space-between;align-items:center;padding:18px 32px;border-bottom:1px solid var(--line);gap:16px;flex-wrap:wrap;flex-shrink:0}
+.topbar-left{display:flex;align-items:center;gap:12px}
 .topbar-left .ws{font-size:14px;color:var(--text);font-weight:600}
 .topbar-left .date{font-size:12.5px;color:var(--muted);text-transform:capitalize}
 .topbar-right{display:flex;align-items:center;gap:12px}
 .demo-tag{font-size:11.5px;color:var(--muted)}
-.role-select{background:var(--panel);border:1px solid var(--line);color:var(--text);padding:8px 10px;border-radius:8px;font-size:13px}
+.role-select{background:var(--panel);border:1px solid var(--line);color:var(--text);padding:8px 10px;border-radius:8px;font-size:13px;max-width:40vw}
 .avatar{width:34px;height:34px;border-radius:50%;background:var(--gold);color:#0c0e12;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12.5px;flex-shrink:0}
-.disclaimer{padding:8px 32px;font-size:11.5px;color:var(--muted);border-bottom:1px solid var(--line);background:var(--panel2)}
+.disclaimer{padding:8px 32px;font-size:11.5px;color:var(--muted);border-bottom:1px solid var(--line);background:var(--panel2);flex-shrink:0}
 .content{padding:28px 32px 60px;flex:1}
+.hamburger-btn{display:none}
 
 .page-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;gap:16px;flex-wrap:wrap}
 .page-header h1{font-size:22px;margin:0 0 4px;font-weight:700}
@@ -86,6 +90,22 @@ tr:last-child td{border-bottom:none}
 .filters-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
 .filters-row select,.filters-row input{background:var(--panel);border:1px solid var(--line);color:var(--text);padding:9px 12px;border-radius:8px;font-size:13px}
 .filters-row input{flex:1;min-width:200px}
+
+/* Mobile-only patterns: pill selector + full-detail single-column list (hidden on desktop) */
+.mobile-list,.agenda-mobile,.kanban-mobile{display:none}
+.pill-row{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;margin-bottom:14px;scrollbar-width:none}
+.pill-row::-webkit-scrollbar{display:none}
+.pill-btn{flex-shrink:0;padding:9px 15px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-size:12.5px;cursor:pointer;white-space:nowrap}
+.pill-btn.active{background:var(--gold);color:#0c0e12;border-color:var(--gold);font-weight:700}
+.pill-btn .pb-count{margin-left:6px;opacity:.7}
+.list-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px}
+.list-card .lc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.list-card .lc-name{font-size:15px;font-weight:700}
+.list-card .lc-sub{font-size:12.5px;color:var(--muted);margin-top:2px}
+.list-card .lc-motif{font-size:13.5px;margin:10px 0}
+.list-card .lc-badges{display:flex;gap:8px;flex-wrap:wrap}
+.list-card .lc-foot{display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:10px;padding-top:12px;border-top:1px solid var(--line)}
+.agenda-day-heading{font-size:14.5px;font-weight:700;margin-bottom:10px}
 
 .breadcrumb{font-size:12.5px;color:var(--muted);background:none;border:none;cursor:pointer;padding:0;margin-bottom:10px}
 .breadcrumb:hover{color:var(--text)}
@@ -168,6 +188,48 @@ tr:last-child td{border-bottom:none}
 .conn-card .conn-detail{font-size:12px;color:var(--muted)}
 
 .toast{position:fixed;bottom:24px;right:24px;background:var(--panel);border:1px solid var(--gold);color:var(--text);padding:12px 18px;border-radius:8px;font-size:13px;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+
+/* ==================================================================
+   Phone & tablet: real app-shell (fixed chrome, no page-level scroll)
+   plus mobile-native screens for dense views (agenda/tables/kanban).
+   Kept last so it always wins the cascade at matching widths.
+   ================================================================== */
+@media (max-width:900px){
+  html,body{height:100%;overflow:hidden}
+  #app{height:100vh;height:100dvh}
+  .main{height:100vh;height:100dvh;overflow:hidden}
+  .content{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 16px calc(24px + env(safe-area-inset-bottom));overscroll-behavior:contain}
+  .topbar{padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top))}
+  .topbar-left .ws,.topbar-left .date{display:none}
+  .disclaimer{padding:6px 16px;font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hamburger-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;width:36px;height:36px;padding:0;border-radius:8px;background:var(--panel);border:1px solid var(--line);color:var(--text);cursor:pointer;flex-shrink:0}
+  .hamburger-btn span,.hamburger-btn:before,.hamburger-btn:after{content:'';display:block;width:16px;height:2px;background:var(--text);border-radius:2px}
+
+  .sidebar{position:fixed;top:0;left:0;z-index:60;width:78vw;max-width:300px;height:100vh;height:100dvh;transform:translateX(-100%);transition:transform .22s ease;padding-top:calc(20px + env(safe-area-inset-top));padding-bottom:calc(20px + env(safe-area-inset-bottom))}
+  .sidebar.open{transform:translateX(0);box-shadow:8px 0 24px rgba(0,0,0,.4)}
+  .sidebar-close{display:block;position:absolute;top:calc(16px + env(safe-area-inset-top));right:14px;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1}
+  .sidebar-backdrop{display:block;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:55;opacity:0;pointer-events:none;transition:opacity .2s ease}
+  .sidebar-backdrop.open{opacity:1;pointer-events:auto}
+
+  .page-header{margin-bottom:14px}
+  .page-header h1{font-size:19px}
+  .page-header p{font-size:12.5px}
+  .stat-grid{grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px}
+  .stat-card{padding:12px 13px;border-radius:10px}
+  .stat-value{font-size:19px}
+  .stat-label{font-size:11.5px;margin-top:3px}
+  .stat-sub{display:none}
+  .card{padding:14px}
+
+  /* Dense grids/tables become pill-filtered single-column lists */
+  .table-wrap{display:none}
+  .mobile-list{display:block}
+  .agenda-topbar{display:none}
+  .agenda-grid{display:none}
+  .agenda-mobile{display:block}
+  .kanban{display:none}
+  .kanban-mobile{display:block}
+}
 </style>
 </head>
 <body>
