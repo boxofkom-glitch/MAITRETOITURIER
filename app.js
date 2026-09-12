@@ -131,10 +131,33 @@ const NAV = {
   client:[["client","Mon espace client"]]
 };
 
-const WEEK_DAYS = [
-  {label:"Lun.", num:7}, {label:"Mar.", num:8}, {label:"Mer.", num:9}, {label:"Jeu.", num:10},
-  {label:"Ven.", num:11}, {label:"Sam.", num:12}, {label:"Dim.", num:13}
-];
+const MONTH_NAMES = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
+const MONTH_SHORT = ["janv.","févr.","mars","avr.","mai","juin","juil.","août","sept.","oct.","nov.","déc."];
+const DOW_LONG = ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"];
+const DOW_SHORT = ["Lun.","Mar.","Mer.","Jeu.","Ven.","Sam.","Dim."];
+const DOW_MIN = ["L","M","M","J","V","S","D"];
+const TODAY_REF = new Date(2026,8,12);
+
+function addDays(date,n){ const d=new Date(date); d.setDate(d.getDate()+n); return d; }
+function addMonths(date,n){ const d=new Date(date); const day=d.getDate(); d.setDate(1); d.setMonth(d.getMonth()+n); const last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate(); d.setDate(Math.min(day,last)); return d; }
+function addYears(date,n){ return addMonths(date,n*12); }
+function startOfWeek(date){ const d=new Date(date); const dow=(d.getDay()+6)%7; d.setDate(d.getDate()-dow); return d; }
+function startOfMonth(date){ return new Date(date.getFullYear(),date.getMonth(),1); }
+function sameDay(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+function sameMonth(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth(); }
+function isToday(d){ return sameDay(d, TODAY_REF); }
+function parseShortFrDate(str){
+  if(!str) return null;
+  const parts = str.trim().split(/\s+/);
+  if(parts.length<2) return null;
+  const day = parseInt(parts[0],10);
+  const monthIdx = MONTH_SHORT.indexOf(parts[1]);
+  if(isNaN(day) || monthIdx<0) return null;
+  return new Date(2026, monthIdx, day);
+}
+function fmtFullDate(d){ return `${DOW_LONG[(d.getDay()+6)%7]} ${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`; }
+function fmtDayMonth(d){ return `${d.getDate()} ${MONTH_SHORT[d.getMonth()]}`; }
+function fmtMonthYear(d){ return `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`; }
 
 let DOSSIERS = seedDossiers();
 
@@ -145,7 +168,10 @@ let state = {
   dossierTab:"info",
   diagStep:1,
   agendaMember:"all",
-  agendaDay:12,
+  calendarView:"day",
+  calendarDate:new Date(TODAY_REF),
+  datePickerOpen:false,
+  pickerViewDate:new Date(TODAY_REF),
   kanbanStage:"À contacter",
   modal:null,
   toast:null,
@@ -723,76 +749,172 @@ function renderDossierCommercial(d){
 
 // ---------- Agenda ----------
 
-function agendaEventsForDay(dayNum){
+function agendaEventsForDate(date){
   const events = [];
   visibleDossiers().forEach(d=>{
-    if(d.visiteDate && d.visiteDate.startsWith(String(dayNum)+" ")){
+    const visiteD = parseShortFrDate(d.visiteDate);
+    if(visiteD && sameDay(visiteD, date)){
       events.push({time:d.visiteHeure, label:"Visite", client:d.client, membre:d.technicien, ville:d.ville, id:d.id});
     }
-    if(d.prochaineRelance && d.prochaineRelance.startsWith(String(dayNum)+" ")){
+    const relanceD = parseShortFrDate(d.prochaineRelance);
+    if(relanceD && sameDay(relanceD, date)){
       events.push({time:null, label:"Relance commerciale", client:d.client, membre:d.commercial, ville:d.ville, id:d.id});
     }
   });
   if(state.agendaMember!=="all"){
     return events.filter(e=>e.membre===state.agendaMember);
   }
-  return events;
+  return events.sort((a,b)=>(a.time||"").localeCompare(b.time||""));
+}
+function agendaEventsForMonth(date){
+  const start = startOfMonth(date);
+  const end = new Date(date.getFullYear(), date.getMonth()+1, 0);
+  const all = [];
+  let cur = new Date(start);
+  while(cur<=end){ all.push(...agendaEventsForDate(cur).map(e=>({...e,date:new Date(cur)}))); cur = addDays(cur,1); }
+  return all;
+}
+
+function renderEventCard(e, cls){
+  return `<div class="${cls}" data-action="open-dossier" data-id="${e.id}">
+    ${e.time?`<div class="ev-time">${esc(e.time)} · ${esc(e.label)}</div>`:`<div class="ev-time">${esc(e.label)}</div>`}
+    <div>${esc(e.client)}</div>
+    <div class="row-sub">${esc(e.membre||"—")} · ${esc(e.ville)}</div>
+  </div>`;
+}
+
+function renderCalToolbar(){
+  const v = state.calendarView;
+  const members = ["Toute l’équipe","Julien Bernard","Léa Petit","Sarah Durand","Lucas Robert"];
+  let label = "";
+  if(v==="day") label = fmtFullDate(state.calendarDate);
+  else if(v==="week"){ const s=startOfWeek(state.calendarDate), en=addDays(s,6); label = `${fmtDayMonth(s)} — ${fmtDayMonth(en)} ${en.getFullYear()}`; }
+  else if(v==="month") label = fmtMonthYear(state.calendarDate);
+  else label = String(state.calendarDate.getFullYear());
+
+  return `
+  <div class="cal-toolbar">
+    <div class="cal-view-switch">
+      ${[["day","Jour"],["week","Semaine"],["month","Mois"],["year","Année"]].map(([k,l])=>`<button class="cal-view-btn ${v===k?"active":""}" data-action="cal-view" data-view="${k}">${l}</button>`).join("")}
+    </div>
+    <div class="cal-nav-group">
+      <button class="cal-nav-btn" data-action="cal-prev" aria-label="Précédent">←</button>
+      <div style="position:relative">
+        <button class="cal-date-btn" data-action="toggle-datepicker">${esc(label)}</button>
+        ${state.datePickerOpen ? renderDatePicker() : ""}
+      </div>
+      <button class="cal-nav-btn" data-action="cal-next" aria-label="Suivant">→</button>
+    </div>
+    <button class="btn-secondary btn-sm cal-today-btn" data-action="cal-today">Aujourd’hui</button>
+    <select id="agendaMemberSelect">
+      ${members.map(m=>`<option value="${m==="Toute l’équipe"?"all":m}" ${state.agendaMember===(m==="Toute l’équipe"?"all":m)?"selected":""}>${m}</option>`).join("")}
+    </select>
+  </div>
+  ${state.datePickerOpen ? `<div class="sidebar-backdrop open" style="z-index:65" data-action="close-datepicker"></div>` : ""}
+  `;
+}
+
+function renderDatePicker(){
+  const pv = state.pickerViewDate;
+  const start = startOfWeek(startOfMonth(pv));
+  const cells = [];
+  for(let i=0;i<42;i++) cells.push(addDays(start,i));
+  return `
+  <div class="cal-datepicker" onclick="event.stopPropagation()">
+    <div class="cal-datepicker-head">
+      <button class="cal-nav-btn" style="width:26px;height:26px" data-action="picker-prev-month">←</button>
+      <span>${esc(fmtMonthYear(pv))}</span>
+      <button class="cal-nav-btn" style="width:26px;height:26px" data-action="picker-next-month">→</button>
+    </div>
+    <div class="cal-datepicker-grid">
+      ${DOW_MIN.map(d=>`<div class="cal-datepicker-dow">${d}</div>`).join("")}
+      ${cells.map(c=>{
+        const cls = ["cal-datepicker-day"];
+        if(!sameMonth(c,pv)) cls.push("dim");
+        if(isToday(c)) cls.push("today");
+        if(sameDay(c,state.calendarDate)) cls.push("selected");
+        return `<button class="${cls.join(" ")}" data-action="picker-select-day" data-date="${c.getFullYear()}-${c.getMonth()}-${c.getDate()}">${c.getDate()}</button>`;
+      }).join("")}
+    </div>
+  </div>`;
+}
+
+function renderCalDayView(){
+  const d = state.calendarDate;
+  const evs = agendaEventsForDate(d);
+  return `
+  ${evs.length===0 ? `<div class="empty-note">Aucun événement ce jour-là.</div>` : evs.map(e=>renderEventCard(e,"list-card")).join("")}
+  `;
+}
+
+function renderCalWeekView(){
+  const start = startOfWeek(state.calendarDate);
+  const days = Array.from({length:7},(_,i)=>addDays(start,i));
+  return `
+  <div class="cal-week-grid">
+    ${days.map(day=>{
+      const evs = agendaEventsForDate(day);
+      const dow = (day.getDay()+6)%7;
+      return `<div class="cal-week-col ${isToday(day)?"today":""}">
+        <h5>${DOW_SHORT[dow]} <b>${day.getDate()}</b></h5>
+        ${evs.length===0 ? `<div class="cal-empty">Aucun événement</div>` : evs.map(e=>renderEventCard(e,"cal-event")).join("")}
+      </div>`;
+    }).join("")}
+  </div>`;
+}
+
+function renderCalMonthView(){
+  const monthDate = state.calendarDate;
+  const start = startOfWeek(startOfMonth(monthDate));
+  const cells = Array.from({length:42},(_,i)=>addDays(start,i));
+  return `
+  <div class="cal-month-grid">
+    ${DOW_SHORT.map(d=>`<div class="cal-month-dow">${d}</div>`).join("")}
+    ${cells.map(c=>{
+      const evs = agendaEventsForDate(c);
+      const cls = ["cal-month-cell"];
+      if(!sameMonth(c,monthDate)) cls.push("dim");
+      if(isToday(c)) cls.push("today");
+      return `<div class="${cls.join(" ")}" data-action="cal-goto-day" data-date="${c.getFullYear()}-${c.getMonth()}-${c.getDate()}">
+        <div class="cmc-num">${c.getDate()}</div>
+        ${evs.length ? `<div class="cal-month-dots">${evs.slice(0,4).map(()=>`<div class="cal-month-dot"></div>`).join("")}</div>` : ""}
+      </div>`;
+    }).join("")}
+  </div>`;
+}
+
+function renderCalYearView(){
+  const year = state.calendarDate.getFullYear();
+  return `
+  <div class="cal-year-grid">
+    ${Array.from({length:12},(_,m)=>{
+      const monthDate = new Date(year,m,1);
+      const count = agendaEventsForMonth(monthDate).length;
+      const isCurrent = sameMonth(monthDate, TODAY_REF);
+      return `<div class="cal-year-card ${isCurrent?"current":""}" data-action="cal-goto-month" data-date="${year}-${m}-1">
+        <h5>${MONTH_NAMES[m]}</h5>
+        <div class="cyc-count">${count ? `<b>${count}</b> événement${count>1?"s":""}` : "Aucun événement"}</div>
+      </div>`;
+    }).join("")}
+  </div>`;
 }
 
 function renderAgenda(){
-  const members = ["Toute l’équipe","Julien Bernard","Léa Petit","Sarah Durand","Lucas Robert"];
+  const v = state.calendarView;
+  let body = "";
+  if(v==="day") body = renderCalDayView();
+  else if(v==="week") body = renderCalWeekView();
+  else if(v==="month") body = renderCalMonthView();
+  else body = renderCalYearView();
+
   return `
   <div class="page-header">
     <div><h1>Agenda d’équipe</h1><p>Visites terrain et échéances commerciales, reliées aux dossiers.</p></div>
     ${canPlanifierVisite() ? `<button class="btn-primary" data-action="modal-choose">+ Planifier une visite</button>` : ""}
   </div>
-  <div class="agenda-topbar">
-    <button class="btn-ghost" disabled>← Semaine</button>
-    <span class="week-label">7 sept. — 13 sept.</span>
-    <button class="btn-ghost" disabled>Semaine →</button>
-    <button class="btn-secondary btn-sm" disabled>Aujourd’hui</button>
-    <select id="agendaMemberSelect" style="margin-left:auto">
-      ${members.map(m=>`<option value="${m==="Toute l’équipe"?"all":m}" ${state.agendaMember===(m==="Toute l’équipe"?"all":m)?"selected":""}>${m}</option>`).join("")}
-    </select>
-  </div>
-  <div class="agenda-grid">
-    ${WEEK_DAYS.map(day=>{
-      const evs = agendaEventsForDay(day.num);
-      return `<div class="agenda-day">
-        <h5>${day.label} <b>${day.num}</b></h5>
-        ${evs.length===0 ? `<div class="agenda-empty">Aucun événement</div>` : evs.map(e=>`
-          <div class="agenda-event" data-action="open-dossier" data-id="${e.id}">
-            ${e.time?`<div class="ev-time">${esc(e.time)} · ${esc(e.label)}</div>`:`<div class="ev-time">${esc(e.label)}</div>`}
-            <div>${esc(e.client)}</div>
-            <div class="row-sub">${esc(e.membre)} · ${esc(e.ville)}</div>
-          </div>`).join("")}
-      </div>`;
-    }).join("")}
-  </div>
-
-  <div class="agenda-mobile">
-    <div class="pill-row">
-      ${WEEK_DAYS.map(day=>{
-        const count = agendaEventsForDay(day.num).length;
-        return `<button class="pill-btn ${state.agendaDay===day.num?"active":""}" data-action="agenda-day" data-day="${day.num}">${day.label} ${day.num}${count?`<span class="pb-count">${count}</span>`:""}</button>`;
-      }).join("")}
-    </div>
-    ${(()=>{
-      const day = WEEK_DAYS.find(d=>d.num===state.agendaDay);
-      const evs = agendaEventsForDay(state.agendaDay);
-      return `<div class="agenda-day-heading">${day.label} ${day.num} septembre</div>
-      ${evs.length===0 ? `<div class="empty-note">Aucun événement ce jour-là.</div>` : evs.map(e=>`
-        <div class="list-card" data-action="open-dossier" data-id="${e.id}">
-          <div class="lc-top">
-            <div>
-              <div class="ev-time">${e.time?esc(e.time)+" · ":""}${esc(e.label)}</div>
-              <div class="lc-name" style="margin-top:4px">${esc(e.client)}</div>
-            </div>
-          </div>
-          <div class="lc-sub">${esc(e.membre)} · ${esc(e.ville)}</div>
-        </div>`).join("")}`;
-    })()}
-  </div>`;
+  ${renderCalToolbar()}
+  ${body}
+  `;
 }
 
 // ---------- Entretiens ----------
@@ -897,7 +1019,7 @@ function renderCommercialKanban(){
       const items = list.filter(d=>d.commercialStage===stg);
       return `<div class="kanban-col">
         <h4>${esc(stg)} <span>${items.length}</span></h4>
-        ${items.length===0 ? `<div class="agenda-empty">Aucun dossier à cette étape.</div>` : items.map(d=>`
+        ${items.length===0 ? `<div class="cal-empty">Aucun dossier à cette étape.</div>` : items.map(d=>`
           <div class="kanban-card">
             <div class="kc-id">${esc(d.id)}</div>
             <div class="kc-name">${esc(d.client)}</div>
@@ -1098,7 +1220,7 @@ function buildModal(){
 
 function modalWrap(title, bodyHtml){
   return `<div class="modal-overlay" data-action="modal-overlay">
-    <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal">
       <div class="modal-header"><h3>${esc(title)}</h3><button class="modal-close" data-action="modal-close">✕</button></div>
       ${bodyHtml}
     </div>
@@ -1169,7 +1291,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(!t) return;
     const action = t.dataset.action;
 
-    if(action==="modal-overlay"){ state.modal=null; render(); return; }
+    if(action==="modal-overlay"){ if(e.target===t){ state.modal=null; render(); } return; }
     if(action==="modal-close"){ state.modal=null; render(); return; }
     if(action==="toggle-sidebar"){ state.sidebarOpen=!state.sidebarOpen; render(); return; }
     if(action==="close-sidebar"){ state.sidebarOpen=false; render(); return; }
@@ -1182,7 +1304,14 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(action==="modal-choose"){ state.modal={type:"choose"}; render(); return; }
     if(action==="modal-info"){ state.modal={type:"info", msg:t.dataset.msg}; render(); return; }
     if(action==="choose-dossier"){ state.modal={type:"affect", id:t.dataset.id}; render(); return; }
-    if(action==="reset-demo"){ DOSSIERS = seedDossiers(); state={role:"admin",section:"overview",dossierId:null,dossierTab:"info",diagStep:1,agendaMember:"all",modal:null,toast:null}; render(); return; }
+    if(action==="reset-demo"){
+      DOSSIERS = seedDossiers();
+      state = {role:"admin",section:"overview",dossierId:null,dossierTab:"info",diagStep:1,agendaMember:"all",
+        calendarView:"day",calendarDate:new Date(TODAY_REF),datePickerOpen:false,pickerViewDate:new Date(TODAY_REF),
+        kanbanStage:"À contacter",modal:null,toast:null,sidebarOpen:false};
+      render();
+      return;
+    }
     if(action==="copy-ref"){ showToast("Référence copiée : "+t.dataset.ref); return; }
     if(action==="mark-remise"){ showToast("Récompense marquée comme remise (démo)."); return; }
     if(action==="download-pdf"){ showToast("Le PDF serait téléchargé dans la version connectée."); return; }
@@ -1257,7 +1386,48 @@ document.addEventListener("DOMContentLoaded", ()=>{
       render();
       return;
     }
-    if(action==="agenda-day"){ state.agendaDay = parseInt(t.dataset.day,10); render(); return; }
+    if(action==="cal-view"){ state.calendarView = t.dataset.view; state.datePickerOpen=false; render(); return; }
+    if(action==="cal-prev" || action==="cal-next"){
+      const dir = action==="cal-prev" ? -1 : 1;
+      const v = state.calendarView;
+      if(v==="day") state.calendarDate = addDays(state.calendarDate, dir);
+      else if(v==="week") state.calendarDate = addDays(state.calendarDate, dir*7);
+      else if(v==="month") state.calendarDate = addMonths(state.calendarDate, dir);
+      else state.calendarDate = addYears(state.calendarDate, dir);
+      render();
+      return;
+    }
+    if(action==="cal-today"){ state.calendarDate = new Date(TODAY_REF); render(); return; }
+    if(action==="toggle-datepicker"){
+      if(!state.datePickerOpen) state.pickerViewDate = new Date(state.calendarDate);
+      state.datePickerOpen = !state.datePickerOpen;
+      render();
+      return;
+    }
+    if(action==="close-datepicker"){ state.datePickerOpen=false; render(); return; }
+    if(action==="picker-prev-month"){ state.pickerViewDate = addMonths(state.pickerViewDate,-1); render(); return; }
+    if(action==="picker-next-month"){ state.pickerViewDate = addMonths(state.pickerViewDate,1); render(); return; }
+    if(action==="picker-select-day"){
+      const [y,m,day] = t.dataset.date.split("-").map(Number);
+      state.calendarDate = new Date(y,m,day);
+      state.datePickerOpen = false;
+      render();
+      return;
+    }
+    if(action==="cal-goto-day"){
+      const [y,m,day] = t.dataset.date.split("-").map(Number);
+      state.calendarDate = new Date(y,m,day);
+      state.calendarView = "day";
+      render();
+      return;
+    }
+    if(action==="cal-goto-month"){
+      const [y,m,day] = t.dataset.date.split("-").map(Number);
+      state.calendarDate = new Date(y,m,day);
+      state.calendarView = "month";
+      render();
+      return;
+    }
     if(action==="kanban-stage"){ state.kanbanStage = t.dataset.stage; render(); return; }
     if(action==="diag-step"){ state.diagStep = parseInt(t.dataset.step,10); render(); return; }
     if(action==="diag-save-point" || action==="diag-next"){
