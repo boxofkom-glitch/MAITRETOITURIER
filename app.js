@@ -455,6 +455,16 @@ function renderDossierDetail(id){
   else if(state.dossierTab==="rapport") body = renderDossierRapport(d);
   else if(state.dossierTab==="commercial") body = renderDossierCommercial(d);
 
+  if(state.dossierTab==="diagnostic" && diagEditable()){
+    return `
+    <div class="diag-focus-bar">
+      <button class="breadcrumb" data-action="dossier-tab" data-tab="info">← Quitter le diagnostic</button>
+      <div class="diag-focus-title">${esc(d.client)} · ${esc(d.id)}</div>
+    </div>
+    ${body}
+    `;
+  }
+
   return `
   <button class="breadcrumb" data-action="nav" data-section="dossiers">← Dossiers / ${esc(d.id)}</button>
   <div class="page-header">
@@ -574,54 +584,45 @@ function renderDossierDiagnostic(d){
   return `
   <div class="diag-progress">POINT ${step} SUR ${POINTS.length} · ${controlled} / ${POINTS.length} contrôlés</div>
   ${stepsNav}
-  <div class="diag-layout">
-    <div class="card">
-      <div class="point-title">${esc(pointName)}</div>
-      <div class="point-sub">Renseignez uniquement ce qui a pu être observé. Précisez les zones non accessibles.</div>
-      <div class="form-field"><label>État — ${esc(pointName)}</label>
-        <select id="ptEtat">
-          ${["Non contrôlé","Bon état","À surveiller","Défaut constaté","Non accessible"].map(o=>`<option ${p.etat===o?"selected":""}>${o}</option>`).join("")}
-        </select>
-      </div>
-      <div class="form-field"><label>Observation — ${esc(pointName)}</label><textarea id="ptObs" placeholder="Localisation, anomalie visible, étendue et réserves…">${esc(p.observation)}</textarea></div>
-      <div style="font-weight:600;font-size:13px;margin:16px 0 10px">Le choix à expliquer au client</div>
-      <div class="form-field"><label>Décision proposée — ${esc(pointName)}</label>
-        <select id="ptDecision">
-          ${["Conserver","Surveiller","Réparer","Remplacer","Contrôle complémentaire"].map(o=>`<option ${p.decision===o?"selected":""}>${o}</option>`).join("")}
-        </select>
-      </div>
-      <div class="form-field"><label>Pourquoi ce choix ? — ${esc(pointName)}</label><textarea id="ptPourquoi" placeholder="Ce point n’a pas pu être contrôlé complètement. Aucune conclusion de bon état ou de remplacement ne peut être établie.">${esc(p.pourquoi)}</textarea></div>
-      <div class="form-field"><label>Travaux proposés — ${esc(pointName)}</label><textarea id="ptTravaux" placeholder="Réparation ciblée, remplacement et périmètre, ou entretien conseillé…">${esc(p.travaux)}</textarea></div>
-      <div class="form-help">La justification doit correspondre aux constats. Un défaut localisé ne justifie pas automatiquement une rénovation complète.</div>
-      <div class="form-help" style="margin-top:6px">${p.photos.length} photo(s) rattachée(s) à ce point de contrôle.</div>
-      <div class="modal-actions">
-        <button class="btn-secondary" data-action="diag-save-point" data-id="${d.id}" data-step="${step}">Enregistrer le brouillon</button>
-        <button class="btn-primary" data-action="diag-next" data-id="${d.id}" data-step="${step}">Suivant →</button>
-      </div>
+  <div class="card">
+    <div class="point-title">${esc(pointName)}</div>
+    <div class="point-sub">Renseignez uniquement ce qui a pu être observé. Précisez les zones non accessibles.</div>
+    <div class="form-field"><label>État — ${esc(pointName)}</label>
+      <select id="ptEtat">
+        ${["Non contrôlé","Bon état","À surveiller","Défaut constaté","Non accessible"].map(o=>`<option ${p.etat===o?"selected":""}>${o}</option>`).join("")}
+      </select>
     </div>
-    <div class="diag-side">
-      <div class="card">
-        <h3 style="margin:0 0 10px;font-size:14.5px">Photos de ce point</h3>
-        <div class="row-sub" style="margin-bottom:10px">${p.photos.length} / 24</div>
-        ${p.photos.length ? `<div class="photo-grid">
-          ${p.photos.map((ph,i)=>`
-            <div class="photo-thumb">
-              ${ph.dataUrl ? `<img src="${ph.dataUrl}" alt="">` : `<div class="photo-placeholder">🖼</div>`}
-              <button class="photo-remove" data-action="remove-photo" data-id="${d.id}" data-step="${step}" data-idx="${i}">✕</button>
-            </div>`).join("")}
-        </div>` : ""}
-        <input type="file" id="photoGalleryInput" accept="image/*" multiple style="display:none" data-id="${d.id}" data-step="${step}">
-        <input type="file" id="photoCameraInput" accept="image/*" capture="environment" style="display:none" data-id="${d.id}" data-step="${step}">
-        <button class="btn-secondary btn-sm" style="width:100%;margin-bottom:8px" data-action="trigger-file" data-target="photoGalleryInput">Ajouter depuis la galerie</button>
-        <div class="form-help" style="margin-bottom:10px">JPG, PNG, WebP · 10 Mo par photo · 24 par visite</div>
-        <button class="btn-secondary btn-sm" style="width:100%" data-action="trigger-file" data-target="photoCameraInput">Prendre une photo</button>
-      </div>
-      <div class="card">
-        <h3 style="margin:0 0 10px;font-size:14.5px">Assistance photo par IA</h3>
-        <span class="badge gray">Non connectée</span>
-        <p style="font-size:12.5px;color:var(--muted);margin-top:10px">Dans la version connectée, l’IA pourra proposer des anomalies et des observations à partir des photos. Chaque suggestion devra être modifiée ou validée par le technicien.</p>
-        <p style="font-size:12.5px;color:var(--muted)">Cette démo ne transmet aucune photo à un service d’IA.</p>
-      </div>
+    <div class="form-field"><label>Observation — ${esc(pointName)}</label><textarea id="ptObs" placeholder="Localisation, anomalie visible, étendue et réserves…">${esc(p.observation)}</textarea></div>
+    <div style="font-weight:600;font-size:13px;margin:16px 0 10px">Le choix à expliquer au client</div>
+    <div class="form-field"><label>Décision proposée — ${esc(pointName)}</label>
+      <select id="ptDecision">
+        ${["Conserver","Surveiller","Réparer","Remplacer","Contrôle complémentaire"].map(o=>`<option ${p.decision===o?"selected":""}>${o}</option>`).join("")}
+      </select>
+    </div>
+    <div class="form-field"><label>Pourquoi ce choix ? — ${esc(pointName)}</label><textarea id="ptPourquoi" placeholder="Ce point n’a pas pu être contrôlé complètement. Aucune conclusion de bon état ou de remplacement ne peut être établie.">${esc(p.pourquoi)}</textarea></div>
+    <div class="form-field"><label>Travaux proposés — ${esc(pointName)}</label><textarea id="ptTravaux" placeholder="Réparation ciblée, remplacement et périmètre, ou entretien conseillé…">${esc(p.travaux)}</textarea></div>
+    <div class="form-help">La justification doit correspondre aux constats. Un défaut localisé ne justifie pas automatiquement une rénovation complète.</div>
+
+    <div style="font-weight:600;font-size:13px;margin:18px 0 10px">Photos de ce point</div>
+    <div class="row-sub" style="margin-bottom:10px">${p.photos.length} / 24</div>
+    ${p.photos.length ? `<div class="photo-grid">
+      ${p.photos.map((ph,i)=>`
+        <div class="photo-thumb">
+          ${ph.dataUrl ? `<img src="${ph.dataUrl}" alt="">` : `<div class="photo-placeholder">🖼</div>`}
+          <button class="photo-remove" data-action="remove-photo" data-id="${d.id}" data-step="${step}" data-idx="${i}">✕</button>
+        </div>`).join("")}
+    </div>` : ""}
+    <input type="file" id="photoGalleryInput" accept="image/*" multiple style="display:none" data-id="${d.id}" data-step="${step}">
+    <input type="file" id="photoCameraInput" accept="image/*" capture="environment" style="display:none" data-id="${d.id}" data-step="${step}">
+    <div style="display:flex;gap:10px">
+      <button class="btn-secondary btn-sm" style="flex:1" data-action="trigger-file" data-target="photoGalleryInput">Ajouter depuis la galerie</button>
+      <button class="btn-secondary btn-sm" style="flex:1" data-action="trigger-file" data-target="photoCameraInput">Prendre une photo</button>
+    </div>
+    <div class="form-help" style="margin-top:8px">JPG, PNG, WebP · 10 Mo par photo · 24 par visite</div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" data-action="diag-save-point" data-id="${d.id}" data-step="${step}">Enregistrer le brouillon</button>
+      <button class="btn-primary" data-action="diag-next" data-id="${d.id}" data-step="${step}">Suivant →</button>
     </div>
   </div>`;
 }
