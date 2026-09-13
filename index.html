@@ -338,9 +338,9 @@ tr:last-child td{border-bottom:none}
 .rd-contact b{display:block;font-size:13px;margin-bottom:2px}
 
 @media print{
-  .rd-section{page-break-before:always}
-  .rd-cover-section{page-break-before:avoid}
-  .rd-point-card,.rd-action-card,.rd-banner,.rd-info-grid{page-break-inside:avoid}
+  .rd-point-card,.rd-action-card,.rd-banner,.rd-info-grid,.rd-diagram,.rd-stat-card,.rd-hero,.rd-contact,.rd-page-header,.rd-brand-row{page-break-inside:avoid}
+  .rd-section h3,.rd-section .rd-section-sub,.rd-diagram-title,.rd-page-header,.rd-brand-row,.rd-cover-label,.rd-cover-title{page-break-after:avoid}
+  .rd-point-card:last-child,.rd-action-card:last-child{page-break-after:avoid}
 }
 
 .progress-tracker{display:flex;margin-bottom:26px}

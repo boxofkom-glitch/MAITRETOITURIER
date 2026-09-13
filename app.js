@@ -537,37 +537,6 @@ function logoMark(size){
   </div>`;
 }
 
-function coverIllustrationSvg(){
-  return `<svg viewBox="0 0 640 300" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice" style="width:100%;height:100%;display:block">
-    <defs>
-      <linearGradient id="rdSky" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#f6e6cc"/>
-        <stop offset="1" stop-color="#faf4e8"/>
-      </linearGradient>
-      <linearGradient id="rdRoof" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#c47a3a"/>
-        <stop offset="1" stop-color="#a8681f"/>
-      </linearGradient>
-    </defs>
-    <rect width="640" height="300" fill="url(#rdSky)"/>
-    <circle cx="546" cy="64" r="38" fill="#eec27f" opacity=".75"/>
-    <path d="M0,230 Q160,200 320,222 T640,214 V300 H0 Z" fill="#e5dcc9"/>
-    <rect x="60" y="150" width="10" height="70" fill="#8fae7a"/>
-    <circle cx="65" cy="130" r="34" fill="#9dbb86"/>
-    <rect x="560" y="160" width="9" height="60" fill="#8fae7a"/>
-    <circle cx="564" cy="142" r="28" fill="#9dbb86"/>
-    <polygon points="140,222 320,96 500,222" fill="url(#rdRoof)"/>
-    <polygon points="140,222 320,96 320,222" fill="#8f551f"/>
-    <line x1="140" y1="222" x2="500" y2="222" stroke="#7a4a1c" stroke-width="4"/>
-    <rect x="178" y="222" width="284" height="78" fill="#fbf7ef" stroke="#e6ddc9" stroke-width="2"/>
-    <rect x="298" y="252" width="52" height="48" fill="#a8681f"/>
-    <rect x="211" y="248" width="42" height="34" fill="#cfe6f2" stroke="#a8681f" stroke-width="2"/>
-    <rect x="387" y="248" width="42" height="34" fill="#cfe6f2" stroke="#a8681f" stroke-width="2"/>
-    <rect x="308" y="106" width="18" height="34" fill="#6b6b6b"/>
-    <rect x="303" y="98" width="28" height="10" fill="#565656"/>
-  </svg>`;
-}
-
 function roofCutawaySvg(){
   return `<svg viewBox="0 0 520 190" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block">
     <polygon points="20,150 260,30 500,150" fill="none" stroke="#8f551f" stroke-width="2"/>
@@ -581,14 +550,6 @@ function roofCutawaySvg(){
     <rect x="90" y="178" width="340" height="10" fill="#c7cbd3"/>
     <circle cx="260" cy="44" r="5" fill="#7a4a1c"/>
   </svg>`;
-}
-
-function firstReportPhoto(d){
-  for(const p of POINTS){
-    const photos = d.diagnostic.points[p].photos;
-    if(photos.length && photos[0].dataUrl) return photos[0].dataUrl;
-  }
-  return null;
 }
 
 function actionLabelFor(pointName, decision){
@@ -1058,7 +1019,6 @@ function reportPageHeader(){
 
 function renderReportDoc(d){
   const s = d.diagnostic.synthese;
-  const hero = firstReportPhoto(d);
   const controlledPoints = POINTS.filter(p=>d.diagnostic.points[p].etat!=="Non contrôlé");
   const flaggedPoints = POINTS.filter(p=>["Défaut constaté","À surveiller"].includes(d.diagnostic.points[p].etat));
   const conclusionCls = s.conclusion==="Bon état général" ? "green" : s.conclusion==="À surveiller" ? "gold" : "red";
@@ -1118,8 +1078,8 @@ function renderReportDoc(d){
       <div class="rd-cover-label">Dossier client</div>
       <h1 class="rd-cover-title">Rapport de diagnostic de toiture</h1>
       <div class="rd-cover-sub">État des lieux, points de vigilance et actions recommandées.</div>
-      <div class="rd-hero">${hero?`<img src="${hero}" alt="">`:coverIllustrationSvg()}</div>
-      <div class="rd-caption">${hero?"Photo prise durant la visite":"Illustration générique · une photo prise durant la visite s’affichera ici"}</div>
+      <div class="rd-hero"><img src="assets/cover-roof.jpg" alt=""></div>
+      <div class="rd-caption">Visuel générique d’illustration</div>
       <div class="rd-info-grid">
         <div>
           <div class="rd-info-label">Dossier</div><div class="rd-info-val">${esc(d.id)}</div>
