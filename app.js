@@ -12,7 +12,6 @@ const POINTS = [
 ];
 
 const CONSERVER_JUSTIF = "Le contrôle visuel renseigné indique un bon état. Aucun remplacement n’est justifié par les constats de cette visite, sous réserve des limites d’accès.";
-const CONSERVER_OBJECTIF = "préserver les éléments en état de service et éviter des travaux sans justification constatée.";
 
 const POINT_OBS = {
   "Couverture et état des tuiles":[
@@ -485,6 +484,48 @@ function stat(label, value, sub){
 }
 function badge(text, cls){ return `<span class="badge ${cls}">${esc(text)}</span>`; }
 
+const POINT_LAYER = {
+  "Couverture et état des tuiles":1,
+  "Éléments de finition et zinguerie":1,
+  "Étanchéité":2,
+  "Charpente":3,
+  "Isolation et ventilation":4,
+  "Humidité et infiltrations":5,
+  "État général et sécurité":1,
+  "Entretien, mousses et lichens":1
+};
+const DIAGRAM_LAYERS = [
+  {n:1, label:"Couverture", color:"#a8681f"},
+  {n:2, label:"Écran de sous-toiture", color:"#4a4f5a"},
+  {n:3, label:"Charpente", color:"#8a5a2b"},
+  {n:4, label:"Isolation", color:"#d8b45a"},
+  {n:5, label:"Plafond", color:"#c7cbd3"}
+];
+
+function etatPill(etat){
+  if(etat==="Défaut constaté") return badge("Défaut constaté","red");
+  if(etat==="À surveiller") return badge("À surveiller","gold");
+  if(etat==="Bon état") return badge("Bon état apparent","green");
+  if(etat==="Non accessible") return badge("Non accessible","gray");
+  return badge("Non contrôlé","gray");
+}
+
+function firstReportPhoto(d){
+  for(const p of POINTS){
+    const photos = d.diagnostic.points[p].photos;
+    if(photos.length && photos[0].dataUrl) return photos[0].dataUrl;
+  }
+  return null;
+}
+
+function actionLabelFor(pointName, decision){
+  if(decision==="Réparer") return "Réparer — "+pointName;
+  if(decision==="Remplacer") return "Remplacer — "+pointName;
+  if(decision==="Surveiller") return "Surveiller — "+pointName;
+  if(decision==="Contrôle complémentaire") return "Compléter le contrôle — "+pointName;
+  return "Traiter — "+pointName;
+}
+
 function showToast(msg){
   state.toast = msg;
   render();
@@ -936,50 +977,137 @@ function renderDossierDiagnostic(d){
 
 function renderReportDoc(d){
   const s = d.diagnostic.synthese;
+  const hero = firstReportPhoto(d);
+  const controlledPoints = POINTS.filter(p=>d.diagnostic.points[p].etat!=="Non contrôlé");
+  const flaggedPoints = POINTS.filter(p=>["Défaut constaté","À surveiller"].includes(d.diagnostic.points[p].etat));
+  const conclusionCls = s.conclusion==="Bon état général" ? "green" : s.conclusion==="À surveiller" ? "gold" : "red";
+
+  const refLines = flaggedPoints.map(p=>{
+    const pt = d.diagnostic.points[p];
+    const layer = POINT_LAYER[p] || 1;
+    return `<div><b>Repère ${layer}</b> · ${esc(p)}${pt.observation?" — "+esc(pt.observation):""}</div>`;
+  }).join("") || `<div>Aucun point signalé pour le moment.</div>`;
+
+  const pointCards = POINTS.map((p,i)=>{
+    const pt = d.diagnostic.points[p];
+    const photo = pt.photos.find(ph=>ph.dataUrl);
+    return `
+    <div class="rd-point-card">
+      <div class="rd-point-head">
+        <div class="rd-point-head-left">
+          <div class="rd-point-num">${i+1}</div>
+          <div class="rd-point-title">${esc(p)}</div>
+        </div>
+        ${etatPill(pt.etat)}
+      </div>
+      <div class="rd-point-body">
+        <div class="rd-point-photo">${photo?`<img src="${photo.dataUrl}" alt="">`:`<span class="rd-point-photo-placeholder">🖼</span>`}</div>
+        <div class="rd-point-text">
+          <h5>Observation</h5><p>${pt.observation?esc(pt.observation):"Non renseignée."}</p>
+          <h5>Décision</h5><p>${esc(pt.decision)}${pt.pourquoi?" — "+esc(pt.pourquoi):""}</p>
+          <h5>Travaux proposés</h5><p>${pt.travaux?esc(pt.travaux):"Aucun à ce stade."}</p>
+        </div>
+      </div>
+      ${pt.risque?`<div class="rd-risk-box"><b>⚠ Risques</b><span>${esc(pt.risque)}</span></div>`:""}
+    </div>`;
+  }).join("");
+
+  const actionRows = flaggedPoints.map((p,i)=>{
+    const pt = d.diagnostic.points[p];
+    return `<div class="rd-action-card">
+      <div class="rd-action-num">${i+1}</div>
+      <div>
+        <div class="rd-action-title">${esc(actionLabelFor(p, pt.decision))}</div>
+        <div class="rd-action-scope">Concerne : ${esc(p)}</div>
+        <div class="rd-action-detail">${esc(pt.travaux || pt.pourquoi || "À définir avec le technicien.")}</div>
+      </div>
+    </div>`;
+  }).join("");
+  const finalRowNum = flaggedPoints.length+1;
+
   return `
   <div class="report-doc">
-    <div style="color:var(--gold);font-weight:700;font-size:13px;margin-bottom:14px">⌂ Maître Toiturier</div>
-    <div class="rd-sub">Maître Toiturier · Démonstration</div>
-    <h2>RAPPORT DE DIAGNOSTIC</h2>
-    <div class="rd-sub">${esc(d.id)} · ${esc(d.visiteDate)}</div>
-    <div style="font-weight:700;margin-top:10px">${esc(d.client)}</div>
-    <div class="rd-sub">${esc(d.adresse)}, ${esc(d.ville)}</div>
-    <div class="rd-sub">Visite : ${esc(d.visiteDate)} · Technicien : ${esc(d.technicien)}</div>
-    <div class="rd-sub">Couverture : ${esc(s.typeCouverture)} · Surface estimée : ${esc(s.surface)} m²</div>
 
-    <div class="rd-section"><h4>Conclusion</h4><div>${esc(s.conclusion)}</div></div>
-
-    <div class="rd-section"><h4>Points de contrôle</h4>
-      ${POINTS.map(p=>{
-        const pt = d.diagnostic.points[p];
-        return `<div class="rd-point"><span>${esc(p)}</span><span>${esc(pt.etat)}</span></div>${pt.observation?`<div class="rd-quote">${esc(pt.observation)}</div>`:""}`;
-      }).join("")}
+    <div class="rd-section">
+      <div class="rd-cover-label">Dossier client</div>
+      <h1 class="rd-cover-title">Rapport de diagnostic de toiture</h1>
+      <div class="rd-cover-sub">État des lieux, points de vigilance et actions recommandées.</div>
+      <div class="rd-hero">${hero?`<img src="${hero}" alt="">`:`<div class="rd-hero-placeholder"><span style="font-size:26px">🏠</span>Photo de couverture à ajouter</div>`}</div>
+      <div class="rd-caption">${hero?"Photo prise durant la visite":"Visuel générique en attendant une photo"}</div>
+      <div class="rd-info-grid">
+        <div>
+          <div class="rd-info-label">Dossier</div><div class="rd-info-val">${esc(d.id)}</div>
+          <div class="rd-info-label">Date de visite</div><div class="rd-info-val">${esc(d.visiteDate)}</div>
+          <div class="rd-info-label">Technicien</div><div class="rd-info-val">${esc(d.technicien)}</div>
+        </div>
+        <div>
+          <div class="rd-info-label">Client</div><div class="rd-info-val">${esc(d.client)}</div>
+          <div class="rd-info-label">Adresse du bien</div><div class="rd-info-val">${esc(d.adresse)}, ${esc(d.ville)}</div>
+        </div>
+      </div>
+      <div class="rd-banner">🛡️<div><b>Prévenir les désordres. Prioriser les bonnes actions.</b>Une lecture claire de votre toiture, selon les zones accessibles.</div></div>
     </div>
 
-    <div class="rd-section"><h4>Observations</h4><div class="rd-quote">${esc(s.observations)}</div></div>
-    <div class="rd-section"><h4>Préconisations</h4><div class="rd-quote">${esc(s.preconisations)}</div></div>
+    <div class="rd-section">
+      <h3>Synthèse du diagnostic</h3>
+      <div class="rd-section-sub">${controlledPoints.length} / ${POINTS.length} points contrôlés</div>
+      <div class="rd-stat-row">
+        <div><div class="rd-stat-label">Couverture</div><div class="rd-stat-val">${esc(s.typeCouverture)}</div></div>
+        <div><div class="rd-stat-label">Surface estimée</div><div class="rd-stat-val">${s.surface?esc(s.surface)+" m²":"—"}</div></div>
+        <div><div class="rd-stat-label">Conclusion</div>${badge(s.conclusion||"À finaliser", conclusionCls)}</div>
+      </div>
+      ${s.observations?`<div class="rd-lead">${esc(s.observations)}</div>`:""}
 
-    <div class="rd-section"><h4>Les choix expliqués</h4>
-      ${POINTS.filter(p=>d.diagnostic.points[p].etat!=="Non contrôlé").map(p=>{
-        const pt = d.diagnostic.points[p];
-        return `<div class="rd-choice">
-          <div class="rc-head">${esc(p)} — ${esc(pt.decision)}</div>
-          ${pt.pourquoi?`<div class="rd-quote">${esc(pt.pourquoi)}</div>`:""}
-          ${pt.travaux?`<div style="font-size:12.5px">Travaux proposés : ${esc(pt.travaux)}</div>`:""}
-          <div style="font-size:12.5px;color:var(--muted)">Objectif : ${pt.decision==="Conserver"?CONSERVER_OBJECTIF:"traiter les constats identifiés dans l’intérêt du client."}</div>
-          ${pt.risque?`<div class="rd-risk">⚠ Risques : ${esc(pt.risque)}</div>`:""}
-        </div>`;
-      }).join("") || `<div class="empty-note">Aucun point contrôlé à ce jour.</div>`}
+      <div class="rd-diagram">
+        <div class="rd-diagram-title">Comprendre les zones contrôlées</div>
+        ${DIAGRAM_LAYERS.map(l=>`<div class="rd-diagram-layer"><div class="rd-diagram-num">${l.n}</div><div class="rd-diagram-swatch" style="background:${l.color}"></div>${esc(l.label)}</div>`).join("")}
+      </div>
+      <div class="rd-diagram-refs"><b>Références des observations</b>${refLines}</div>
+
+      <div class="rd-legend">
+        <div class="rd-legend-item"><span class="rd-legend-dot" style="background:var(--green)"></span>Bon état général</div>
+        <div class="rd-legend-item"><span class="rd-legend-dot" style="background:var(--gold)"></span>À surveiller</div>
+        <div class="rd-legend-item"><span class="rd-legend-dot" style="background:var(--red)"></span>Travaux recommandés</div>
+        <div class="rd-legend-item"><span class="rd-legend-dot" style="background:var(--red)"></span>Intervention urgente</div>
+      </div>
     </div>
 
-    <div class="rd-section"><h4>Photos de l’inspection</h4>
-      ${POINTS.filter(p=>d.diagnostic.points[p].photos.length).map(p=>{
-        const pt = d.diagnostic.points[p];
-        return `<div class="rd-photos-point">
-          <div class="rd-photo-title">${esc(p)}</div>
-          <div class="rd-photo-grid">${pt.photos.map(ph=>ph.dataUrl?`<img src="${ph.dataUrl}" alt="">`:"").join("")}</div>
-        </div>`;
-      }).join("") || `<div class="empty-note">Aucune photo ajoutée pour cette visite.</div>`}
+    <div class="rd-section">
+      <h3>Points de contrôle</h3>
+      <div class="rd-section-sub">Constat, photo et risques associés pour chaque zone inspectée.</div>
+      ${pointCards}
+    </div>
+
+    <div class="rd-section">
+      <h3>Préconisations &amp; plan d’action</h3>
+      <div class="rd-section-sub">Une intervention proportionnée aux constats, à valider avec le technicien.</div>
+      ${s.preconisations?`<div class="rd-lead">${esc(s.preconisations)}</div>`:""}
+      <div class="rd-action-list">
+        ${actionRows}
+        <div class="rd-action-card">
+          <div class="rd-action-num">${finalRowNum}</div>
+          <div>
+            <div class="rd-action-title">Documenter et suivre</div>
+            <div class="rd-action-scope">Concerne : tous les contrôles</div>
+            <div class="rd-action-detail">Conserver les photos après intervention et signaler les zones restées inaccessibles.</div>
+          </div>
+        </div>
+      </div>
+      <div class="rd-checklist">
+        <div class="rd-checklist-item"><span class="rd-checkbox"></span>Demander un devis détaillé</div>
+        <div class="rd-checklist-item"><span class="rd-checkbox"></span>Prévoir un échange avec le technicien</div>
+      </div>
+    </div>
+
+    <div class="rd-section">
+      <div class="rd-contact">
+        <div>
+          <b>Maître Toiturier</b>
+          maitretoiturier.fr<br>
+          Téléphone : à renseigner<br>
+          E-mail : à renseigner
+        </div>
+      </div>
     </div>
 
     <div class="rd-footer">Document de démonstration. Contrôle visuel des zones accessibles, selon les observations renseignées par le technicien. Ce rapport n’est pas une certification.</div>
