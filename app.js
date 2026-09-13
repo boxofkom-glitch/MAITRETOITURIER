@@ -589,6 +589,31 @@ function numberPdfPages(){
   nums.forEach((el,i)=>{ el.textContent = `Page ${i+1} / ${nums.length}`; });
 }
 
+function openReportPrintWindow(d){
+  const reportHtml = renderReportDoc(d);
+  const styleEl = document.querySelector("style");
+  const styleBlock = styleEl ? styleEl.outerHTML : "";
+  const helperSrc = [iconSvg, logoMark, pdfHead, repaginatePoints, numberPdfPages].map(fn=>fn.toString()).join("\n\n");
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Rapport de diagnostic ${esc(d.id)}</title>${styleBlock}<style>html,body{margin:0;padding:0}</style></head><body>${reportHtml}<script>${helperSrc}
+repaginatePoints();
+numberPdfPages();
+<\/script></body></html>`;
+
+  const old = document.getElementById("pdf-print-frame");
+  if(old) old.remove();
+  const frame = document.createElement("iframe");
+  frame.id = "pdf-print-frame";
+  frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+  frame.onload = function(){
+    setTimeout(function(){
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+    }, 200);
+  };
+  document.body.appendChild(frame);
+  frame.srcdoc = html;
+}
+
 function repaginatePoints(){
   const flow = document.querySelector(".pdf-points-flow");
   if(!flow) return;
@@ -1285,8 +1310,9 @@ function renderDossierRapport(d){
   }
   return `
   <div class="card-header" style="margin-bottom:14px">
-    <div style="display:flex;gap:10px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
       <button class="btn-secondary btn-sm" data-action="download-pdf" data-id="${d.id}">Télécharger le PDF</button>
+      <button class="btn-primary btn-sm" data-action="modal-send" data-id="${d.id}">Envoyer au client</button>
       <button class="btn-secondary btn-sm" data-action="share-report" data-id="${d.id}">Partager au client (démo)</button>
     </div>
     ${badge(d.diagnostic.rapportPartage?"Partagé (démo)":"Non partagé", d.diagnostic.rapportPartage?"green":"gray")}
@@ -1823,6 +1849,7 @@ function buildModal(){
   if(m.type==="affect") return modalAffecter(byId(m.id));
   if(m.type==="choose") return modalChooseDossier();
   if(m.type==="info") return modalInfo(m.msg);
+  if(m.type==="send") return modalSendClient(byId(m.id));
   return "";
 }
 
@@ -1884,6 +1911,16 @@ function modalChooseDossier(){
   `);
 }
 
+function modalSendClient(d){
+  return modalWrap("Envoyer le rapport au client", `
+    <p class="form-help" style="margin-bottom:14px">${esc(d.client)} — choisissez comment envoyer le rapport.</p>
+    <button class="modal-list-btn" data-action="send-whatsapp" data-id="${d.id}">WhatsApp — ${esc(d.telephone||"numéro non renseigné")}</button>
+    <button class="modal-list-btn" data-action="send-email" data-id="${d.id}">E-mail — ${esc(d.email||"adresse non renseignée")}</button>
+    <p class="form-help" style="margin-top:14px">La conversation ou l’e-mail s’ouvre avec un message prêt. Aucun site ne peut joindre un fichier automatiquement : générez le PDF (bouton “Télécharger le PDF”) puis joignez-le manuellement.</p>
+    <div class="modal-actions"><button class="btn-secondary" data-action="modal-close">Annuler</button></div>
+  `);
+}
+
 function modalInfo(msg){
   return modalWrap(msg, `<p style="color:var(--muted);font-size:13px">Fonctionnalité de démonstration : cet écran illustre l’emplacement de l’action dans le parcours, sans persistance au-delà de la session.</p>
     <div class="modal-actions"><button class="btn-secondary" data-action="modal-close">Fermer</button></div>`);
@@ -1925,7 +1962,32 @@ document.addEventListener("DOMContentLoaded", ()=>{
     }
     if(action==="copy-ref"){ showToast("Référence copiée : "+t.dataset.ref); return; }
     if(action==="mark-remise"){ showToast("Récompense marquée comme remise (démo)."); return; }
-    if(action==="download-pdf"){ showToast("Le PDF serait téléchargé dans la version connectée."); return; }
+    if(action==="download-pdf"){
+      const d = byId(t.dataset.id);
+      openReportPrintWindow(d);
+      return;
+    }
+    if(action==="modal-send"){ state.modal={type:"send", id:t.dataset.id}; render(); return; }
+    if(action==="send-whatsapp"){
+      const d = byId(t.dataset.id);
+      const phone = (d.telephone||"").replace(/\D/g,"").replace(/^0/,"33");
+      const msg = `Bonjour ${d.client}, voici votre rapport de diagnostic de toiture (réf. ${d.id}). N’hésitez pas si vous avez des questions.`;
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
+      state.modal = null;
+      showToast("WhatsApp ouvert avec le message prêt. Pensez à joindre le PDF (bouton “Télécharger le PDF”) à la conversation.");
+      render();
+      return;
+    }
+    if(action==="send-email"){
+      const d = byId(t.dataset.id);
+      const subject = `Votre rapport de diagnostic — Maître Toiturier (${d.id})`;
+      const body = `Bonjour ${d.client},\n\nVeuillez trouver ci-joint votre rapport de diagnostic de toiture.\n\nCordialement,\nMaître Toiturier`;
+      window.location.href = `mailto:${encodeURIComponent(d.email||"")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      state.modal = null;
+      showToast("E-mail ouvert avec le message prêt. Pensez à joindre le PDF (bouton “Télécharger le PDF”) avant de l’envoyer.");
+      render();
+      return;
+    }
     if(action==="share-report"){
       const d = byId(t.dataset.id); d.diagnostic.rapportPartage = true;
       showToast("Rapport partagé dans l’espace client de démonstration.");
