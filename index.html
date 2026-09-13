@@ -256,12 +256,14 @@ tr:last-child td{border-bottom:none}
 .diag-focus-title{font-size:13px;color:var(--muted);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 .pdf-doc{display:flex;flex-direction:column;align-items:center;gap:28px;padding:28px 0}
-.pdf-page{width:210mm;min-height:297mm;background:#fff;box-shadow:0 10px 34px rgba(20,14,6,.16);position:relative;overflow:hidden;box-sizing:border-box;font-family:inherit;color:#232017}
+.pdf-page{width:210mm;min-height:297mm;background:#f6eeda;box-shadow:0 10px 34px rgba(20,14,6,.16);position:relative;overflow:hidden;box-sizing:border-box;font-family:inherit;color:#232017}
+.pdf-page:not(.pdf-cover):not(.pdf-backcover):after{content:'';position:absolute;left:0;right:0;bottom:0;height:7px;background:linear-gradient(90deg,#7d4e17,#e8bf69,#a8681f,#7d4e17)}
 .pdf-page-pad{padding:15mm 15mm 12mm}
 
 .pdf-head{display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:1.5px solid #e7dcc6}
 .pdf-head-name{font-size:12.5px;font-weight:800}
 .pdf-head-tag{margin-left:auto;font-size:10px;font-weight:700;letter-spacing:.07em;color:#a8681f;text-transform:uppercase}
+.pdf-page-num{font-size:9.5px;color:#9c8f74;margin-left:10px;white-space:nowrap}
 
 /* Cover */
 .pdf-page.pdf-cover{color:#fff;height:297mm}
@@ -288,13 +290,13 @@ tr:last-child td{border-bottom:none}
 .pdf-h1-sub{color:#6b6355;font-size:12px;margin-bottom:16px}
 
 .pdf-stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
-.pdf-stat-card{border:1px solid #e7dcc6;border-radius:10px;padding:11px 12px;background:#faf7f0}
+.pdf-stat-card{border:1px solid #e7dcc6;border-radius:10px;padding:11px 12px;background:#fffdf8}
 .pdf-stat-card-top{display:flex;align-items:center;gap:6px;color:#a8681f;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-bottom:5px}
 .pdf-stat-val{font-size:13px;font-weight:700}
-.pdf-lead{font-size:12px;margin-bottom:14px;padding:10px 13px;background:#faf7f0;border-radius:9px;border-left:3px solid #a8681f}
+.pdf-lead{font-size:12px;margin-bottom:14px;padding:10px 13px;background:#fffdf8;border-radius:9px;border-left:3px solid #a8681f}
 
 .pdf-diagram{border:1px solid #e7dcc6;border-radius:10px;overflow:hidden;margin-bottom:12px}
-.pdf-diagram-title{font-size:10px;font-weight:700;letter-spacing:.05em;color:#6b6355;text-transform:uppercase;padding:8px 12px;background:#faf7f0}
+.pdf-diagram-title{font-size:10px;font-weight:700;letter-spacing:.05em;color:#6b6355;text-transform:uppercase;padding:8px 12px;background:#fffdf8}
 .pdf-diagram-art{padding:10px 12px 2px;background:#fdfbf6;text-align:center}
 .pdf-diagram-art svg{max-width:360px}
 .pdf-diagram-layers{display:flex;flex-wrap:wrap;gap:0}
@@ -308,7 +310,7 @@ tr:last-child td{border-bottom:none}
 .pdf-legend-item{display:flex;align-items:center;gap:5px}
 .pdf-legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 
-.pdf-point{border:1px solid #e7dcc6;border-left:5px solid #d8cba4;border-radius:10px;padding:14px;margin-bottom:14px}
+.pdf-point{border:1px solid #e7dcc6;border-left:5px solid #d8cba4;border-radius:10px;padding:14px;margin-bottom:14px;background:#fffdf8}
 .pdf-point.st-red{border-left-color:#c0342a}
 .pdf-point.st-gold{border-left-color:#a8681f}
 .pdf-point.st-green{border-left-color:#15804a}
@@ -326,21 +328,31 @@ tr:last-child td{border-bottom:none}
 .pdf-risk{display:flex;gap:8px;align-items:flex-start;background:#fdeeed;border-radius:8px;padding:8px 10px;margin-top:2px;font-size:11px}
 .pdf-risk b{color:#c0342a;flex-shrink:0;display:flex;align-items:center;gap:4px}
 
-.pdf-action{display:flex;gap:10px;border:1px solid #e7dcc6;border-radius:10px;padding:10px 12px;margin-bottom:8px}
+.pdf-action{display:flex;gap:10px;border:1px solid #e7dcc6;border-radius:10px;padding:10px 12px;margin-bottom:8px;background:#fffdf8}
 .pdf-action-num{width:20px;height:20px;border-radius:50%;background:#f2e6d0;color:#7d4e17;font-weight:700;font-size:10.5px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .pdf-action-title{font-weight:700;font-size:12px}
 .pdf-action-scope{font-size:10.5px;color:#8a7f66;margin:1px 0 3px}
 .pdf-action-detail{font-size:11.5px}
+.pdf-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:6px}
+.pdf-step-card{border:1px solid #e7dcc6;border-radius:10px;padding:14px 12px;background:#fffdf8;text-align:center}
+.pdf-step-num{width:28px;height:28px;border-radius:50%;background:linear-gradient(155deg,#a8681f,#7d4e17);color:#fff;font-weight:800;font-size:12.5px;display:flex;align-items:center;justify-content:center;margin:0 auto 8px}
+.pdf-step-title{font-weight:700;font-size:11.5px;margin-bottom:3px}
+.pdf-step-text{font-size:10px;color:#6b6355;line-height:1.5}
+
 .pdf-checklist{display:flex;flex-direction:column;gap:7px;margin:12px 0}
 .pdf-checklist-item{display:flex;align-items:center;gap:9px;font-size:11.5px}
 .pdf-checkbox{width:14px;height:14px;border:1.5px solid #d8cba4;border-radius:3px;flex-shrink:0}
 
-.pdf-back{margin-top:18px;background:linear-gradient(160deg,#1c130a,#3c2810 55%,#5a3a18);color:#fff;padding:14mm 15mm 12mm}
-.pdf-back-thanks{font-size:16px;font-weight:800;margin-bottom:4px}
-.pdf-back-sub{font-size:11.5px;color:#e9dfce;margin-bottom:14px}
-.pdf-back-row{display:flex;align-items:center;gap:12px}
-.pdf-back-contact{font-size:11.5px;color:#f3ead9}
-.pdf-back-contact b{display:block;font-size:12.5px;color:#fff;margin-bottom:2px}
+.pdf-page.pdf-backcover{height:297mm;background:linear-gradient(160deg,#180f07,#3c2810 55%,#5a3a18);color:#fff;display:flex;flex-direction:column}
+.pdf-backcover-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 25mm}
+.pdf-backcover-name{font-size:21px;font-weight:800;margin-bottom:4px}
+.pdf-backcover-tag{font-size:11.5px;color:#e8bf69;letter-spacing:.06em;text-transform:uppercase;margin-bottom:30px}
+.pdf-backcover-divider{width:64px;height:2px;background:linear-gradient(90deg,transparent,#e8bf69,transparent);margin-bottom:30px}
+.pdf-backcover-thanks{font-size:27px;font-weight:800;margin-bottom:12px}
+.pdf-backcover-sub{font-size:12.5px;color:#e9dfce;line-height:1.75;max-width:420px;margin-bottom:32px}
+.pdf-backcover-contact{font-size:12px;color:#f3ead9;line-height:2}
+.pdf-backcover-contact b{display:block;font-size:13.5px;color:#fff;margin-bottom:4px}
+.pdf-backcover-legal{font-size:9.5px;color:#c9bfa6;text-align:center;padding:0 20mm 14mm;line-height:1.6}
 .pdf-legal{font-size:9.5px;color:#c9bfa6;margin-top:14px;line-height:1.5}
 
 @media print{

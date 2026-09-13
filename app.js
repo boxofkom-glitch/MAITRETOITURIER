@@ -552,6 +552,13 @@ function roofCutawaySvg(){
   </svg>`;
 }
 
+function backcoverArtSvg(){
+  return `<svg viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg" style="position:absolute;left:50%;bottom:-30px;transform:translateX(-50%);width:900px;opacity:.07;pointer-events:none">
+    <path d="M40 340 L400 80 L760 340" stroke="#e8bf69" stroke-width="10" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M140 300 V400 H660 V300" stroke="#e8bf69" stroke-width="10" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+}
+
 function actionLabelFor(pointName, decision){
   if(decision==="Réparer") return "Réparer — "+pointName;
   if(decision==="Remplacer") return "Remplacer — "+pointName;
@@ -572,7 +579,14 @@ function render(){
   const app = document.getElementById("app");
   app.innerHTML = buildApp();
   repaginatePoints();
+  numberPdfPages();
   applyPdfScale();
+}
+
+function numberPdfPages(){
+  const nums = document.querySelectorAll(".pdf-page-num");
+  if(!nums.length) return;
+  nums.forEach((el,i)=>{ el.textContent = `Page ${i+1} / ${nums.length}`; });
 }
 
 function repaginatePoints(){
@@ -1093,7 +1107,7 @@ function renderDossierDiagnostic(d){
 }
 
 function pdfHead(){
-  return `<div class="pdf-head">${logoMark(24)}<div class="pdf-head-name">Maître Toiturier</div><div class="pdf-head-tag">Rapport de diagnostic</div></div>`;
+  return `<div class="pdf-head">${logoMark(24)}<div class="pdf-head-name">Maître Toiturier</div><div class="pdf-head-tag">Rapport de diagnostic</div><div class="pdf-page-num"></div></div>`;
 }
 
 function pdfPointCard(p, i, d){
@@ -1230,15 +1244,33 @@ function renderReportDoc(d){
           <div class="pdf-checklist-item"><span class="pdf-checkbox"></span>Demander un devis détaillé</div>
           <div class="pdf-checklist-item"><span class="pdf-checkbox"></span>Prévoir un échange avec le technicien</div>
         </div>
-      </div>
-      <div class="pdf-back">
-        <div class="pdf-back-thanks">Merci de votre confiance</div>
-        <div class="pdf-back-sub">Document de démonstration. Contrôle visuel des zones accessibles, selon les observations renseignées par le technicien. Ce rapport n’est pas une certification.</div>
-        <div class="pdf-back-row">
-          ${logoMark(30)}
-          <div class="pdf-back-contact"><b>Maître Toiturier</b>maitretoiturier.fr · Téléphone : à renseigner · E-mail : à renseigner</div>
+
+        <div style="font-weight:700;font-size:12.5px;margin:18px 0 10px">Et maintenant ?</div>
+        <div class="pdf-steps">
+          <div class="pdf-step-card"><div class="pdf-step-num">1</div><div class="pdf-step-title">Devis détaillé</div><div class="pdf-step-text">Un chiffrage précis vous est transmis pour les travaux recommandés dans ce rapport.</div></div>
+          <div class="pdf-step-card"><div class="pdf-step-num">2</div><div class="pdf-step-title">Planification</div><div class="pdf-step-text">Une date d’intervention est fixée avec vous selon la nature et l’urgence des travaux.</div></div>
+          <div class="pdf-step-card"><div class="pdf-step-num">3</div><div class="pdf-step-title">Suivi après travaux</div><div class="pdf-step-text">Un point de contrôle peut être réalisé pour valider la bonne exécution.</div></div>
         </div>
       </div>
+    </div></div>
+
+    <div class="pdf-page-frame"><div class="pdf-page pdf-backcover">
+      ${backcoverArtSvg()}
+      <div class="pdf-backcover-body">
+        ${logoMark(52)}
+        <div class="pdf-backcover-name" style="margin-top:16px">Maître Toiturier</div>
+        <div class="pdf-backcover-tag">Expertise · Conseil · Toitures durables</div>
+        <div class="pdf-backcover-divider"></div>
+        <div class="pdf-backcover-thanks">Merci de votre confiance</div>
+        <div class="pdf-backcover-sub">Ce rapport vous a été remis à l’issue de la visite diagnostic. Notre équipe reste à votre disposition pour répondre à vos questions et organiser les travaux recommandés.</div>
+        <div class="pdf-backcover-contact">
+          <b>Nous contacter</b>
+          maitretoiturier.fr<br>
+          Téléphone : à renseigner<br>
+          E-mail : à renseigner
+        </div>
+      </div>
+      <div class="pdf-backcover-legal">Document de démonstration. Contrôle visuel des zones accessibles, selon les observations renseignées par le technicien. Ce rapport n’est pas une certification.</div>
     </div></div>
   </div>`;
 }
