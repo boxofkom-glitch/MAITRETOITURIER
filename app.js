@@ -583,39 +583,67 @@ function render(){
   applyPdfScale();
 }
 
-function numberPdfPages(){
-  const nums = document.querySelectorAll(".pdf-page-num");
+function numberPdfPages(root){
+  root = root || document;
+  const nums = root.querySelectorAll(".pdf-page-num");
   if(!nums.length) return;
   nums.forEach((el,i)=>{ el.textContent = `Page ${i+1} / ${nums.length}`; });
 }
 
-function openReportPrintWindow(d){
-  const reportHtml = renderReportDoc(d);
-  const styleEl = document.querySelector("style");
-  const styleBlock = styleEl ? styleEl.outerHTML : "";
-  const helperSrc = [iconSvg, logoMark, pdfHead, repaginatePoints, numberPdfPages].map(fn=>fn.toString()).join("\n\n");
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Rapport de diagnostic ${esc(d.id)}</title>${styleBlock}<style>html,body{margin:0;padding:0}</style></head><body>${reportHtml}<script>${helperSrc}
-repaginatePoints();
-numberPdfPages();
-<\/script></body></html>`;
-
-  const old = document.getElementById("pdf-print-frame");
-  if(old) old.remove();
-  const frame = document.createElement("iframe");
-  frame.id = "pdf-print-frame";
-  frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
-  frame.onload = function(){
-    setTimeout(function(){
-      frame.contentWindow.focus();
-      frame.contentWindow.print();
-    }, 200);
-  };
-  document.body.appendChild(frame);
-  frame.srcdoc = html;
+function loadScriptOnce(src){
+  return new Promise((resolve,reject)=>{
+    if(document.querySelector(`script[src="${src}"]`)){ resolve(); return; }
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = ()=>resolve();
+    s.onerror = ()=>reject(new Error("Échec de chargement : "+src));
+    document.head.appendChild(s);
+  });
 }
 
-function repaginatePoints(){
-  const flow = document.querySelector(".pdf-points-flow");
+async function generateAndDownloadPdf(d){
+  showToast("Génération du PDF…");
+  try{
+    await loadScriptOnce("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
+    await loadScriptOnce("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
+  } catch(e){
+    showToast("Connexion internet requise pour générer le PDF.");
+    return;
+  }
+
+  const host = document.createElement("div");
+  host.style.cssText = "position:fixed;left:-99999px;top:0;width:794px;background:#fff;z-index:-1";
+  host.innerHTML = renderReportDoc(d);
+  document.body.appendChild(host);
+
+  const imgs = Array.from(host.querySelectorAll("img"));
+  await Promise.all(imgs.map(img=>img.complete ? Promise.resolve() : new Promise(res=>{ img.onload=res; img.onerror=res; })));
+
+  repaginatePoints(host);
+  numberPdfPages(host);
+
+  const pages = Array.from(host.querySelectorAll(".pdf-page"));
+  try{
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit:"mm", format:"a4", orientation:"portrait" });
+    for(let i=0;i<pages.length;i++){
+      const canvas = await window.html2canvas(pages[i], { scale:2, useCORS:true, backgroundColor:"#ffffff" });
+      const imgData = canvas.toDataURL("image/jpeg", 0.92);
+      if(i>0) pdf.addPage();
+      pdf.addImage(imgData, "JPEG", 0, 0, 210, 297, "", "FAST");
+    }
+    pdf.save(`rapport-diagnostic-${d.id}.pdf`);
+    showToast("PDF téléchargé.");
+  } catch(e){
+    showToast("La génération du PDF a échoué. Réessayez.");
+  } finally {
+    host.remove();
+  }
+}
+
+function repaginatePoints(root){
+  root = root || document;
+  const flow = root.querySelector(".pdf-points-flow");
   if(!flow) return;
   const frame = flow.closest(".pdf-page-frame");
   if(!frame || !frame.parentNode) return;
@@ -1964,7 +1992,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(action==="mark-remise"){ showToast("Récompense marquée comme remise (démo)."); return; }
     if(action==="download-pdf"){
       const d = byId(t.dataset.id);
-      openReportPrintWindow(d);
+      generateAndDownloadPdf(d);
       return;
     }
     if(action==="modal-send"){ state.modal={type:"send", id:t.dataset.id}; render(); return; }
