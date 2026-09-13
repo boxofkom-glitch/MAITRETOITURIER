@@ -509,6 +509,79 @@ function etatPill(etat){
   if(etat==="Non accessible") return badge("Non accessible","gray");
   return badge("Non contrôlé","gray");
 }
+function etatAccentCls(etat){
+  if(etat==="Défaut constaté") return "st-red";
+  if(etat==="À surveiller") return "st-gold";
+  if(etat==="Bon état") return "st-green";
+  return "st-gray";
+}
+
+function iconSvg(name, size){
+  size = size||18;
+  const inner = {
+    shield:`<path d="M12 2.5l7.5 3v5.5c0 5-3.2 8.6-7.5 10-4.3-1.4-7.5-5-7.5-10V5.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 12l2 2 4-4.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>`,
+    warning:`<path d="M12 3.2l9.5 16.6H2.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><line x1="12" y1="9.3" x2="12" y2="14.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="17.1" r="1.05" fill="currentColor"/>`,
+    house:`<path d="M4 11.2L12 4l8 7.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.3 9.8V19h11.4V9.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><rect x="10.2" y="13" width="3.6" height="6" fill="none" stroke="currentColor" stroke-width="1.4"/>`,
+    check:`<path d="M4.5 12.5l4.7 4.7L19.5 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`,
+    ruler:`<rect x="3" y="9" width="18" height="6" rx="1" transform="rotate(-25 12 12)" fill="none" stroke="currentColor" stroke-width="1.5"/>`,
+    layers:`<path d="M12 3l9 5-9 5-9-5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 13l9 5 9-5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>`,
+    clipboard:`<rect x="5" y="4.5" width="14" height="16" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="8.5" y="3" width="7" height="3" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="8" y1="10.5" x2="16" y2="10.5" stroke="currentColor" stroke-width="1.3"/><line x1="8" y1="14" x2="16" y2="14" stroke="currentColor" stroke-width="1.3"/><line x1="8" y1="17.5" x2="13" y2="17.5" stroke="currentColor" stroke-width="1.3"/>`
+  };
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24">${inner[name]||""}</svg>`;
+}
+
+function logoMark(size){
+  size = size||36;
+  return `<div style="width:${size}px;height:${size}px;border-radius:${Math.round(size*.28)}px;background:linear-gradient(155deg,var(--gold),var(--gold2));display:flex;align-items:center;justify-content:center;flex-shrink:0">
+    <svg viewBox="0 0 64 64" fill="none" width="${Math.round(size*.6)}" height="${Math.round(size*.6)}"><path d="M10 34 L32 14 L54 34" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 31 V50 H47 V31" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>`;
+}
+
+function coverIllustrationSvg(){
+  return `<svg viewBox="0 0 640 300" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice" style="width:100%;height:100%;display:block">
+    <defs>
+      <linearGradient id="rdSky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#f6e6cc"/>
+        <stop offset="1" stop-color="#faf4e8"/>
+      </linearGradient>
+      <linearGradient id="rdRoof" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#c47a3a"/>
+        <stop offset="1" stop-color="#a8681f"/>
+      </linearGradient>
+    </defs>
+    <rect width="640" height="300" fill="url(#rdSky)"/>
+    <circle cx="546" cy="64" r="38" fill="#eec27f" opacity=".75"/>
+    <path d="M0,230 Q160,200 320,222 T640,214 V300 H0 Z" fill="#e5dcc9"/>
+    <rect x="60" y="150" width="10" height="70" fill="#8fae7a"/>
+    <circle cx="65" cy="130" r="34" fill="#9dbb86"/>
+    <rect x="560" y="160" width="9" height="60" fill="#8fae7a"/>
+    <circle cx="564" cy="142" r="28" fill="#9dbb86"/>
+    <polygon points="140,222 320,96 500,222" fill="url(#rdRoof)"/>
+    <polygon points="140,222 320,96 320,222" fill="#8f551f"/>
+    <line x1="140" y1="222" x2="500" y2="222" stroke="#7a4a1c" stroke-width="4"/>
+    <rect x="178" y="222" width="284" height="78" fill="#fbf7ef" stroke="#e6ddc9" stroke-width="2"/>
+    <rect x="298" y="252" width="52" height="48" fill="#a8681f"/>
+    <rect x="211" y="248" width="42" height="34" fill="#cfe6f2" stroke="#a8681f" stroke-width="2"/>
+    <rect x="387" y="248" width="42" height="34" fill="#cfe6f2" stroke="#a8681f" stroke-width="2"/>
+    <rect x="308" y="106" width="18" height="34" fill="#6b6b6b"/>
+    <rect x="303" y="98" width="28" height="10" fill="#565656"/>
+  </svg>`;
+}
+
+function roofCutawaySvg(){
+  return `<svg viewBox="0 0 520 190" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block">
+    <polygon points="20,150 260,30 500,150" fill="none" stroke="#8f551f" stroke-width="2"/>
+    <polygon points="20,150 260,30 260,150" fill="none" stroke="#8f551f" stroke-width="0"/>
+    <polygon points="40,144 260,44 260,144" fill="#c47a3a" opacity=".9"/>
+    <polygon points="260,44 480,144 260,144" fill="#a8681f" opacity=".9"/>
+    <polygon points="52,148 260,58 260,148" fill="#4a4f5a" opacity=".85"/>
+    <polygon points="260,58 468,148 260,148" fill="#4a4f5a" opacity=".65"/>
+    <rect x="80" y="148" width="360" height="14" fill="#8a5a2b"/>
+    <rect x="90" y="162" width="340" height="16" fill="#d8b45a"/>
+    <rect x="90" y="178" width="340" height="10" fill="#c7cbd3"/>
+    <circle cx="260" cy="44" r="5" fill="#7a4a1c"/>
+  </svg>`;
+}
 
 function firstReportPhoto(d){
   for(const p of POINTS){
@@ -975,6 +1048,14 @@ function renderDossierDiagnostic(d){
   </div>`;
 }
 
+function reportPageHeader(){
+  return `<div class="rd-page-header">
+    ${logoMark(26)}
+    <div class="rd-page-header-name">Maître Toiturier</div>
+    <div class="rd-page-header-tag">Rapport de diagnostic</div>
+  </div>`;
+}
+
 function renderReportDoc(d){
   const s = d.diagnostic.synthese;
   const hero = firstReportPhoto(d);
@@ -992,7 +1073,7 @@ function renderReportDoc(d){
     const pt = d.diagnostic.points[p];
     const photo = pt.photos.find(ph=>ph.dataUrl);
     return `
-    <div class="rd-point-card">
+    <div class="rd-point-card ${etatAccentCls(pt.etat)}">
       <div class="rd-point-head">
         <div class="rd-point-head-left">
           <div class="rd-point-num">${i+1}</div>
@@ -1001,14 +1082,14 @@ function renderReportDoc(d){
         ${etatPill(pt.etat)}
       </div>
       <div class="rd-point-body">
-        <div class="rd-point-photo">${photo?`<img src="${photo.dataUrl}" alt="">`:`<span class="rd-point-photo-placeholder">🖼</span>`}</div>
+        <div class="rd-point-photo">${photo?`<img src="${photo.dataUrl}" alt="">`:`<div class="rd-point-photo-placeholder">${iconSvg("house",26)}<span>Photo à ajouter</span></div>`}</div>
         <div class="rd-point-text">
           <h5>Observation</h5><p>${pt.observation?esc(pt.observation):"Non renseignée."}</p>
           <h5>Décision</h5><p>${esc(pt.decision)}${pt.pourquoi?" — "+esc(pt.pourquoi):""}</p>
           <h5>Travaux proposés</h5><p>${pt.travaux?esc(pt.travaux):"Aucun à ce stade."}</p>
         </div>
       </div>
-      ${pt.risque?`<div class="rd-risk-box"><b>⚠ Risques</b><span>${esc(pt.risque)}</span></div>`:""}
+      ${pt.risque?`<div class="rd-risk-box"><b>${iconSvg("warning",15)} Risques</b><span>${esc(pt.risque)}</span></div>`:""}
     </div>`;
   }).join("");
 
@@ -1028,12 +1109,17 @@ function renderReportDoc(d){
   return `
   <div class="report-doc">
 
-    <div class="rd-section">
+    <div class="rd-section rd-cover-section">
+      <div class="rd-brand-row">
+        ${logoMark(40)}
+        <div class="rd-brand-text"><div class="rd-brand-name">Maître Toiturier</div><div class="rd-brand-tag">Expertise · Conseil · Toitures durables</div></div>
+        <div class="rd-brand-doctag">Rapport de<br>diagnostic</div>
+      </div>
       <div class="rd-cover-label">Dossier client</div>
       <h1 class="rd-cover-title">Rapport de diagnostic de toiture</h1>
       <div class="rd-cover-sub">État des lieux, points de vigilance et actions recommandées.</div>
-      <div class="rd-hero">${hero?`<img src="${hero}" alt="">`:`<div class="rd-hero-placeholder"><span style="font-size:26px">🏠</span>Photo de couverture à ajouter</div>`}</div>
-      <div class="rd-caption">${hero?"Photo prise durant la visite":"Visuel générique en attendant une photo"}</div>
+      <div class="rd-hero">${hero?`<img src="${hero}" alt="">`:coverIllustrationSvg()}</div>
+      <div class="rd-caption">${hero?"Photo prise durant la visite":"Illustration générique · une photo prise durant la visite s’affichera ici"}</div>
       <div class="rd-info-grid">
         <div>
           <div class="rd-info-label">Dossier</div><div class="rd-info-val">${esc(d.id)}</div>
@@ -1045,21 +1131,23 @@ function renderReportDoc(d){
           <div class="rd-info-label">Adresse du bien</div><div class="rd-info-val">${esc(d.adresse)}, ${esc(d.ville)}</div>
         </div>
       </div>
-      <div class="rd-banner">🛡️<div><b>Prévenir les désordres. Prioriser les bonnes actions.</b>Une lecture claire de votre toiture, selon les zones accessibles.</div></div>
+      <div class="rd-banner"><span class="rd-banner-icon">${iconSvg("shield",20)}</span><div><b>Prévenir les désordres. Prioriser les bonnes actions.</b>Une lecture claire de votre toiture, selon les zones accessibles.</div></div>
     </div>
 
     <div class="rd-section">
+      ${reportPageHeader()}
       <h3>Synthèse du diagnostic</h3>
       <div class="rd-section-sub">${controlledPoints.length} / ${POINTS.length} points contrôlés</div>
       <div class="rd-stat-row">
-        <div><div class="rd-stat-label">Couverture</div><div class="rd-stat-val">${esc(s.typeCouverture)}</div></div>
-        <div><div class="rd-stat-label">Surface estimée</div><div class="rd-stat-val">${s.surface?esc(s.surface)+" m²":"—"}</div></div>
-        <div><div class="rd-stat-label">Conclusion</div>${badge(s.conclusion||"À finaliser", conclusionCls)}</div>
+        <div class="rd-stat-card"><span class="rd-stat-icon">${iconSvg("layers",16)}</span><div><div class="rd-stat-label">Couverture</div><div class="rd-stat-val">${esc(s.typeCouverture)}</div></div></div>
+        <div class="rd-stat-card"><span class="rd-stat-icon">${iconSvg("ruler",16)}</span><div><div class="rd-stat-label">Surface estimée</div><div class="rd-stat-val">${s.surface?esc(s.surface)+" m²":"—"}</div></div></div>
+        <div class="rd-stat-card"><span class="rd-stat-icon">${iconSvg("clipboard",16)}</span><div><div class="rd-stat-label">Conclusion</div>${badge(s.conclusion||"À finaliser", conclusionCls)}</div></div>
       </div>
       ${s.observations?`<div class="rd-lead">${esc(s.observations)}</div>`:""}
 
       <div class="rd-diagram">
         <div class="rd-diagram-title">Comprendre les zones contrôlées</div>
+        <div class="rd-diagram-art">${roofCutawaySvg()}</div>
         ${DIAGRAM_LAYERS.map(l=>`<div class="rd-diagram-layer"><div class="rd-diagram-num">${l.n}</div><div class="rd-diagram-swatch" style="background:${l.color}"></div>${esc(l.label)}</div>`).join("")}
       </div>
       <div class="rd-diagram-refs"><b>Références des observations</b>${refLines}</div>
@@ -1073,12 +1161,14 @@ function renderReportDoc(d){
     </div>
 
     <div class="rd-section">
+      ${reportPageHeader()}
       <h3>Points de contrôle</h3>
       <div class="rd-section-sub">Constat, photo et risques associés pour chaque zone inspectée.</div>
       ${pointCards}
     </div>
 
     <div class="rd-section">
+      ${reportPageHeader()}
       <h3>Préconisations &amp; plan d’action</h3>
       <div class="rd-section-sub">Une intervention proportionnée aux constats, à valider avec le technicien.</div>
       ${s.preconisations?`<div class="rd-lead">${esc(s.preconisations)}</div>`:""}
@@ -1097,20 +1187,17 @@ function renderReportDoc(d){
         <div class="rd-checklist-item"><span class="rd-checkbox"></span>Demander un devis détaillé</div>
         <div class="rd-checklist-item"><span class="rd-checkbox"></span>Prévoir un échange avec le technicien</div>
       </div>
-    </div>
 
-    <div class="rd-section">
       <div class="rd-contact">
+        ${logoMark(32)}
         <div>
           <b>Maître Toiturier</b>
-          maitretoiturier.fr<br>
-          Téléphone : à renseigner<br>
-          E-mail : à renseigner
+          maitretoiturier.fr · Téléphone : à renseigner · E-mail : à renseigner
         </div>
       </div>
-    </div>
 
-    <div class="rd-footer">Document de démonstration. Contrôle visuel des zones accessibles, selon les observations renseignées par le technicien. Ce rapport n’est pas une certification.</div>
+      <div class="rd-footer">Document de démonstration. Contrôle visuel des zones accessibles, selon les observations renseignées par le technicien. Ce rapport n’est pas une certification.</div>
+    </div>
   </div>`;
 }
 
