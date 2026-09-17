@@ -13,267 +13,187 @@ const POINTS = [
 
 const CONSERVER_JUSTIF = "Le contrôle visuel renseigné indique un bon état. Aucun remplacement n’est justifié par les constats de cette visite, sous réserve des limites d’accès.";
 
-const POINT_OBS = {
-  "Couverture et état des tuiles":[
-    "Plusieurs tuiles fissurées sont visibles sur le pan contrôlé.",
-    "Des tuiles sont déplacées ou glissées par rapport à leur position d’origine.",
-    "Une usure diffuse de la couverture est constatée (porosité, tuiles gélives).",
-    "Aucune anomalie de couverture n’a été observée sur les zones accessibles.",
-    "Une zone de la couverture n’a pas pu être contrôlée (accès limité)."
-  ],
-  "Éléments de finition et zinguerie":[
-    "Le faîtage ou l’arêtier présente des éléments descellés ou désolidarisés du support.",
-    "La gouttière est encombrée (feuilles, mousses) et/ou mal inclinée.",
-    "Un solin ou une noue présente une dégradation visible du matériau d’étanchéité.",
-    "Faîtages, arêtiers, rives, solins et gouttières sont en bon état apparent.",
-    "Une partie de la zinguerie n’a pas pu être contrôlée (accès limité)."
-  ],
-  "Étanchéité":[
-    "Des traces d’humidité ponctuelles sont visibles au droit d’un point singulier.",
-    "La membrane ou le raccord d’étanchéité présente un défaut localisé (déchirure, décollement).",
-    "Plusieurs zones d’étanchéité présentent des signes de vieillissement avancé.",
-    "Aucune trace d’infiltration ni de défaut d’étanchéité visible sur les zones accessibles.",
-    "Une zone d’étanchéité n’a pas pu être contrôlée (accès limité)."
-  ],
-  "Charpente":[
-    "Une trace d’humidité ou de développement fongique est visible sur une pièce de charpente.",
-    "Un élément de charpente (chevron, panne) présente une fissure ou un fléchissement localisé.",
-    "Des traces d’attaque de xylophages sont visibles sur plusieurs éléments.",
-    "Aucune trace d’humidité, de fissure ou d’attaque de xylophages sur les éléments accessibles.",
-    "Une partie de la charpente n’a pas pu être contrôlée (accès limité)."
-  ],
-  "Isolation et ventilation":[
-    "L’isolant en place est tassé ou d’épaisseur insuffisante au regard des standards actuels.",
-    "La ventilation des combles apparaît insuffisante (entrées/sorties d’air obstruées ou absentes).",
-    "L’isolant présente des zones dégradées par une humidité constatée.",
-    "L’isolation et la ventilation des combles sont en bon état et conformes à l’usage constaté.",
-    "Une partie des combles n’a pas pu être contrôlée (accès limité)."
-  ],
-  "Humidité et infiltrations":[
-    "Des traces d’humidité sont visibles en sous-face de toiture ou en plafond.",
-    "Une infiltration active est constatée avec une origine identifiée sur une zone précise.",
-    "Des traces d’humidité anciennes sont visibles mais aucune infiltration active n’est constatée ce jour.",
-    "Aucune trace d’humidité ni d’infiltration constatée sur les zones accessibles.",
-    "Une zone n’a pas pu être contrôlée pour confirmer l’absence d’humidité (accès limité)."
-  ],
-  "État général et sécurité":[
-    "Certaines zones n’ont pas pu être contrôlées dans des conditions de sécurité suffisantes.",
-    "Un élément instable présentant un risque de chute a été identifié sur la toiture.",
-    "Les équipements de sécurité (garde-corps, ligne de vie, crochets) sont absents ou non conformes.",
-    "L’état général de la toiture ne présente pas de risque de sécurité identifié.",
-    "Une zone n’a pas pu être contrôlée pour d’autres raisons d’accès."
-  ],
-  "Entretien, mousses et lichens":[
-    "Des mousses et lichens sont présents de façon localisée, sans encrassement généralisé.",
-    "L’ensemble de la couverture présente un encrassement généralisé (mousses, lichens, dépôts).",
-    "La couverture commence à devenir poreuse et absorbe l’humidité.",
-    "Aucun encrassement notable, la couverture ne présente pas de besoin d’entretien particulier.",
-    "Une zone n’a pas pu être contrôlée pour confirmer l’état d’entretien (accès limité)."
-  ]
+const ANOMALY_VOCAB = {
+  casse:      {icon:"💥", label:"Cassé(e)", risk:"une dégradation qui s’aggrave et laisse progressivement passer l’eau"},
+  fissure:    {icon:"〰️", label:"Fissuré(e)", risk:"une dégradation qui s’aggrave et laisse progressivement passer l’eau"},
+  deplace:    {icon:"↔️", label:"Déplacé(e) / glissé(e)", risk:"un risque de chute de l’élément lors d’un prochain épisode de vent fort"},
+  souleve:    {icon:"⬆️", label:"Soulevé(e) / décollé(e)", risk:"une entrée d’eau au point de soulèvement lors de pluies battantes"},
+  manquant:   {icon:"❌", label:"Manquant(e)", risk:"une zone non protégée, exposée directement aux intempéries"},
+  malfixe:    {icon:"🔩", label:"Mal fixé(e)", risk:"un risque de chute de l’élément et une perte d’étanchéité au point de fixation"},
+  corrode:    {icon:"🟤", label:"Corrodé(e) / rouillé(e)", risk:"une perte progressive d’étanchéité de l’élément concerné"},
+  perce:      {icon:"🕳️", label:"Trou / percé(e)", risk:"un passage d’eau direct au niveau de la perforation"},
+  eau:        {icon:"💧", label:"Trace d’eau / fuite", risk:"une aggravation de l’humidité dans les matériaux environnants si la source n’est pas traitée"},
+  mousse:     {icon:"🌿", label:"Mousse / salissure / bouché", risk:"une rétention d’humidité qui accélère le vieillissement de la couverture"},
+  use:        {icon:"🧱", label:"Poreuse(s) / usée(s)", risk:"une absorption d’eau croissante et un vieillissement accéléré du matériau"},
+  affaisse:   {icon:"📉", label:"Affaissé(e) / déformé(e)", risk:"une aggravation progressive de la déformation en l’absence d’intervention"},
+  ruissellement:{icon:"🌊", label:"Ruissellement", risk:"un dégât des eaux visible si la source n’est pas traitée rapidement"},
+  joint:      {icon:"🧱", label:"Joint / mortier dégradé", risk:"une infiltration au niveau du joint dégradé"},
+  recouvrement:{icon:"⚠️", label:"Recouvrement insuffisant", risk:"une infiltration lors de pluies battantes"},
+  bois_humide:{icon:"💧", label:"Bois humide", risk:"un développement de champignons lignivores qui fragilisent le bois"},
+  moisissure: {icon:"🍄", label:"Moisissure", risk:"une dégradation continue du matériau et un risque pour la qualité de l’air"},
+  insectes:   {icon:"🐛", label:"Traces d’insectes xylophages", risk:"une propagation de l’attaque aux pièces de bois saines avoisinantes"},
+  ventil:     {icon:"🌬️", label:"Ventilation insuffisante / obstruée", risk:"une accumulation d’humidité dans les combles qui favorise la dégradation de la charpente"},
+  isolant:    {icon:"📉", label:"Isolant tassé / insuffisant", risk:"une perte de performance thermique de la toiture"},
+  instable:   {icon:"⚠️", label:"Élément instable", risk:"un risque de chute pouvant blesser des personnes ou endommager des biens"},
+  secu:       {icon:"🔩", label:"Équipement de sécurité absent / non conforme", risk:"un risque accru lors de toute intervention future en toiture"},
+  autre:      {icon:"❓", label:"Autre", risk:"une évolution incertaine du désordre constaté"}
 };
 
-const POINT_CAUSES = {
-  "Couverture et état des tuiles":[
-    "Le désordre est localisé et ne concerne qu’un nombre limité de tuiles.",
-    "Le vent a probablement déplacé les éléments non solidement fixés.",
-    "L’ancienneté de la couverture explique l’usure généralisée constatée.",
-    "Le contrôle visuel indique un bon état général de la couverture.",
-    "L’accès restreint ne permet pas de confirmer l’état de la zone concernée."
-  ],
-  "Éléments de finition et zinguerie":[
-    "Le faîtage présente des éléments descellés, sans désordre affectant l’ensemble de la ligne.",
-    "La gouttière évacue mal les eaux pluviales du fait de l’encombrement ou du défaut de pente.",
-    "Le solin ou la noue est dégradé au niveau du point singulier concerné.",
-    "Aucun désordre ni encombrement notable n’a été constaté sur les éléments de finition.",
-    "L’accès restreint ne permet pas de confirmer l’état de la zinguerie sur cette zone."
-  ],
-  "Étanchéité":[
-    "L’origine exacte du passage d’eau n’est pas encore confirmée à ce stade.",
-    "La membrane ou le raccord présente un défaut identifié sur une zone localisée.",
-    "Le vieillissement avancé de l’étanchéité est incompatible avec une réparation ponctuelle durable.",
-    "Le contrôle visuel n’a révélé aucun défaut d’étanchéité sur les zones accessibles.",
-    "L’accès restreint ne permet pas de confirmer l’état de l’étanchéité sur cette zone."
-  ],
-  "Charpente":[
-    "Aucun affaiblissement structurel n’est constaté à ce stade malgré la trace observée.",
-    "Le désordre est localisé et n’affecte pas l’ensemble de la structure.",
-    "Les traces d’attaque de xylophages indiquent une dégradation active du bois.",
-    "Le contrôle visuel indique un bon état général de la charpente accessible.",
-    "L’accès restreint ne permet pas de confirmer l’état de la charpente sur cette zone."
-  ],
-  "Isolation et ventilation":[
-    "L’épaisseur d’isolant réduit la performance thermique de la toiture.",
-    "Les entrées et sorties d’air ne permettent pas un renouvellement suffisant dans les combles.",
-    "L’humidité constatée a dégradé localement la performance de l’isolant.",
-    "Le contrôle visuel indique une isolation et une ventilation conformes à l’usage.",
-    "L’accès restreint ne permet pas de confirmer l’état de l’isolation sur cette zone."
-  ],
-  "Humidité et infiltrations":[
-    "La source exacte de l’humidité n’est pas encore confirmée à ce stade.",
-    "L’origine de l’infiltration active a été identifiée sur un point singulier ou une zone de couverture.",
-    "La cause initiale de la trace ancienne semble avoir été traitée, sans récidive constatée.",
-    "Le contrôle visuel n’a révélé aucune trace d’humidité sur les zones accessibles.",
-    "L’accès restreint ne permet pas de confirmer l’état de la zone concernée."
-  ],
-  "État général et sécurité":[
-    "L’accès, la pente ou la hauteur ne permettaient pas un contrôle sécurisé de la zone.",
-    "L’élément identifié (tuile, faîtage, antenne) n’est plus correctement fixé.",
-    "Les équipements de sécurité en place ne sont plus aux standards actuels.",
-    "Le contrôle visuel n’a révélé aucun risque de sécurité sur les zones accessibles.",
-    "L’accès restreint ne permet pas de confirmer l’état de la zone concernée."
-  ],
-  "Entretien, mousses et lichens":[
-    "L’encrassement reste localisé, sans désordre généralisé de la couverture.",
-    "L’encrassement généralisé nécessite un entretien complet de la couverture.",
-    "La porosité de la couverture augmente avec l’âge du matériau et l’absence de traitement hydrofuge.",
-    "Le contrôle visuel indique une couverture propre et sans besoin d’entretien particulier.",
-    "L’accès restreint ne permet pas de confirmer l’état d’entretien sur cette zone."
-  ]
+const POINT_ANOMALIES = {
+  "Couverture et état des tuiles": ["casse","fissure","deplace","souleve","manquant","malfixe","use","mousse","autre"],
+  "Éléments de finition et zinguerie": ["casse","deplace","manquant","mousse","eau","joint","corrode","autre"],
+  "Étanchéité": ["fissure","souleve","perce","corrode","eau","joint","recouvrement","autre"],
+  "Charpente": ["bois_humide","moisissure","fissure","affaisse","insectes","autre"],
+  "Isolation et ventilation": ["isolant","ventil","eau","manquant","autre"],
+  "Humidité et infiltrations": ["eau","moisissure","ruissellement","affaisse","autre"],
+  "État général et sécurité": ["instable","secu","affaisse","autre"],
+  "Entretien, mousses et lichens": ["mousse","use","autre"]
 };
 
-const POINT_SOLUTIONS = {
-  "Couverture et état des tuiles":[
-    "Remplacer les tuiles fissurées identifiées et contrôler les liteaux sous la zone.",
-    "Repositionner et fixer les tuiles déplacées, vérifier les crochets de fixation.",
-    "Prévoir une réfection complète de la couverture sur la zone concernée.",
-    "Aucun travaux nécessaire à ce jour, entretien courant à poursuivre.",
-    "Prévoir un contrôle complémentaire avec accès adapté (nacelle, ligne de vie)."
-  ],
-  "Éléments de finition et zinguerie":[
-    "Resceller les éléments de faîtage/arêtier concernés et contrôler la ventilation sous faîtage.",
-    "Nettoyer la gouttière et les descentes, reprendre la pente et les crochets de fixation.",
-    "Remplacer le solin/la noue sur la zone concernée et reprendre l’étanchéité au raccordement.",
-    "Aucun travaux nécessaire à ce jour, entretien courant (nettoyage des gouttières) à poursuivre.",
-    "Prévoir un contrôle complémentaire avec accès adapté pour la zone non contrôlée."
-  ],
-  "Étanchéité":[
-    "Contrôler l’étanchéité au droit de la zone identifiée avant de chiffrer une réparation définitive.",
-    "Reprendre ou remplacer la membrane/le raccord sur la zone concernée.",
-    "Prévoir la reprise complète de l’étanchéité sur les zones concernées.",
-    "Aucun travaux nécessaire à ce jour, contrôle périodique à poursuivre.",
-    "Prévoir un contrôle complémentaire avec accès adapté pour la zone non contrôlée."
-  ],
-  "Charpente":[
-    "Prévoir un contrôle complémentaire (sondage) avant de définir un traitement ou un remplacement.",
-    "Renforcer ou remplacer l’élément concerné par un professionnel qualifié.",
-    "Traiter la charpente et remplacer les éléments trop dégradés, par une entreprise spécialisée.",
-    "Aucun travaux nécessaire à ce jour, entretien courant à poursuivre.",
-    "Prévoir un contrôle complémentaire avec accès adapté pour la zone non contrôlée."
-  ],
-  "Isolation et ventilation":[
-    "Prévoir un complément ou un remplacement de l’isolation des combles.",
-    "Rétablir une ventilation continue des combles (chatières, grilles en égout de toiture).",
-    "Remplacer l’isolant dégradé après traitement de la source d’humidité identifiée.",
-    "Aucun travaux nécessaire à ce jour, entretien courant à poursuivre.",
-    "Prévoir un contrôle complémentaire avec accès adapté pour la zone non contrôlée."
-  ],
-  "Humidité et infiltrations":[
-    "Compléter les observations par un contrôle ciblé avant de définir la réparation adaptée.",
-    "Traiter en urgence le point d’entrée d’eau identifié et contrôler l’absence de dégâts associés.",
-    "Surveiller l’évolution de la zone lors des prochaines pluies ; aucune intervention urgente à ce stade.",
-    "Aucun travaux nécessaire à ce jour, contrôle périodique à poursuivre.",
-    "Prévoir un contrôle complémentaire avec accès adapté pour la zone non contrôlée."
-  ],
-  "État général et sécurité":[
-    "Prévoir un contrôle complémentaire avec un équipement adapté (nacelle, ligne de vie).",
-    "Sécuriser ou déposer en urgence l’élément instable identifié.",
-    "Prévoir la mise en conformité des équipements de sécurité avant toute intervention future.",
-    "Aucun travaux nécessaire à ce jour.",
-    "Prévoir un contrôle complémentaire avec accès adapté pour la zone non contrôlée."
-  ],
-  "Entretien, mousses et lichens":[
-    "Un nettoyage ciblé peut être envisagé à titre préventif ; aucune intervention urgente à ce stade.",
-    "Nettoyer complètement la couverture (démoussage) et appliquer un traitement hydrofuge.",
-    "Appliquer un traitement hydrofuge pour limiter l’absorption d’eau et prolonger la durée de vie de la couverture.",
-    "Aucun travaux nécessaire à ce jour, entretien courant à poursuivre.",
-    "Prévoir un contrôle complémentaire avec accès adapté pour la zone non contrôlée."
-  ]
-};
-
-const POINT_RISKS = {
-  "Couverture et état des tuiles":[
-    "Une tuile fissurée non traitée laisse progressivement passer l’eau vers la charpente et les combles.",
-    "Une tuile mal positionnée peut se détacher lors d’un prochain épisode de vent fort, avec un risque de chute.",
-    "Une couverture usée perd son étanchéité de façon diffuse, rendant les réparations ponctuelles inefficaces dans la durée.",
-    "Aucun risque identifié à ce jour, sous réserve du maintien d’un entretien courant.",
-    "Une zone non contrôlée peut dissimuler un désordre non détecté lors de cette visite."
-  ],
-  "Éléments de finition et zinguerie":[
-    "Un faîtage désolidarisé laisse l’eau s’infiltrer en pied de charpente lors de pluies battantes.",
-    "Une gouttière obstruée provoque des débordements pouvant s’infiltrer sous la couverture ou en façade.",
-    "Une dégradation au niveau d’un point singulier entraîne des infiltrations rapides et ciblées.",
-    "Aucun risque identifié à ce jour, sous réserve d’un entretien courant des gouttières.",
-    "Une zone non contrôlée peut dissimuler un désordre non détecté lors de cette visite."
-  ],
-  "Étanchéité":[
-    "Sans identification précise de l’origine, l’humidité peut endommager silencieusement les matériaux environnants.",
-    "Un défaut d’étanchéité localisé s’aggrave avec les intempéries et finit par générer une infiltration continue.",
-    "Une étanchéité en fin de vie expose à des infiltrations multiples et imprévisibles.",
-    "Aucun risque identifié à ce jour, sous réserve d’un contrôle périodique des points singuliers.",
-    "Une zone non contrôlée peut dissimuler un désordre non détecté lors de cette visite."
-  ],
-  "Charpente":[
-    "Une humidité persistante favorise le développement de champignons lignivores qui fragilisent le bois.",
-    "Un élément fragilisé reporte les charges sur les éléments voisins et le désordre peut s’étendre.",
-    "Une attaque de xylophages non traitée continue de se propager aux pièces de bois saines avoisinantes.",
-    "Aucun risque identifié à ce jour ; une bonne ventilation des combles permettra de préserver cet état.",
-    "Une zone non contrôlée peut dissimuler un désordre non détecté lors de cette visite."
-  ],
-  "Isolation et ventilation":[
-    "Une isolation insuffisante entraîne des déperditions de chaleur et peut favoriser la condensation en sous-face.",
-    "Un comble mal ventilé accumule l’humidité ambiante et favorise la dégradation de la charpente.",
-    "Un isolant humide perd sa performance thermique et peut devenir un foyer de moisissures.",
-    "Aucun risque identifié à ce jour.",
-    "Une zone non contrôlée peut dissimuler un désordre non détecté lors de cette visite."
-  ],
-  "Humidité et infiltrations":[
-    "Sans identification de la source, l’humidité peut endommager silencieusement l’isolant, la charpente ou les plafonds.",
-    "Une infiltration active non traitée s’aggrave à chaque épisode pluvieux et peut causer des dégâts des eaux visibles.",
-    "Une trace ancienne peut réapparaître si la cause initiale n’a pas été totalement traitée.",
-    "Aucun risque identifié à ce jour.",
-    "Une zone non contrôlée peut dissimuler un désordre non détecté lors de cette visite."
-  ],
-  "État général et sécurité":[
-    "Les zones non contrôlées peuvent dissimuler des désordres non détectés lors de cette visite.",
-    "Un élément instable en hauteur représente un risque immédiat de chute pouvant blesser des personnes ou endommager des biens.",
-    "L’absence d’équipement de sécurité conforme rend plus risquée toute intervention future en toiture.",
-    "Aucun risque identifié à ce jour.",
-    "Une zone non contrôlée peut dissimuler un désordre non détecté lors de cette visite."
-  ],
-  "Entretien, mousses et lichens":[
-    "Les mousses retiennent l’humidité au contact des tuiles et accélèrent le vieillissement du matériau.",
-    "Un encrassement généralisé maintient une humidité permanente qui augmente le risque d’infiltration diffuse.",
-    "Une couverture poreuse non traitée absorbe davantage d’eau à chaque pluie et accélère son vieillissement.",
-    "Aucun risque identifié à ce jour.",
-    "Une zone non contrôlée peut dissimuler un désordre non détecté lors de cette visite."
-  ]
-};
-
-const CHOICE_FIELDS = {
-  obs:{target:"observation", options:POINT_OBS, label:"Observation"},
-  cause:{target:"pourquoi", options:POINT_CAUSES, label:"Pourquoi ce choix ?"},
-  sol:{target:"travaux", options:POINT_SOLUTIONS, label:"Travaux proposés"},
-  risk:{target:"risque", options:POINT_RISKS, label:"Risques associés"}
-};
-const CHOICE_SELECT_IDS = {selObs:"obs", selCause:"cause", selSol:"sol", selRisk:"risk"};
+const EXTENT_OPTIONS = [
+  {id:"un", icon:"1️⃣", label:"Un / ponctuel"},
+  {id:"plusieurs", icon:"2️⃣", label:"Plusieurs / localisé"},
+  {id:"beaucoup", icon:"3️⃣", label:"Beaucoup / plusieurs zones"},
+  {id:"general", icon:"🌐", label:"Généralisé"},
+  {id:"indetermine", icon:"❓", label:"Non déterminé"}
+];
+const ZONE_VERSANT_OPTIONS = [
+  {id:"avant", icon:"⬆️", label:"Avant"},
+  {id:"arriere", icon:"⬇️", label:"Arrière"},
+  {id:"gauche", icon:"⬅️", label:"Gauche"},
+  {id:"droite", icon:"➡️", label:"Droite"}
+];
+const ZONE_POSITION_OPTIONS = [
+  {id:"bas", icon:"🔽", label:"Bas de toiture"},
+  {id:"milieu", icon:"⏺", label:"Milieu"},
+  {id:"haut", icon:"🔼", label:"Haut de toiture"}
+];
+const ETAT_OPTIONS = [
+  {id:"Bon état", icon:"🟢", label:"BON"},
+  {id:"À surveiller", icon:"🟡", label:"MOYEN"},
+  {id:"Défaut constaté", icon:"🔴", label:"MAUVAIS"},
+  {id:"Urgent", icon:"⚫", label:"URGENT"},
+  {id:"Pas vu", icon:"⚪", label:"PAS VU"},
+  {id:"Non présent", icon:"⚪", label:"NON PRÉSENT"}
+];
+const AUTO_ADVANCE_ETATS = ["Bon état","Pas vu","Non présent"];
 
 function freshPoint(){
-  return { etat:"Non contrôlé", observation:"", decision:"Contrôle complémentaire", pourquoi:"", travaux:"", risque:"", photos:[] };
+  return { etat:"Non contrôlé", problems:[], extent:"", zones:[], comment:"", decisionTouched:false, observation:"", decision:"Contrôle complémentaire", pourquoi:"", travaux:"", risque:"", photos:[] };
 }
+
+function extentPhrase(extentId){
+  switch(extentId){
+    case "un": return "Le désordre est ponctuel : un seul élément est concerné.";
+    case "plusieurs": return "Le désordre est localisé : plusieurs éléments sont concernés.";
+    case "beaucoup": return "Le désordre concerne un nombre important d’éléments, sur plusieurs zones.";
+    case "general": return "Le désordre est généralisé à l’ensemble de la zone contrôlée.";
+    default: return "";
+  }
+}
+function zonePhrase(zones){
+  if(!zones || !zones.length) return "";
+  const versantLabels = {avant:"avant",arriere:"arrière",gauche:"gauche",droite:"droite"};
+  const positionLabels = {bas:"en partie basse",milieu:"au milieu",haut:"en partie haute"};
+  const versants = zones.filter(z=>versantLabels[z]).map(z=>versantLabels[z]);
+  const positions = zones.filter(z=>positionLabels[z]).map(z=>positionLabels[z]);
+  const parts = [];
+  if(versants.length) parts.push("sur le versant "+versants.join(", "));
+  if(positions.length) parts.push(positions.join(", "));
+  if(!parts.length) return "";
+  return "Localisation constatée : "+parts.join(", ")+".";
+}
+function problemLabels(problemIds){
+  return (problemIds||[]).map(id=>ANOMALY_VOCAB[id] ? ANOMALY_VOCAB[id].label.toLowerCase() : id);
+}
+
+function reformulatePoint(pointName, p){
+  if(p.etat==="Bon état"){
+    p.observation = `Aucune anomalie n’a été observée sur cet élément (${pointName.toLowerCase()}) lors du contrôle visuel des zones accessibles.`;
+    p.decision = "Conserver";
+    p.pourquoi = CONSERVER_JUSTIF;
+    p.travaux = "";
+    p.risque = "Aucun risque identifié à ce jour, sous réserve du maintien d’un entretien courant.";
+    return;
+  }
+  if(p.etat==="Pas vu"){
+    p.observation = "Cette zone n’a pas pu être contrôlée lors de la visite (accès non sécurisé ou élément non visible).";
+    p.decision = "Contrôle complémentaire";
+    p.pourquoi = "L’accès restreint ne permet pas de confirmer l’état de cette zone.";
+    p.travaux = "Prévoir un contrôle complémentaire avec un accès adapté (nacelle, ligne de vie).";
+    p.risque = "Une zone non contrôlée peut dissimuler un désordre non détecté lors de cette visite.";
+    return;
+  }
+  if(p.etat==="Non présent"){
+    p.observation = "Cet élément n’est pas présent sur cette toiture.";
+    p.decision = "Conserver";
+    p.pourquoi = "";
+    p.travaux = "";
+    p.risque = "";
+    return;
+  }
+  if(p.etat==="Non contrôlé"){
+    p.observation = ""; p.pourquoi=""; p.travaux=""; p.risque="";
+    return;
+  }
+
+  // À surveiller / Défaut constaté / Urgent
+  const labels = problemLabels(p.problems);
+  const sentences = [];
+  if(labels.length){
+    const cap = labels[0].charAt(0).toUpperCase()+labels[0].slice(1);
+    sentences.push(`Le contrôle visuel a permis de constater : ${[cap,...labels.slice(1)].join(", ")}.`);
+  } else {
+    sentences.push("Une anomalie a été constatée sur cet élément lors du contrôle visuel.");
+  }
+  const ext = extentPhrase(p.extent);
+  if(ext) sentences.push(ext);
+  const zone = zonePhrase(p.zones);
+  if(zone) sentences.push(zone);
+  if(p.comment && p.comment.trim()) sentences.push(`Remarque du technicien : « ${p.comment.trim()} ».`);
+  p.observation = sentences.join(" ");
+
+  if(!p.decisionTouched){
+    if(p.etat==="Urgent") p.decision = "Réparer";
+    else if(p.etat==="Défaut constaté") p.decision = (p.extent==="general"||p.extent==="beaucoup") ? "Remplacer" : "Réparer";
+    else p.decision = "Surveiller";
+  }
+
+  if(p.etat==="Urgent"){
+    p.pourquoi = "Le caractère urgent de ce constat justifie une intervention prioritaire, afin de limiter les conséquences pour le bâtiment et ses occupants.";
+  } else if(p.etat==="Défaut constaté"){
+    p.pourquoi = (p.extent==="general"||p.extent==="beaucoup")
+      ? "L’étendue du désordre ne permet pas une réparation ponctuelle durable ; une intervention plus complète est nécessaire."
+      : "Le désordre reste localisé à ce stade ; une reprise ciblée est proportionnée aux constats réalisés lors de cette visite.";
+  } else {
+    p.pourquoi = "L’anomalie constatée ne présente pas de caractère urgent à ce jour, mais mérite d’être surveillée afin d’anticiper une dégradation.";
+  }
+
+  const zoneConcernee = labels.join(", ") || "zone concernée";
+  if(p.decision==="Réparer") p.travaux = `Prévoir une réparation ciblée des éléments concernés (${zoneConcernee}).`;
+  else if(p.decision==="Remplacer") p.travaux = `Prévoir le remplacement des éléments concernés (${zoneConcernee}).`;
+  else if(p.decision==="Surveiller") p.travaux = "Aucune intervention immédiate ; un contrôle est recommandé lors de la prochaine visite d’entretien.";
+  else p.travaux = "Prévoir un contrôle complémentaire avant de définir précisément les travaux nécessaires.";
+
+  const riskClauses = [...new Set((p.problems||[]).map(id=>ANOMALY_VOCAB[id]?.risk).filter(Boolean))];
+  p.risque = riskClauses.length
+    ? `Non traité, ce désordre peut entraîner : ${riskClauses.join(" ; ")}.`
+    : "Une évolution du désordre n’est pas exclue si aucune intervention n’est réalisée.";
+}
+
 function savePointFieldsFromDOM(){
-  const etatEl = document.getElementById("ptEtat");
-  if(!etatEl || !state.dossierId) return;
+  if(!state.dossierId) return;
   const d = byId(state.dossierId);
   if(!d) return;
   const pointName = POINTS[state.diagStep-1];
   if(!pointName) return;
   const p = d.diagnostic.points[pointName];
-  p.etat = etatEl.value;
-  p.decision = document.getElementById("ptDecision").value;
-  Object.keys(CHOICE_FIELDS).forEach(fieldKey=>{
-    const customEl = document.getElementById("custom-"+fieldKey);
-    if(customEl) p[CHOICE_FIELDS[fieldKey].target] = customEl.value;
-  });
+  if(!p) return;
+  const decisionEl = document.getElementById("ptDecision");
+  if(decisionEl) p.decision = decisionEl.value;
+  const commentEl = document.getElementById("ptComment");
+  if(commentEl) p.comment = commentEl.value;
+  if(p.etat && p.etat!=="Non contrôlé") reformulatePoint(pointName, p);
 }
 function freshDiagnostic(){
   const points = {};
@@ -419,6 +339,8 @@ function fmtMonthYear(d){ return `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()
 let DOSSIERS = seedDossiers();
 
 let state = {
+  appStage:"splash",
+  splashExiting:false,
   role:"admin",
   section:"overview",
   dossierId:null,
@@ -503,13 +425,17 @@ const DIAGRAM_LAYERS = [
 ];
 
 function etatPill(etat){
+  if(etat==="Urgent") return badge("Urgent","black");
   if(etat==="Défaut constaté") return badge("Défaut constaté","red");
   if(etat==="À surveiller") return badge("À surveiller","gold");
   if(etat==="Bon état") return badge("Bon état apparent","green");
+  if(etat==="Pas vu") return badge("Pas vu","gray");
+  if(etat==="Non présent") return badge("Non présent","gray");
   if(etat==="Non accessible") return badge("Non accessible","gray");
   return badge("Non contrôlé","gray");
 }
 function etatAccentCls(etat){
+  if(etat==="Urgent") return "st-black";
   if(etat==="Défaut constaté") return "st-red";
   if(etat==="À surveiller") return "st-gold";
   if(etat==="Bon état") return "st-green";
@@ -532,8 +458,8 @@ function iconSvg(name, size){
 
 function logoMark(size){
   size = size||36;
-  return `<div style="width:${size}px;height:${size}px;border-radius:${Math.round(size*.28)}px;background:linear-gradient(155deg,var(--gold),var(--gold2));display:flex;align-items:center;justify-content:center;flex-shrink:0">
-    <svg viewBox="0 0 64 64" fill="none" width="${Math.round(size*.6)}" height="${Math.round(size*.6)}"><path d="M10 34 L32 14 L54 34" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 31 V50 H47 V31" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  return `<div style="width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+    <img src="assets/logo-icon.png" alt="" style="width:100%;height:100%;object-fit:contain">
   </div>`;
 }
 
@@ -554,8 +480,8 @@ function roofCutawaySvg(){
 
 function backcoverArtSvg(){
   return `<svg viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg" style="position:absolute;left:50%;bottom:-30px;transform:translateX(-50%);width:900px;opacity:.07;pointer-events:none">
-    <path d="M40 340 L400 80 L760 340" stroke="#e8bf69" stroke-width="10" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M140 300 V400 H660 V300" stroke="#e8bf69" stroke-width="10" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M40 340 L400 80 L760 340" stroke="#d4af37" stroke-width="10" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M140 300 V400 H660 V300" stroke="#d4af37" stroke-width="10" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`;
 }
 
@@ -723,7 +649,38 @@ function applyPdfScale(){
   });
 }
 
+function buildSplash(){
+  return `
+  <div class="splash ${state.splashExiting?"exiting":""}">
+    <video class="splash-video" src="assets/Vid%C3%A9o.mov" autoplay muted loop playsinline></video>
+    <div class="splash-overlay"></div>
+    <div class="splash-body">
+      <img class="splash-logo" src="assets/logo-full.png" alt="Maître Toiturier">
+      <button class="splash-btn" data-action="open-app">Ouvrir mon appli</button>
+    </div>
+  </div>`;
+}
+
+function buildLogin(){
+  const roleOptions = Object.keys(ROLES).map(k=>`<option value="${k}" ${state.role===k?"selected":""}>${esc(ROLES[k].label)}</option>`).join("");
+  return `
+  <div class="login-screen">
+    <div class="login-card">
+      <img class="login-logo" src="assets/logo-full.png" alt="Maître Toiturier">
+      <h1>Connexion à votre espace</h1>
+      <p>Choisissez un profil de démonstration pour continuer.</p>
+      <div class="form-field"><label>Profil</label>
+        <select id="loginRole">${roleOptions}</select>
+      </div>
+      <button class="btn-primary login-submit" data-action="do-login">Se connecter</button>
+      <div class="login-help">Démo interactive · Aucune donnée réelle · Aucun e-mail envoyé</div>
+    </div>
+  </div>`;
+}
+
 function buildApp(){
+  if(state.appStage==="splash") return buildSplash();
+  if(state.appStage==="login") return buildLogin();
   if(state.role==="client"){
     return `
       ${buildSidebar()}
@@ -756,7 +713,7 @@ function buildSidebar(){
     <button class="sidebar-close" data-action="close-sidebar">✕</button>
     <div class="sidebar-logo">
       <div class="logo-icon">
-        <svg viewBox="0 0 64 64" fill="none"><path d="M10 34 L32 14 L54 34" stroke="#e8bf69" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 31 V50 H47 V31" stroke="#e8bf69" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <img src="assets/logo-icon.png" alt="">
       </div>
       <div>
         <div class="wordmark">MAÎTRE TOITURIER</div>
@@ -1046,26 +1003,7 @@ function renderDossierInfo(d){
   `;
 }
 
-const CHOICE_SELECT_ID = {obs:"selObs", cause:"selCause", sol:"selSol", risk:"selRisk"};
-
-function renderChoiceGroup(fieldKey, pointName, p, d, step){
-  const cfg = CHOICE_FIELDS[fieldKey];
-  const options = cfg.options[pointName] || [];
-  const current = p[cfg.target];
-  const matchIdx = options.indexOf(current);
-  const isCustom = !!(p.customFlags && p.customFlags[fieldKey]) || (current !== "" && matchIdx === -1);
-  const groupClass = fieldKey==="risk" ? "risk-group" : "form-field";
-  return `
-  <div class="${groupClass}">
-    <label>${fieldKey==="risk"?"⚠ ":""}${cfg.label} — ${esc(pointName)}</label>
-    <select id="${CHOICE_SELECT_ID[fieldKey]}">
-      <option value="">— Sélectionner —</option>
-      ${options.map((opt,i)=>`<option value="${i}" ${matchIdx===i?"selected":""}>${esc(opt)}</option>`).join("")}
-      <option value="custom" ${isCustom?"selected":""}>Autre (préciser)…</option>
-    </select>
-    ${isCustom?`<textarea id="custom-${fieldKey}" placeholder="Précisez…" style="margin-top:8px">${esc(current)}</textarea>`:""}
-  </div>`;
-}
+function etatBtnCls(etatId){ return "etat-"+etatId.normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-zA-Z]/g,"").toLowerCase(); }
 
 function renderDossierDiagnostic(d){
   if(!diagEditable()){
@@ -1111,46 +1049,83 @@ function renderDossierDiagnostic(d){
 
   const pointName = POINTS[step-1];
   const p = d.diagnostic.points[pointName];
+  const showCascade = p.etat && p.etat!=="Non contrôlé" && !AUTO_ADVANCE_ETATS.includes(p.etat);
+  const showPreview = p.etat && p.etat!=="Non contrôlé";
+  const anomalyIds = POINT_ANOMALIES[pointName] || [];
+  const problems = p.problems || [];
+  const zones = p.zones || [];
+
   return `
   <div class="diag-progress">POINT ${step} SUR ${POINTS.length} · ${controlled} / ${POINTS.length} contrôlés</div>
   ${stepsNav}
   <div class="card">
     <div class="point-title">${esc(pointName)}</div>
-    <div class="point-sub">Choisissez dans les menus déroulants, aucune saisie n’est obligatoire.</div>
-    <div class="form-field"><label>État — ${esc(pointName)}</label>
-      <select id="ptEtat">
-        ${["Non contrôlé","Bon état","À surveiller","Défaut constaté","Non accessible"].map(o=>`<option ${p.etat===o?"selected":""}>${o}</option>`).join("")}
-      </select>
-    </div>
-    ${renderChoiceGroup("obs", pointName, p, d, step)}
-    <div style="font-weight:600;font-size:13px;margin:16px 0 10px">Le choix à expliquer au client</div>
-    <div class="form-field"><label>Décision proposée — ${esc(pointName)}</label>
-      <select id="ptDecision">
-        ${["Conserver","Surveiller","Réparer","Remplacer","Contrôle complémentaire"].map(o=>`<option ${p.decision===o?"selected":""}>${o}</option>`).join("")}
-      </select>
-    </div>
-    ${renderChoiceGroup("cause", pointName, p, d, step)}
-    ${renderChoiceGroup("sol", pointName, p, d, step)}
-    <div class="form-help">La justification doit correspondre aux constats. Un défaut localisé ne justifie pas automatiquement une rénovation complète.</div>
+    <div class="point-sub">Appuyez sur l’état constaté. Si tout va bien, passage automatique au point suivant.</div>
 
-    ${renderChoiceGroup("risk", pointName, p, d, step)}
+    <div class="etat-btn-grid">
+      ${ETAT_OPTIONS.map(o=>`
+        <button type="button" class="etat-btn ${etatBtnCls(o.id)} ${p.etat===o.id?"active":""}" data-action="pt-etat" data-id="${d.id}" data-step="${step}" data-val="${esc(o.id)}">
+          <span class="etat-btn-icon">${o.icon}</span><span class="etat-btn-label">${o.label}</span>
+        </button>`).join("")}
+    </div>
 
-    <div style="font-weight:600;font-size:13px;margin:18px 0 10px">Photos de ce point</div>
-    <div class="row-sub" style="margin-bottom:10px">${p.photos.length} / 24</div>
-    ${p.photos.length ? `<div class="photo-grid">
-      ${p.photos.map((ph,i)=>`
-        <div class="photo-thumb">
-          ${ph.dataUrl ? `<img src="${ph.dataUrl}" alt="">` : `<div class="photo-placeholder">🖼</div>`}
-          <button class="photo-remove" data-action="remove-photo" data-id="${d.id}" data-step="${step}" data-idx="${i}">✕</button>
-        </div>`).join("")}
+    ${showCascade ? `
+    <div class="diag-cascade">
+      <div class="cascade-label">1. Quel problème ? <span class="cascade-hint">plusieurs choix possibles</span></div>
+      <div class="chip-grid">
+        ${anomalyIds.map(id=>{
+          const a = ANOMALY_VOCAB[id];
+          return `<button type="button" class="chip-btn ${problems.includes(id)?"active":""}" data-action="pt-problem" data-id="${d.id}" data-step="${step}" data-val="${id}"><span>${a.icon}</span>${esc(a.label)}</button>`;
+        }).join("")}
+      </div>
+
+      <div class="cascade-label">2. Combien / étendue ?</div>
+      <div class="chip-grid">
+        ${EXTENT_OPTIONS.map(o=>`<button type="button" class="chip-btn ${p.extent===o.id?"active":""}" data-action="pt-extent" data-id="${d.id}" data-step="${step}" data-val="${o.id}"><span>${o.icon}</span>${esc(o.label)}</button>`).join("")}
+      </div>
+
+      <div class="cascade-label">3. Où ? <span class="cascade-hint">plusieurs choix possibles</span></div>
+      <div class="chip-grid">
+        ${ZONE_VERSANT_OPTIONS.map(o=>`<button type="button" class="chip-btn ${zones.includes(o.id)?"active":""}" data-action="pt-zone" data-id="${d.id}" data-step="${step}" data-val="${o.id}"><span>${o.icon}</span>${esc(o.label)}</button>`).join("")}
+      </div>
+      <div class="chip-grid">
+        ${ZONE_POSITION_OPTIONS.map(o=>`<button type="button" class="chip-btn ${zones.includes(o.id)?"active":""}" data-action="pt-zone" data-id="${d.id}" data-step="${step}" data-val="${o.id}"><span>${o.icon}</span>${esc(o.label)}</button>`).join("")}
+      </div>
+
+      <div class="cascade-label">Décision proposée <span class="cascade-hint">modifiable</span></div>
+      <div class="form-field">
+        <select id="ptDecision">
+          ${["Conserver","Surveiller","Réparer","Remplacer","Contrôle complémentaire"].map(o=>`<option ${p.decision===o?"selected":""}>${o}</option>`).join("")}
+        </select>
+      </div>
+
+      <div style="font-weight:600;font-size:13px;margin:16px 0 10px">4. Photo</div>
+      <div class="row-sub" style="margin-bottom:10px">${p.photos.length} / 24</div>
+      ${p.photos.length ? `<div class="photo-grid">
+        ${p.photos.map((ph,i)=>`
+          <div class="photo-thumb">
+            ${ph.dataUrl ? `<img src="${ph.dataUrl}" alt="">` : `<div class="photo-placeholder">🖼</div>`}
+            <button class="photo-remove" data-action="remove-photo" data-id="${d.id}" data-step="${step}" data-idx="${i}">✕</button>
+          </div>`).join("")}
+      </div>` : ""}
+      <input type="file" id="photoGalleryInput" accept="image/*" multiple style="display:none" data-id="${d.id}" data-step="${step}">
+      <input type="file" id="photoCameraInput" accept="image/*" capture="environment" style="display:none" data-id="${d.id}" data-step="${step}">
+      <div style="display:flex;gap:10px">
+        <button class="btn-secondary btn-sm" style="flex:1" data-action="trigger-file" data-target="photoGalleryInput">Ajouter depuis la galerie</button>
+        <button class="btn-secondary btn-sm" style="flex:1" data-action="trigger-file" data-target="photoCameraInput">Prendre une photo</button>
+      </div>
+      <div class="form-help" style="margin-top:8px">JPG, PNG, WebP · 10 Mo par photo · 24 par visite</div>
+
+      <div class="cascade-label">5. Commentaire facultatif</div>
+      <textarea id="ptComment" placeholder="À préciser au clavier si besoin (facultatif)…">${esc(p.comment||"")}</textarea>
+    </div>
+    ` : ""}
+
+    ${showPreview ? `
+    <div class="diag-preview">
+      <div class="diag-preview-label">Aperçu du texte rapport</div>
+      <div class="diag-preview-text">${esc(p.observation)}</div>
     </div>` : ""}
-    <input type="file" id="photoGalleryInput" accept="image/*" multiple style="display:none" data-id="${d.id}" data-step="${step}">
-    <input type="file" id="photoCameraInput" accept="image/*" capture="environment" style="display:none" data-id="${d.id}" data-step="${step}">
-    <div style="display:flex;gap:10px">
-      <button class="btn-secondary btn-sm" style="flex:1" data-action="trigger-file" data-target="photoGalleryInput">Ajouter depuis la galerie</button>
-      <button class="btn-secondary btn-sm" style="flex:1" data-action="trigger-file" data-target="photoCameraInput">Prendre une photo</button>
-    </div>
-    <div class="form-help" style="margin-top:8px">JPG, PNG, WebP · 10 Mo par photo · 24 par visite</div>
 
     <div class="modal-actions">
       <button class="btn-secondary" data-action="diag-save-point" data-id="${d.id}" data-step="${step}">Enregistrer le brouillon</button>
@@ -1190,7 +1165,7 @@ function pdfPointCard(p, i, d){
 function renderReportDoc(d){
   const s = d.diagnostic.synthese;
   const controlledPoints = POINTS.filter(p=>d.diagnostic.points[p].etat!=="Non contrôlé");
-  const flaggedPoints = POINTS.filter(p=>["Défaut constaté","À surveiller"].includes(d.diagnostic.points[p].etat));
+  const flaggedPoints = POINTS.filter(p=>["Défaut constaté","À surveiller","Urgent"].includes(d.diagnostic.points[p].etat));
   const conclusionCls = s.conclusion==="Bon état général" ? "green" : s.conclusion==="À surveiller" ? "gold" : "red";
 
   const refLines = flaggedPoints.map(p=>{
@@ -1968,6 +1943,13 @@ document.addEventListener("DOMContentLoaded", ()=>{
 
     if(action==="modal-overlay"){ if(e.target===t){ state.modal=null; render(); } return; }
     if(action==="modal-close"){ state.modal=null; render(); return; }
+    if(action==="open-app"){
+      state.splashExiting = true;
+      render();
+      setTimeout(()=>{ state.appStage="login"; state.splashExiting=false; render(); }, 650);
+      return;
+    }
+    if(action==="do-login"){ state.appStage="app"; render(); return; }
     if(action==="toggle-sidebar"){ state.sidebarOpen=!state.sidebarOpen; render(); return; }
     if(action==="close-sidebar"){ state.sidebarOpen=false; render(); return; }
     if(action==="nav"){ state.section=t.dataset.section; state.dossierId=null; state.diagStep=1; state.sidebarOpen=false; render(); return; }
@@ -1982,7 +1964,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(action==="choose-dossier"){ state.modal={type:"affect", id:t.dataset.id}; render(); return; }
     if(action==="reset-demo"){
       DOSSIERS = seedDossiers();
-      state = {role:"admin",section:"overview",dossierId:null,dossierTab:"info",diagStep:1,agendaMember:"all",
+      state = {appStage:"app",splashExiting:false,role:"admin",section:"overview",dossierId:null,dossierTab:"info",diagStep:1,agendaMember:"all",
         calendarView:"day",calendarDate:new Date(TODAY_REF),datePickerOpen:false,pickerViewDate:new Date(TODAY_REF),
         kanbanStage:"À contacter",modal:null,toast:null,sidebarOpen:false};
       render();
@@ -2135,6 +2117,51 @@ document.addEventListener("DOMContentLoaded", ()=>{
       return;
     }
     if(action==="kanban-stage"){ state.kanbanStage = t.dataset.stage; render(); return; }
+    if(action==="pt-etat"){
+      const d = byId(t.dataset.id);
+      const stepNum = parseInt(t.dataset.step,10);
+      const pointName = POINTS[stepNum-1];
+      const p = d.diagnostic.points[pointName];
+      p.etat = t.dataset.val;
+      if(AUTO_ADVANCE_ETATS.includes(p.etat)){
+        p.problems = []; p.extent = ""; p.zones = []; p.comment = "";
+      }
+      reformulatePoint(pointName, p);
+      if(AUTO_ADVANCE_ETATS.includes(p.etat)) state.diagStep = Math.min(POINTS.length+1, stepNum+1);
+      render();
+      return;
+    }
+    if(action==="pt-problem"){
+      const d = byId(t.dataset.id);
+      const pointName = POINTS[parseInt(t.dataset.step,10)-1];
+      const p = d.diagnostic.points[pointName];
+      p.problems = p.problems || [];
+      const idx = p.problems.indexOf(t.dataset.val);
+      if(idx===-1) p.problems.push(t.dataset.val); else p.problems.splice(idx,1);
+      reformulatePoint(pointName, p);
+      render();
+      return;
+    }
+    if(action==="pt-extent"){
+      const d = byId(t.dataset.id);
+      const pointName = POINTS[parseInt(t.dataset.step,10)-1];
+      const p = d.diagnostic.points[pointName];
+      p.extent = p.extent===t.dataset.val ? "" : t.dataset.val;
+      reformulatePoint(pointName, p);
+      render();
+      return;
+    }
+    if(action==="pt-zone"){
+      const d = byId(t.dataset.id);
+      const pointName = POINTS[parseInt(t.dataset.step,10)-1];
+      const p = d.diagnostic.points[pointName];
+      p.zones = p.zones || [];
+      const idx = p.zones.indexOf(t.dataset.val);
+      if(idx===-1) p.zones.push(t.dataset.val); else p.zones.splice(idx,1);
+      reformulatePoint(pointName, p);
+      render();
+      return;
+    }
     if(action==="diag-step"){ state.diagStep = parseInt(t.dataset.step,10); render(); return; }
     if(action==="diag-save-point" || action==="diag-next"){
       if(action==="diag-next") state.diagStep = Math.min(POINTS.length+1, parseInt(t.dataset.step,10)+1);
@@ -2176,6 +2203,11 @@ document.addEventListener("DOMContentLoaded", ()=>{
 
   document.getElementById("app").addEventListener("change", (e)=>{
     savePointFieldsFromDOM();
+    if(e.target.id==="loginRole"){
+      state.role = e.target.value;
+      state.section = NAV[state.role][0][0];
+      render();
+    }
     if(e.target.id==="roleSelect"){
       state.role = e.target.value;
       state.section = NAV[state.role][0][0];
@@ -2186,23 +2218,22 @@ document.addEventListener("DOMContentLoaded", ()=>{
       state.agendaMember = e.target.value;
       render();
     }
-    if(CHOICE_SELECT_IDS[e.target.id]){
-      const fieldKey = CHOICE_SELECT_IDS[e.target.id];
-      const cfg = CHOICE_FIELDS[fieldKey];
+    if(e.target.id==="ptDecision"){
       const d = byId(state.dossierId);
       const pointName = POINTS[state.diagStep-1];
       const p = d.diagnostic.points[pointName];
-      const val = e.target.value;
-      p.customFlags = p.customFlags || {};
-      if(val==="custom"){
-        p.customFlags[fieldKey] = true;
-        if(!(p[cfg.target] && cfg.options[pointName].indexOf(p[cfg.target])===-1)) p[cfg.target] = "";
-      } else {
-        p.customFlags[fieldKey] = false;
-        p[cfg.target] = val==="" ? "" : cfg.options[pointName][parseInt(val,10)];
-      }
+      p.decision = e.target.value;
+      p.decisionTouched = true;
+      reformulatePoint(pointName, p);
       render();
-      if(val==="custom") document.getElementById("custom-"+fieldKey)?.focus();
+    }
+    if(e.target.id==="ptComment"){
+      const d = byId(state.dossierId);
+      const pointName = POINTS[state.diagStep-1];
+      const p = d.diagnostic.points[pointName];
+      p.comment = e.target.value;
+      reformulatePoint(pointName, p);
+      render();
     }
     if(e.target.id==="photoGalleryInput" || e.target.id==="photoCameraInput"){
       const files = Array.from(e.target.files || []);
