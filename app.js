@@ -385,7 +385,8 @@ function seedDossiers(){
     visiteDate:null,
     diagnostic:freshDiagnostic(),
     devis:[],
-    factures:[]
+    factures:[],
+    chantier:null
   }, over);
 
   return [
@@ -457,6 +458,39 @@ function factureStatutCls(s){
   return "gray";
 }
 
+// ---------- Chantier (simulé, voir docs/erp/WORKFLOWS.md) ----------
+const POSEURS = ["Marc Petit","Nadia Cools","Yanis Costa","Farid Haddad"];
+const CHANTIER_STATUTS = ["À préparer","En attente acompte","Matériel à préparer","Prêt à planifier","Planifié","En cours","Bloqué","Terminé","À réceptionner","Clôturé","Annulé"];
+const CHANTIER_STATUT_CLS = {"Terminé":"green","Clôturé":"green","En cours":"gold","Bloqué":"red","Annulé":"gray"};
+function chantierStatutCls(s){ return CHANTIER_STATUT_CLS[s] || "blue"; }
+const CHECKLIST_TEMPLATE = {
+  avant: ["Matériel chargé","EPI vérifiés","Accès confirmé avec le client","Protection des zones sensibles","Documents chantier imprimés/disponibles"],
+  pendant: ["Dépose des éléments existants","Pose / réparation réalisée","Reprise de zinguerie si prévue","Nettoyage au fur et à mesure"],
+  fin: ["Nettoyage du chantier","Évacuation des déchets","Contrôle qualité de la pose","Photos après travaux prises","Réserves éventuelles notées","Validation avec le client"]
+};
+function freshChecklist(){
+  const c = {};
+  Object.keys(CHECKLIST_TEMPLATE).forEach(k=>{ c[k] = CHECKLIST_TEMPLATE[k].map(label=>({label, done:false})); });
+  return c;
+}
+function freshChantier(){
+  return {
+    statut:"À préparer",
+    equipe:[],
+    dateDebut:null,
+    dateFin:null,
+    consignes:"",
+    acces:"",
+    equipement:"",
+    checklist:freshChecklist(),
+    photos:{avant:[],pendant:[],apres:[]},
+    incidents:[]
+  };
+}
+function incidentCatLabel(c){
+  return {materiel:"Matériel manquant",technique:"Problème technique",acces:"Accès impossible",meteo:"Météo",dommage:"Dommage constaté",autre:"Autre"}[c] || c;
+}
+
 const ROLES = {
   admin:{ label:"Administration", avatar:"AD" },
   tech:{ label:"Technicien · Julien", avatar:"JB" },
@@ -499,6 +533,7 @@ function hasPermission(perm){
   const set = PERMISSIONS[state.role];
   return !!set && set.has(perm);
 }
+function canReadJob(){ return hasPermission("job.read.all") || hasPermission("job.read.team") || hasPermission("job.read.own"); }
 
 const NAV = {
   admin:[["overview","Vue d’ensemble"],["dossiers","Dossiers clients"],["agenda","Agenda d’équipe"],["entretiens","Entretiens"],["diagnostics","Diagnostics"],["commercial","Suivi commercial"],["parrainages","Parrainages"],["equipe","Équipe & accès"],["connexions","Connexions"],["client-preview","Aperçu espace client"]],
@@ -1203,17 +1238,22 @@ function renderDossiersList(){
 
 // ---------- Dossier detail ----------
 
-function tabsForRole(){
-  if(state.role==="tech") return [["info","Dossier & historique"],["diagnostic","Diagnostic terrain"],["rapport","Rapport PDF"]];
+function tabsForRole(d){
+  if(state.role==="tech"){
+    const tabs = [["info","Dossier & historique"],["diagnostic","Diagnostic terrain"],["rapport","Rapport PDF"]];
+    if(d && d.chantier && canReadJob()) tabs.push(["chantier","Chantier"]);
+    return tabs;
+  }
   const tabs = [["info","Dossier & historique"],["diagnostic","Diagnostic terrain"],["rapport","Rapport PDF"],["commercial","Suivi commercial"]];
   if(hasPermission("quote.create")) tabs.push(["devis","Devis & factures"]);
+  if(d && d.chantier && canReadJob()) tabs.push(["chantier","Chantier"]);
   return tabs;
 }
 
 function renderDossierDetail(id){
   const d = byId(id);
   if(!d) return renderDossiersList();
-  const tabs = tabsForRole();
+  const tabs = tabsForRole(d);
   if(!tabs.find(t=>t[0]===state.dossierTab)) state.dossierTab = "info";
 
   let body = "";
@@ -1222,6 +1262,7 @@ function renderDossierDetail(id){
   else if(state.dossierTab==="rapport") body = renderDossierRapport(d);
   else if(state.dossierTab==="commercial") body = renderDossierCommercial(d);
   else if(state.dossierTab==="devis") body = renderDossierDevis(d);
+  else if(state.dossierTab==="chantier") body = renderDossierChantier(d);
 
   if(state.dossierTab==="diagnostic" && diagEditable()){
     return `
@@ -1828,6 +1869,81 @@ function renderDossierDevis(d){
     </div>`;
 
   return devisBlock + facturesBlock;
+}
+
+function renderDossierChantier(d){
+  const c = d.chantier;
+  if(!c) return `<div class="card" style="text-align:center;padding:32px 20px"><h3 style="margin-bottom:6px">Pas encore de chantier</h3><p style="color:var(--muted)">Le chantier est préparé automatiquement à l'acceptation du devis.</p></div>`;
+  const canEdit = hasPermission("job.update");
+  const equipeOptions = POSEURS.map(p=>`<option value="${esc(p)}" ${c.equipe.includes(p)?"selected":""}>${esc(p)}</option>`).join("");
+
+  const resume = `
+  <div class="card">
+    <div class="card-header"><h3>Chantier</h3>${badge(c.statut, chantierStatutCls(c.statut))}</div>
+    <div class="form-field"><label>Statut</label>
+      <select id="chStatut" ${canEdit?"":"disabled"}>${CHANTIER_STATUTS.map(s=>`<option ${c.statut===s?"selected":""}>${esc(s)}</option>`).join("")}</select>
+    </div>
+    <div class="form-field"><label>Équipe (poseurs)</label>
+      <select id="chEquipe" multiple size="${POSEURS.length}" ${canEdit?"":"disabled"}>${equipeOptions}</select>
+    </div>
+    <div class="form-field"><label>Date de début</label><input type="text" id="chDebut" placeholder="ex. 20 sept." value="${esc(c.dateDebut||"")}" ${canEdit?"":"disabled"}></div>
+    <div class="form-field"><label>Date de fin</label><input type="text" id="chFin" placeholder="ex. 22 sept." value="${esc(c.dateFin||"")}" ${canEdit?"":"disabled"}></div>
+    <div class="form-field"><label>Consignes d'accès</label><textarea id="chAcces" placeholder="Clés, code, contact sur place…" ${canEdit?"":"disabled"}>${esc(c.acces)}</textarea></div>
+    <div class="form-field"><label>Matériel spécifique (échafaudage, nacelle, stationnement…)</label><textarea id="chEquipement" ${canEdit?"":"disabled"}>${esc(c.equipement)}</textarea></div>
+    <div class="form-field"><label>Consignes générales</label><textarea id="chConsignes" ${canEdit?"":"disabled"}>${esc(c.consignes)}</textarea></div>
+    ${canEdit?`<button class="btn-primary btn-sm" data-action="chantier-save" data-id="${d.id}">Enregistrer</button>`:""}
+  </div>`;
+
+  const checklistBlock = (key, title) => `
+    <div class="card">
+      <h3 style="margin:0 0 10px;font-size:14.5px">${esc(title)}</h3>
+      ${c.checklist[key].map((item,i)=>`
+        <div class="row-item">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;width:100%">
+            <input type="checkbox" data-action="chantier-toggle-check" data-id="${d.id}" data-key="${key}" data-idx="${i}" ${item.done?"checked":""} ${canEdit?"":"disabled"}>
+            <span style="${item.done?"text-decoration:line-through;color:var(--muted)":""}">${esc(item.label)}</span>
+          </label>
+        </div>`).join("")}
+    </div>`;
+
+  const photoCat = (cat, title) => {
+    const photos = c.photos[cat];
+    return `
+    <div class="card">
+      <h3 style="margin:0 0 10px;font-size:14.5px">${esc(title)} (${photos.length})</h3>
+      ${photos.length?`<div class="photo-grid">${photos.map((ph,i)=>`<div class="photo-thumb"><img src="${ph.dataUrl}" alt=""><button class="photo-remove" data-action="chantier-remove-photo" data-id="${d.id}" data-cat="${cat}" data-idx="${i}">✕</button></div>`).join("")}</div>`:`<div class="empty-note">Aucune photo.</div>`}
+      <input type="file" id="chPhoto-${cat}" accept="image/*" multiple style="display:none" data-id="${d.id}" data-cat="${cat}">
+      <button class="btn-secondary btn-sm" data-action="trigger-file" data-target="chPhoto-${cat}">Ajouter des photos</button>
+    </div>`;
+  };
+
+  const incidentsBlock = `
+    <div class="card">
+      <div class="card-header"><h3>Incidents signalés</h3></div>
+      ${c.incidents.length?c.incidents.map(inc=>`<div class="row-item"><div><div class="row-title">${esc(incidentCatLabel(inc.categorie))}</div><div class="row-sub">${esc(inc.date)} · ${esc(inc.auteur)}</div><div>${esc(inc.description)}</div></div></div>`).join(""):`<div class="empty-note">Aucun incident signalé.</div>`}
+      <div class="form-field" style="margin-top:12px">
+        <label>Signaler un problème</label>
+        <select id="incCategorie">
+          <option value="materiel">Matériel manquant</option>
+          <option value="technique">Problème technique</option>
+          <option value="acces">Accès impossible</option>
+          <option value="meteo">Météo</option>
+          <option value="dommage">Dommage constaté</option>
+          <option value="autre">Autre</option>
+        </select>
+        <textarea id="incDescription" placeholder="Décrire le problème…" style="margin-top:8px"></textarea>
+        <button class="btn-secondary btn-sm" style="margin-top:8px" data-action="chantier-report-incident" data-id="${d.id}">Signaler</button>
+      </div>
+    </div>`;
+
+  return resume
+    + checklistBlock("avant","Checklist — avant chantier")
+    + checklistBlock("pendant","Checklist — pendant chantier")
+    + checklistBlock("fin","Checklist — fin de chantier")
+    + photoCat("avant","Photos avant")
+    + photoCat("pendant","Photos pendant")
+    + photoCat("apres","Photos après")
+    + incidentsBlock;
 }
 
 // ---------- Agenda ----------
@@ -2707,7 +2823,11 @@ document.addEventListener("DOMContentLoaded", ()=>{
       dv.statut = "Accepté";
       d.commercialStage = "Gagné";
       d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:"Devis "+dv.numero+" accepté par le client."});
-      showToast("Devis accepté.");
+      if(!d.chantier){
+        d.chantier = freshChantier();
+        d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:"Chantier préparé automatiquement suite à l'acceptation du devis."});
+      }
+      showToast("Devis accepté. Chantier préparé.");
       render();
       return;
     }
@@ -2774,6 +2894,44 @@ document.addEventListener("DOMContentLoaded", ()=>{
       p.virementStatut = "Confirmé";
       f.statut = factureStatutFromPayments(f);
       showToast("Virement confirmé comme encaissé.");
+      render();
+      return;
+    }
+    if(action==="chantier-save"){
+      const d = byId(t.dataset.id);
+      const c = d.chantier;
+      c.statut = document.getElementById("chStatut").value;
+      c.equipe = Array.from(document.getElementById("chEquipe").selectedOptions).map(o=>o.value);
+      c.dateDebut = document.getElementById("chDebut").value || null;
+      c.dateFin = document.getElementById("chFin").value || null;
+      c.acces = document.getElementById("chAcces").value;
+      c.equipement = document.getElementById("chEquipement").value;
+      c.consignes = document.getElementById("chConsignes").value;
+      showToast("Chantier mis à jour.");
+      render();
+      return;
+    }
+    if(action==="chantier-toggle-check"){
+      const d = byId(t.dataset.id);
+      const item = d.chantier.checklist[t.dataset.key][parseInt(t.dataset.idx,10)];
+      item.done = !item.done;
+      render();
+      return;
+    }
+    if(action==="chantier-remove-photo"){
+      const d = byId(t.dataset.id);
+      d.chantier.photos[t.dataset.cat].splice(parseInt(t.dataset.idx,10),1);
+      render();
+      return;
+    }
+    if(action==="chantier-report-incident"){
+      const d = byId(t.dataset.id);
+      const desc = document.getElementById("incDescription").value.trim();
+      if(!desc){ showToast("Décrivez le problème avant de l'envoyer."); return; }
+      const cat = document.getElementById("incCategorie").value;
+      d.chantier.incidents.unshift({categorie:cat, description:desc, date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label});
+      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:"Incident chantier signalé : "+incidentCatLabel(cat)+"."});
+      showToast("Incident signalé.");
       render();
       return;
     }
@@ -2853,6 +3011,23 @@ document.addEventListener("DOMContentLoaded", ()=>{
       p.comment = e.target.value;
       reformulatePoint(pointName, p);
       render();
+    }
+    if(e.target.id && e.target.id.startsWith("chPhoto-")){
+      const files = Array.from(e.target.files || []);
+      if(!files.length) return;
+      const d = byId(e.target.dataset.id);
+      const cat = e.target.dataset.cat;
+      const bucket = d.chantier.photos[cat];
+      Promise.all(files.slice(0, Math.max(0, 40 - bucket.length)).map(file=>new Promise(resolve=>{
+        const reader = new FileReader();
+        reader.onload = ()=>resolve({name:file.name, dataUrl:reader.result});
+        reader.onerror = ()=>resolve(null);
+        reader.readAsDataURL(file);
+      }))).then(results=>{
+        results.filter(Boolean).forEach(photo=>bucket.push(photo));
+        render();
+      });
+      return;
     }
     if(e.target.id==="photoGalleryInput" || e.target.id==="photoCameraInput"){
       const files = Array.from(e.target.files || []);

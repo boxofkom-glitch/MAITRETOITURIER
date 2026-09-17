@@ -15,8 +15,8 @@ voir DECISIONS.md D1) · `[!]` BLOCKED_EXTERNAL
 | Pipeline opportunités | x | x | – | x | [x] déjà existant (kanban commercial) |
 | Devis versionnés | x | x | x | x | [x] |
 | Factures / paiements | x | x | x | x | [x] |
-| Chantiers | – | – | – | – | [ ] |
-| Poseur mobile | – | – | – | – | [ ] |
+| Chantiers | x | x | x | x | [~] création auto à l'acceptation, checklist/photos/incidents faits ; planning/matériel/achats/finances/timeline dédiés pas encore faits |
+| Poseur mobile | – | – | – | – | [ ] (voir chantier ci-dessus, pas de persona dédiée) |
 | Matériel / besoins chantier | – | – | – | – | [ ] |
 | Fournisseurs / achats | – | – | – | – | [ ] |
 | Dépenses / rentabilité | – | – | – | – | [ ] |
@@ -40,3 +40,23 @@ voir DECISIONS.md D1) · `[!]` BLOCKED_EXTERNAL
   Diagnostic terrain re-vérifié non impacté après ce lot.
 - Modules Chantier/Poseur/Matériel/Achats/Marketing/SAV avancé : non
   démarrés, volontairement — voir DECISIONS.md D4 (anti-fake-feature).
+
+## Session du 2026-09-17 (suite) — refonte brochure + module Chantier
+- Brochure PDF : identité graphique géométrique (chevron toiture, bandeaux
+  diagonaux) sur toutes les pages, graphique de répartition des états,
+  paragraphe de clôture câblé. Bug corrigé : écrasement silencieux d'un
+  point de diagnostic (voir TECH_DEBT.md).
+- Module Chantier : `d.chantier` créé automatiquement (idempotent) à
+  l'acceptation d'un devis. Onglet "Chantier" (visible si `job.read.*`) :
+  statut/équipe/dates/consignes, checklist avant/pendant/fin, photos
+  avant/pendant/après (upload réel), incidents (signaler un problème).
+  RBAC : édition réservée à `job.update` (admin). Testé bout en bout
+  (création via acceptation devis → édition → checklist → incident) en
+  desktop et mobile ; diagnostic re-vérifié non impacté.
+- Bug RBAC trouvé et corrigé en testant : le nouveau code chantier
+  utilisait `hasPermission("job.read")` (permission non définie dans la
+  matrice, qui utilise des scopes `job.read.all/team/own`) — l'onglet
+  Chantier n'apparaissait donc jamais. Ajout d'un helper `canReadJob()`.
+- Reste pour Chantier : planning multi-RDV, matériel/besoins, achats liés,
+  finances/rentabilité du chantier, timeline dédiée, persona Poseur mobile
+  (accès restreint à "Aujourd'hui / mon chantier").
