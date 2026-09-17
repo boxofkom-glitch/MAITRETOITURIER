@@ -193,6 +193,17 @@ function savePointFieldsFromDOM(){
   if(decisionEl) p.decision = decisionEl.value;
   const commentEl = document.getElementById("ptComment");
   if(commentEl) p.comment = commentEl.value;
+  const problemsEl = document.getElementById("selProblems");
+  if(problemsEl) p.problems = Array.from(problemsEl.selectedOptions).map(o=>o.value);
+  const extentEl = document.getElementById("selExtent");
+  if(extentEl) p.extent = extentEl.value;
+  const versantEl = document.getElementById("selVersant");
+  const positionEl = document.getElementById("selPosition");
+  if(versantEl || positionEl){
+    const versant = versantEl ? Array.from(versantEl.selectedOptions).map(o=>o.value) : [];
+    const position = positionEl ? Array.from(positionEl.selectedOptions).map(o=>o.value) : [];
+    p.zones = [...versant, ...position];
+  }
   if(p.etat && p.etat!=="Non contrôlé") reformulatePoint(pointName, p);
 }
 function freshDiagnostic(){
@@ -503,10 +514,22 @@ function showToast(msg){
 
 function render(){
   const app = document.getElementById("app");
+  const oldContent = app.querySelector(".content");
+  const savedScrollTop = oldContent ? oldContent.scrollTop : 0;
+  const savedScrollY = window.scrollY;
   app.innerHTML = buildApp();
   repaginatePoints();
   numberPdfPages();
   applyPdfScale();
+  const newContent = app.querySelector(".content");
+  if(newContent) newContent.scrollTop = savedScrollTop;
+  window.scrollTo(0, savedScrollY);
+}
+
+function scrollContentTop(){
+  const c = document.querySelector(".content");
+  if(c) c.scrollTop = 0;
+  window.scrollTo(0, 0);
 }
 
 function numberPdfPages(root){
@@ -652,8 +675,6 @@ function applyPdfScale(){
 function buildSplash(){
   return `
   <div class="splash ${state.splashExiting?"exiting":""}">
-    <video class="splash-video" src="assets/Vid%C3%A9o.mov" autoplay muted loop playsinline></video>
-    <div class="splash-overlay"></div>
     <div class="splash-body">
       <img class="splash-logo" src="assets/logo-full.png" alt="Maître Toiturier">
       <button class="splash-btn" data-action="open-app">Ouvrir mon appli</button>
@@ -1071,29 +1092,39 @@ function renderDossierDiagnostic(d){
 
     ${showCascade ? `
     <div class="diag-cascade">
-      <div class="cascade-label">1. Quel problème ? <span class="cascade-hint">plusieurs choix possibles</span></div>
-      <div class="chip-grid">
-        ${anomalyIds.map(id=>{
-          const a = ANOMALY_VOCAB[id];
-          return `<button type="button" class="chip-btn ${problems.includes(id)?"active":""}" data-action="pt-problem" data-id="${d.id}" data-step="${step}" data-val="${id}"><span>${a.icon}</span>${esc(a.label)}</button>`;
-        }).join("")}
-      </div>
-
-      <div class="cascade-label">2. Combien / étendue ?</div>
-      <div class="chip-grid">
-        ${EXTENT_OPTIONS.map(o=>`<button type="button" class="chip-btn ${p.extent===o.id?"active":""}" data-action="pt-extent" data-id="${d.id}" data-step="${step}" data-val="${o.id}"><span>${o.icon}</span>${esc(o.label)}</button>`).join("")}
-      </div>
-
-      <div class="cascade-label">3. Où ? <span class="cascade-hint">plusieurs choix possibles</span></div>
-      <div class="chip-grid">
-        ${ZONE_VERSANT_OPTIONS.map(o=>`<button type="button" class="chip-btn ${zones.includes(o.id)?"active":""}" data-action="pt-zone" data-id="${d.id}" data-step="${step}" data-val="${o.id}"><span>${o.icon}</span>${esc(o.label)}</button>`).join("")}
-      </div>
-      <div class="chip-grid">
-        ${ZONE_POSITION_OPTIONS.map(o=>`<button type="button" class="chip-btn ${zones.includes(o.id)?"active":""}" data-action="pt-zone" data-id="${d.id}" data-step="${step}" data-val="${o.id}"><span>${o.icon}</span>${esc(o.label)}</button>`).join("")}
-      </div>
-
-      <div class="cascade-label">Décision proposée <span class="cascade-hint">modifiable</span></div>
       <div class="form-field">
+        <label>1. Quel problème ? <span class="cascade-hint">plusieurs choix possibles</span></label>
+        <select id="selProblems" multiple size="${Math.min(6, anomalyIds.length)}">
+          ${anomalyIds.map(id=>{
+            const a = ANOMALY_VOCAB[id];
+            return `<option value="${id}" ${problems.includes(id)?"selected":""}>${a.icon} ${esc(a.label)}</option>`;
+          }).join("")}
+        </select>
+      </div>
+
+      <div class="form-field">
+        <label>2. Combien / étendue ?</label>
+        <select id="selExtent">
+          <option value="">— Sélectionner —</option>
+          ${EXTENT_OPTIONS.map(o=>`<option value="${o.id}" ${p.extent===o.id?"selected":""}>${o.icon} ${esc(o.label)}</option>`).join("")}
+        </select>
+      </div>
+
+      <div class="form-field">
+        <label>3. Où — versant ? <span class="cascade-hint">plusieurs choix possibles</span></label>
+        <select id="selVersant" multiple size="4">
+          ${ZONE_VERSANT_OPTIONS.map(o=>`<option value="${o.id}" ${zones.includes(o.id)?"selected":""}>${o.icon} ${esc(o.label)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="form-field">
+        <label>Où — position ? <span class="cascade-hint">plusieurs choix possibles</span></label>
+        <select id="selPosition" multiple size="3">
+          ${ZONE_POSITION_OPTIONS.map(o=>`<option value="${o.id}" ${zones.includes(o.id)?"selected":""}>${o.icon} ${esc(o.label)}</option>`).join("")}
+        </select>
+      </div>
+
+      <div class="form-field">
+        <label>Décision proposée <span class="cascade-hint">modifiable</span></label>
         <select id="ptDecision">
           ${["Conserver","Surveiller","Réparer","Remplacer","Contrôle complémentaire"].map(o=>`<option ${p.decision===o?"selected":""}>${o}</option>`).join("")}
         </select>
@@ -1121,17 +1152,18 @@ function renderDossierDiagnostic(d){
     </div>
     ` : ""}
 
-    ${showPreview ? `
-    <div class="diag-preview">
-      <div class="diag-preview-label">Aperçu du texte rapport</div>
-      <div class="diag-preview-text">${esc(p.observation)}</div>
-    </div>` : ""}
+    ${showPreview ? `<div class="diag-preview-spacer"></div>` : ""}
 
     <div class="modal-actions">
       <button class="btn-secondary" data-action="diag-save-point" data-id="${d.id}" data-step="${step}">Enregistrer le brouillon</button>
       <button class="btn-primary" data-action="diag-next" data-id="${d.id}" data-step="${step}">Suivant →</button>
     </div>
-  </div>`;
+  </div>
+  ${showPreview ? `
+  <div class="diag-preview">
+    <div class="diag-preview-label">Aperçu du texte rapport</div>
+    <div class="diag-preview-text">${esc(p.observation)}</div>
+  </div>` : ""}`;
 }
 
 function pdfHead(){
@@ -1143,23 +1175,44 @@ function pdfPointCard(p, i, d){
   const photo = pt.photos.find(ph=>ph.dataUrl);
   return `
   <div class="pdf-point ${etatAccentCls(pt.etat)}">
-    <div class="pdf-point-head">
-      <div class="pdf-point-head-left">
-        <div class="pdf-point-num">${i+1}</div>
+    <div class="pdf-point-photo">
+      ${photo?`<img src="${photo.dataUrl}" alt="">`:`<div class="pdf-point-photo-ph">${iconSvg("house",26)}<span>Photo à ajouter</span></div>`}
+      <div class="pdf-point-photo-tag"><span class="pdf-point-num">${i+1}</span></div>
+    </div>
+    <div class="pdf-point-content">
+      <div class="pdf-point-head">
         <div class="pdf-point-title">${esc(p)}</div>
+        ${etatPill(pt.etat)}
       </div>
-      ${etatPill(pt.etat)}
-    </div>
-    <div class="pdf-point-body">
-      <div class="pdf-point-photo">${photo?`<img src="${photo.dataUrl}" alt="">`:`<div class="pdf-point-photo-ph">${iconSvg("house",24)}<span>Photo à ajouter</span></div>`}</div>
-      <div class="pdf-point-text">
-        <h5>Observation</h5><p>${pt.observation?esc(pt.observation):"Non renseignée."}</p>
-        <h5>Décision</h5><p>${esc(pt.decision)}${pt.pourquoi?" — "+esc(pt.pourquoi):""}</p>
-        <h5>Travaux proposés</h5><p>${pt.travaux?esc(pt.travaux):"Aucun à ce stade."}</p>
+      <div class="pdf-point-block">
+        <span class="pdf-point-label">Observation</span>
+        <p>${pt.observation?esc(pt.observation):"Non renseignée."}</p>
       </div>
+      <div class="pdf-point-block">
+        <span class="pdf-point-label">Décision</span>
+        <p><b>${esc(pt.decision)}</b>${pt.pourquoi?" — "+esc(pt.pourquoi):""}</p>
+      </div>
+      ${pt.travaux?`<div class="pdf-point-block"><span class="pdf-point-label">Travaux proposés</span><p>${esc(pt.travaux)}</p></div>`:""}
+      ${pt.risque?`<div class="pdf-risk"><b>${iconSvg("warning",13)} Vigilance</b><span>${esc(pt.risque)}</span></div>`:""}
     </div>
-    ${pt.risque?`<div class="pdf-risk"><b>${iconSvg("warning",14)} Risques</b><span>${esc(pt.risque)}</span></div>`:""}
   </div>`;
+}
+
+function buildClosingSummary(d){
+  const s = d.diagnostic.synthese;
+  const flagged = POINTS.filter(p=>["Défaut constaté","À surveiller","Urgent"].includes(d.diagnostic.points[p].etat));
+  const urgent = POINTS.filter(p=>d.diagnostic.points[p].etat==="Urgent").length;
+  const controlled = POINTS.filter(p=>d.diagnostic.points[p].etat!=="Non contrôlé").length;
+  let opening;
+  if(flagged.length===0){
+    opening = `Cette visite confirme un état général satisfaisant de la toiture de ${d.client}, sur l’ensemble des ${controlled} zones inspectées.`;
+  } else if(urgent>0){
+    opening = `Cette visite a permis d’identifier ${flagged.length} point${flagged.length>1?"s":""} nécessitant une intervention sur la toiture de ${d.client}, dont ${urgent} à traiter en priorité.`;
+  } else {
+    opening = `Cette visite a permis d’identifier ${flagged.length} point${flagged.length>1?"s":""} de vigilance sur les ${controlled} zones inspectées de la toiture de ${d.client}.`;
+  }
+  const closing = s.preconisations || "Notre équipe reste à votre disposition pour toute question complémentaire sur ces constats.";
+  return [opening, s.observations, closing].filter(Boolean).join(" ");
 }
 
 function renderReportDoc(d){
@@ -1952,9 +2005,9 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(action==="do-login"){ state.appStage="app"; render(); return; }
     if(action==="toggle-sidebar"){ state.sidebarOpen=!state.sidebarOpen; render(); return; }
     if(action==="close-sidebar"){ state.sidebarOpen=false; render(); return; }
-    if(action==="nav"){ state.section=t.dataset.section; state.dossierId=null; state.diagStep=1; state.sidebarOpen=false; render(); return; }
-    if(action==="open-dossier"){ state.section="dossiers"; state.dossierId=t.dataset.id; state.dossierTab=t.dataset.tab||"info"; state.diagStep=1; render(); return; }
-    if(action==="dossier-tab"){ state.dossierTab=t.dataset.tab; state.diagStep=1; render(); return; }
+    if(action==="nav"){ state.section=t.dataset.section; state.dossierId=null; state.diagStep=1; state.sidebarOpen=false; render(); scrollContentTop(); return; }
+    if(action==="open-dossier"){ state.section="dossiers"; state.dossierId=t.dataset.id; state.dossierTab=t.dataset.tab||"info"; state.diagStep=1; render(); scrollContentTop(); return; }
+    if(action==="dossier-tab"){ state.dossierTab=t.dataset.tab; state.diagStep=1; render(); scrollContentTop(); return; }
     if(action==="modal-new"){ state.modal={type:"new"}; render(); return; }
     if(action==="modal-new-diag"){ state.modal={type:"new", toDiagnostic:true}; render(); return; }
     if(action==="modal-edit"){ state.modal={type:"edit", id:t.dataset.id}; render(); return; }
@@ -2127,45 +2180,24 @@ document.addEventListener("DOMContentLoaded", ()=>{
         p.problems = []; p.extent = ""; p.zones = []; p.comment = "";
       }
       reformulatePoint(pointName, p);
-      if(AUTO_ADVANCE_ETATS.includes(p.etat)) state.diagStep = Math.min(POINTS.length+1, stepNum+1);
-      render();
+      if(AUTO_ADVANCE_ETATS.includes(p.etat)){
+        state.diagStep = Math.min(POINTS.length+1, stepNum+1);
+        render();
+        scrollContentTop();
+      } else {
+        render();
+      }
       return;
     }
-    if(action==="pt-problem"){
-      const d = byId(t.dataset.id);
-      const pointName = POINTS[parseInt(t.dataset.step,10)-1];
-      const p = d.diagnostic.points[pointName];
-      p.problems = p.problems || [];
-      const idx = p.problems.indexOf(t.dataset.val);
-      if(idx===-1) p.problems.push(t.dataset.val); else p.problems.splice(idx,1);
-      reformulatePoint(pointName, p);
-      render();
-      return;
-    }
-    if(action==="pt-extent"){
-      const d = byId(t.dataset.id);
-      const pointName = POINTS[parseInt(t.dataset.step,10)-1];
-      const p = d.diagnostic.points[pointName];
-      p.extent = p.extent===t.dataset.val ? "" : t.dataset.val;
-      reformulatePoint(pointName, p);
-      render();
-      return;
-    }
-    if(action==="pt-zone"){
-      const d = byId(t.dataset.id);
-      const pointName = POINTS[parseInt(t.dataset.step,10)-1];
-      const p = d.diagnostic.points[pointName];
-      p.zones = p.zones || [];
-      const idx = p.zones.indexOf(t.dataset.val);
-      if(idx===-1) p.zones.push(t.dataset.val); else p.zones.splice(idx,1);
-      reformulatePoint(pointName, p);
-      render();
-      return;
-    }
-    if(action==="diag-step"){ state.diagStep = parseInt(t.dataset.step,10); render(); return; }
+    if(action==="diag-step"){ state.diagStep = parseInt(t.dataset.step,10); render(); scrollContentTop(); return; }
     if(action==="diag-save-point" || action==="diag-next"){
-      if(action==="diag-next") state.diagStep = Math.min(POINTS.length+1, parseInt(t.dataset.step,10)+1);
-      render();
+      if(action==="diag-next"){
+        state.diagStep = Math.min(POINTS.length+1, parseInt(t.dataset.step,10)+1);
+        render();
+        scrollContentTop();
+      } else {
+        render();
+      }
       return;
     }
     if(action==="diag-generate"){
@@ -2224,6 +2256,34 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const p = d.diagnostic.points[pointName];
       p.decision = e.target.value;
       p.decisionTouched = true;
+      reformulatePoint(pointName, p);
+      render();
+    }
+    if(e.target.id==="selProblems"){
+      const d = byId(state.dossierId);
+      const pointName = POINTS[state.diagStep-1];
+      const p = d.diagnostic.points[pointName];
+      p.problems = Array.from(e.target.selectedOptions).map(o=>o.value);
+      reformulatePoint(pointName, p);
+      render();
+    }
+    if(e.target.id==="selExtent"){
+      const d = byId(state.dossierId);
+      const pointName = POINTS[state.diagStep-1];
+      const p = d.diagnostic.points[pointName];
+      p.extent = e.target.value;
+      reformulatePoint(pointName, p);
+      render();
+    }
+    if(e.target.id==="selVersant" || e.target.id==="selPosition"){
+      const d = byId(state.dossierId);
+      const pointName = POINTS[state.diagStep-1];
+      const p = d.diagnostic.points[pointName];
+      const versantEl = document.getElementById("selVersant");
+      const positionEl = document.getElementById("selPosition");
+      const versant = versantEl ? Array.from(versantEl.selectedOptions).map(o=>o.value) : [];
+      const position = positionEl ? Array.from(positionEl.selectedOptions).map(o=>o.value) : [];
+      p.zones = [...versant, ...position];
       reformulatePoint(pointName, p);
       render();
     }

@@ -46,10 +46,8 @@ a,button,.nav-btn,.tab-btn,.pill-btn{-webkit-tap-highlight-color:transparent}
 *:focus-visible{outline:2px solid var(--gold-line);outline-offset:2px;border-radius:4px}
 #app{display:flex;min-height:100vh;max-width:100vw}
 
-.splash{position:fixed;inset:0;z-index:500;overflow:hidden;background:#0b0b0b;opacity:1;transition:opacity .65s ease}
+.splash{position:fixed;inset:0;z-index:500;overflow:hidden;background:radial-gradient(900px 600px at 50% 40%,rgba(212,175,55,.10),transparent 65%),#0b0b0b;opacity:1;transition:opacity .65s ease}
 .splash.exiting{opacity:0;pointer-events:none}
-.splash-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.splash-overlay{position:absolute;inset:0;background:linear-gradient(180deg,rgba(11,11,11,.45) 0%,rgba(11,11,11,.2) 40%,rgba(11,11,11,.65) 100%)}
 .splash-body{position:relative;z-index:2;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:38px;padding:24px}
 .splash-logo{width:min(230px,58vw);filter:drop-shadow(0 10px 26px rgba(0,0,0,.65))}
 .splash-btn{background:linear-gradient(155deg,var(--gold),var(--gold2));color:#171310;border:none;padding:16px 36px;border-radius:999px;font-weight:700;font-size:15px;letter-spacing:.3px;cursor:pointer;box-shadow:0 12px 30px -6px rgba(212,175,55,.55);transition:transform .18s var(--ease),box-shadow .18s var(--ease)}
@@ -298,9 +296,11 @@ tr:last-child td{border-bottom:none}
 .chip-btn:hover{border-color:var(--gold-line)}
 .chip-btn.active{background:linear-gradient(155deg,var(--gold),var(--gold2));border-color:transparent;color:#171310;font-weight:700}
 
-.diag-preview{background:var(--gold-soft);border:1px solid var(--gold-line);border-radius:12px;padding:12px 14px;margin-top:16px}
-.diag-preview-label{font-size:11px;font-weight:700;color:var(--gold2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px}
-.diag-preview-text{font-size:13px;color:var(--text);line-height:1.5}
+.diag-preview{position:fixed;left:252px;right:0;bottom:0;z-index:120;background:#171410;border-top:1px solid var(--gold-line);padding:12px 24px calc(12px + env(safe-area-inset-bottom));box-shadow:0 -10px 26px rgba(0,0,0,.4);max-height:26vh;overflow-y:auto}
+.diag-preview-label{font-size:10.5px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px}
+.diag-preview-text{font-size:12.5px;color:var(--text);line-height:1.5}
+.diag-preview-spacer{height:110px}
+@media (max-width:900px){ .diag-preview{left:0;padding:11px 16px calc(11px + env(safe-area-inset-bottom))} }
 
 .diag-focus-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:12px}
 .diag-focus-title{font-size:13px;color:var(--muted);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -336,8 +336,14 @@ tr:last-child td{border-bottom:none}
 .pdf-cover-banner-icon{width:34px;height:34px;border-radius:50%;background:rgba(231,196,101,.18);border:1px solid rgba(231,196,101,.5);color:#e7c465;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 
 /* Interior pages */
-.pdf-h1{font-size:21px;font-weight:800;margin:0 0 3px}
+.pdf-overline{font-size:10px;font-weight:800;letter-spacing:.16em;color:#b86f47;text-transform:uppercase;margin-bottom:7px}
+.pdf-h1{font-size:22px;font-weight:800;margin:0 0 3px}
 .pdf-h1-sub{color:#6b6355;font-size:12px;margin-bottom:16px}
+
+.pdf-summary{margin-top:18px;padding:22px 24px;border-radius:16px;background:linear-gradient(160deg,#fbf6ea,#f2e6cd);border:1px solid #e3d3ad;position:relative}
+.pdf-summary .pdf-overline{color:#8a5a2b}
+.pdf-summary-text{font-size:13px;line-height:1.8;font-style:italic;color:#2b2213;margin:0}
+.pdf-summary-sign{margin-top:14px;font-size:10.5px;font-weight:700;letter-spacing:.03em;color:#8a5a2b;text-align:right}
 
 .pdf-stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
 .pdf-stat-card{border:1px solid #e7dcc6;border-radius:10px;padding:11px 12px;background:#fffdf8}
@@ -360,25 +366,26 @@ tr:last-child td{border-bottom:none}
 .pdf-legend-item{display:flex;align-items:center;gap:5px}
 .pdf-legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 
-.pdf-point{border:1px solid #e7dcc6;border-left:5px solid #d8cba4;border-radius:10px;padding:14px;margin-bottom:14px;background:#fffdf8}
-.pdf-point.st-red{border-left-color:#c0342a}
-.pdf-point.st-gold{border-left-color:#d4af37}
-.pdf-point.st-green{border-left-color:#15804a}
-.pdf-point.st-black{border-left-color:#23262c}
-.pdf-point.st-gray{border-left-color:#9aa1ab}
-.pdf-point-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
-.pdf-point-head-left{display:flex;align-items:center;gap:9px}
-.pdf-point-num{width:24px;height:24px;border-radius:50%;background:#f2e6d0;color:#b86f47;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.pdf-point-title{font-size:14px;font-weight:700}
-.pdf-point-body{display:flex;gap:14px}
-.pdf-point-photo{width:135px;height:135px;border-radius:9px;overflow:hidden;background:linear-gradient(135deg,#f2e6d0,#f7f3e9);flex-shrink:0;display:flex;align-items:center;justify-content:center;border:1px solid #e7dcc6}
-.pdf-point-photo img{width:100%;height:100%;object-fit:cover}
-.pdf-point-photo-ph{color:#a89a7c;display:flex;flex-direction:column;align-items:center;gap:5px;font-size:9.5px;text-align:center}
-.pdf-point-text{flex:1;min-width:0}
-.pdf-point-text h5{font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:#8a7f66;margin:0 0 2px}
-.pdf-point-text p{margin:0 0 8px;font-size:11.5px}
-.pdf-risk{display:flex;gap:8px;align-items:flex-start;background:#fdeeed;border-radius:8px;padding:8px 10px;margin-top:2px;font-size:11px}
-.pdf-risk b{color:#c0342a;flex-shrink:0;display:flex;align-items:center;gap:4px}
+.pdf-point{border:1px solid #e3d9c6;border-top:4px solid #d8cba4;border-radius:14px;overflow:hidden;margin-bottom:16px;background:#fffefb;box-shadow:0 3px 14px rgba(20,14,6,.06)}
+.pdf-point.st-red{border-top-color:#c0342a}
+.pdf-point.st-gold{border-top-color:#d4af37}
+.pdf-point.st-green{border-top-color:#15804a}
+.pdf-point.st-black{border-top-color:#23262c}
+.pdf-point.st-gray{border-top-color:#9aa1ab}
+.pdf-point-photo{position:relative;width:100%;aspect-ratio:16/7;background:linear-gradient(135deg,#f2e6d0,#f7f3e9);overflow:hidden}
+.pdf-point-photo img{width:100%;height:100%;object-fit:cover;display:block}
+.pdf-point-photo-ph{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#a89a7c;font-size:10px}
+.pdf-point-photo-tag{position:absolute;top:10px;left:10px;background:rgba(11,11,11,.72);color:#e7c465;font-size:9.5px;font-weight:800;letter-spacing:.08em;padding:4px 10px 4px 8px;border-radius:999px;display:flex;align-items:center;gap:5px}
+.pdf-point-photo-tag .pdf-point-num{width:15px;height:15px;border-radius:50%;background:#e7c465;color:#171310;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.pdf-point-content{padding:14px 17px 16px}
+.pdf-point-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:11px;padding-bottom:10px;border-bottom:1px solid #ece3d0}
+.pdf-point-title{font-family:var(--font-display);font-size:15.5px;font-weight:700}
+.pdf-point-block{margin-bottom:9px}
+.pdf-point-block:last-of-type{margin-bottom:0}
+.pdf-point-label{display:block;font-size:9px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:#b86f47;margin-bottom:2px}
+.pdf-point-block p{margin:0;font-size:11.5px;line-height:1.55;color:#2b2718}
+.pdf-risk{display:flex;gap:8px;align-items:flex-start;background:#fbf3f2;border-left:3px solid #c0342a;border-radius:6px;padding:8px 10px;margin-top:10px;font-size:10.5px}
+.pdf-risk b{color:#c0342a;flex-shrink:0;display:flex;align-items:center;gap:4px;white-space:nowrap}
 
 .pdf-action{display:flex;gap:10px;border:1px solid #e7dcc6;border-radius:10px;padding:10px 12px;margin-bottom:8px;background:#fffdf8}
 .pdf-action-num{width:20px;height:20px;border-radius:50%;background:#f2e6d0;color:#b86f47;font-weight:700;font-size:10.5px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
