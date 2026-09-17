@@ -354,6 +354,42 @@ const ROLES = {
   client:{ label:"Cliente · Marie", avatar:"ML" }
 };
 
+// ---------- RBAC : matrice de permissions (simulée côté client, voir docs/erp/RBAC_MATRIX.md) ----------
+// Chaque rôle est un set de permissions "entite.action". hasPermission() est la seule
+// source de vérité ; les fonctions canXxx() existantes deviennent de simples alias
+// pour ne rien casser dans le reste du code.
+const PERMISSIONS = {
+  admin: new Set([
+    "client.read.all","client.create","client.update",
+    "lead.assign","appointment.create","appointment.update",
+    "diagnostic.read.all","diagnostic.execute",
+    "opportunity.read.all","opportunity.update",
+    "quote.create","quote.update","quote.send",
+    "invoice.create","payment.register",
+    "job.read.all","job.update",
+    "referral.create","team.manage","analytics.company.read"
+  ]),
+  sales: new Set([
+    "client.read.team","client.create",
+    "diagnostic.read.team",
+    "opportunity.read.team","opportunity.update",
+    "quote.create","quote.update","quote.send",
+    "payment.register","job.read.team","referral.create"
+  ]),
+  tech: new Set([
+    "client.read.own","client.create",
+    "diagnostic.read.own","diagnostic.execute",
+    "payment.register","job.read.own"
+  ]),
+  client: new Set([
+    "client.read.own","diagnostic.read.own"
+  ])
+};
+function hasPermission(perm){
+  const set = PERMISSIONS[state.role];
+  return !!set && set.has(perm);
+}
+
 const NAV = {
   admin:[["overview","Vue d’ensemble"],["dossiers","Dossiers clients"],["agenda","Agenda d’équipe"],["entretiens","Entretiens"],["diagnostics","Diagnostics"],["commercial","Suivi commercial"],["parrainages","Parrainages"],["equipe","Équipe & accès"],["connexions","Connexions"],["client-preview","Aperçu espace client"]],
   tech:[["overview","Vue d’ensemble"],["dossiers","Dossiers clients"],["agenda","Agenda d’équipe"],["entretiens","Entretiens"],["diagnostics","Diagnostics"]],
@@ -446,13 +482,13 @@ function visibleParrainages(){
   return PARRAINAGES;
 }
 
-function canCreateDemande(){ return state.role==="admin" || state.role==="tech"; }
-function canPlanifierVisite(){ return state.role==="admin"; }
+function canCreateDemande(){ return hasPermission("client.create"); }
+function canPlanifierVisite(){ return hasPermission("appointment.create"); }
 function canNouveauContrat(){ return state.role==="admin"; }
-function canAjouterParrainage(){ return state.role==="admin" || state.role==="sales"; }
-function canEditDossier(){ return state.role==="admin"; }
-function canAffecter(){ return state.role==="admin"; }
-function diagEditable(){ return state.role==="admin" || state.role==="tech"; }
+function canAjouterParrainage(){ return hasPermission("referral.create"); }
+function canEditDossier(){ return hasPermission("client.update"); }
+function canAffecter(){ return hasPermission("lead.assign"); }
+function diagEditable(){ return hasPermission("diagnostic.execute"); }
 
 function stat(label, value, sub){
   return `<div class="stat-card"><div class="stat-value">${esc(value)}</div><div class="stat-label">${esc(label)}</div><div class="stat-sub">${esc(sub)}</div></div>`;
@@ -835,6 +871,52 @@ function buildSection(){
 
 // ---------- Vue d'ensemble ----------
 
+// "Ma journée" (spec section 70) : agrège urgent / aujourd'hui / à venir à partir
+// des dossiers visibles par le rôle courant. Intégré en tête de l'accueil plutôt
+// que dupliqué en écran séparé (l'accueil jouait déjà ce rôle) — voir docs/erp/PROGRESS.md.
+function buildMaJourneeItem(d, tag){
+  return `
+    <div class="row-item">
+      <div class="row-left">
+        <div class="row-avatar">${initials(d.client)}</div>
+        <div><div class="row-title">${esc(d.client)}</div><div class="row-sub">${esc(tag)} · ${esc(d.ville)}</div></div>
+      </div>
+      <button class="btn-ghost" data-action="open-dossier" data-id="${d.id}">Ouvrir</button>
+    </div>`;
+}
+function buildMaJourneeCol(title, cls, items){
+  return `
+    <div class="mj-col mj-${cls}">
+      <div class="mj-col-head"><span>${esc(title)}</span><span class="badge ${cls==="urgent"?"red":cls==="today"?"gold":"gray"}">${items.length}</span></div>
+      ${items.length===0 ? `<div class="empty-note">Rien ici.</div>` : items.slice(0,4).map(it=>buildMaJourneeItem(it.d, it.tag)).join("")}
+    </div>`;
+}
+function buildMaJournee(list){
+  const urgent = [];
+  list.filter(d=>d.statut==="Nouvelle" && (d.priorite==="Urgente"||d.priorite==="Infiltration signalée"))
+    .forEach(d=>urgent.push({d, tag:"Demande "+d.priorite.toLowerCase()}));
+  list.filter(d=>d.prochaineRelance).forEach(d=>urgent.push({d, tag:"Relance en retard"}));
+
+  const today = list.filter(d=>d.visiteDate && parseInt(d.visiteDate,10)===12)
+    .map(d=>({d, tag:(d.visiteHeure||"")+" · Visite"}));
+
+  const upcoming = list.filter(d=>d.visiteDate && parseInt(d.visiteDate,10)>12)
+    .sort((a,b)=>parseInt(a.visiteDate,10)-parseInt(b.visiteDate,10))
+    .map(d=>({d, tag:d.visiteDate+" · Visite"}));
+
+  if(urgent.length===0 && today.length===0 && upcoming.length===0) return "";
+
+  return `
+  <div class="card mj-card">
+    <div class="card-header"><h3>Ma journée</h3></div>
+    <div class="mj-grid">
+      ${buildMaJourneeCol("Urgent", "urgent", urgent)}
+      ${buildMaJourneeCol("Aujourd’hui", "today", today)}
+      ${buildMaJourneeCol("À venir", "upcoming", upcoming)}
+    </div>
+  </div>`;
+}
+
 function renderOverview(){
   const list = visibleDossiers();
   const nouvelles = list.filter(d=>d.statut==="Nouvelle");
@@ -847,9 +929,9 @@ function renderOverview(){
   const partages = list.filter(d=>d.diagnostic.rapportPartage).length;
 
   const titles = {
-    admin:["Le contrôle, à chaque étape.","Les demandes, les visites et les prochaines actions de l’équipe."],
-    tech:["Votre journée sur le terrain.","Les demandes, les visites et les prochaines actions de l’équipe."],
-    sales:["Vos prochaines affaires.","Les demandes, les visites et les prochaines actions de l’équipe."]
+    admin:["Le contrôle, à chaque étape.","Votre journée : ce qui est urgent, ce qui est prévu aujourd’hui, ce qui arrive."],
+    tech:["Votre journée sur le terrain.","Votre journée : ce qui est urgent, ce qui est prévu aujourd’hui, ce qui arrive."],
+    sales:["Vos prochaines affaires.","Votre journée : ce qui est urgent, ce qui est prévu aujourd’hui, ce qui arrive."]
   };
   const [h1,sub] = titles[state.role] || titles.admin;
   const traiterTitle = state.role==="tech" ? "Mes dossiers à diagnostiquer" : "Demandes à traiter";
@@ -860,6 +942,7 @@ function renderOverview(){
     <div><h1>${esc(h1)}</h1><p>${esc(sub)}</p></div>
     ${canCreateDemande() ? `<button class="btn-primary" data-action="modal-new">+ Nouvelle demande</button>` : ""}
   </div>
+  ${buildMaJournee(list)}
   <div class="stat-grid">
     ${stat("Demandes à affecter", nouvelles.length, "À prendre en charge")}
     ${stat("Visites programmées", planifiees.length, "Interventions à venir")}
