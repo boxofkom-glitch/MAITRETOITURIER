@@ -13,8 +13,8 @@ voir DECISIONS.md D1) · `[!]` BLOCKED_EXTERNAL
 | Leads / secrétariat (file de travail) | partiel | – | – | – | [ ] |
 | Agenda multi-RDV | – | – | – | – | [ ] (1 seul RDV/dossier actuellement) |
 | Pipeline opportunités | x | x | – | x | [x] déjà existant (kanban commercial) |
-| Devis versionnés | – | – | – | – | [ ] |
-| Factures / paiements | – | – | – | – | [ ] |
+| Devis versionnés | x | x | x | x | [x] |
+| Factures / paiements | x | x | x | x | [x] |
 | Chantiers | – | – | – | – | [ ] |
 | Poseur mobile | – | – | – | – | [ ] |
 | Matériel / besoins chantier | – | – | – | – | [ ] |
@@ -29,9 +29,14 @@ voir DECISIONS.md D1) · `[!]` BLOCKED_EXTERNAL
 
 ## Session du 2026-09-17
 - Audit complet + docs/erp/ créés.
-- RBAC formalisé en cours (`PERMISSIONS`/`hasPermission`).
-- "Ma journée" en cours d'implémentation.
-- Devis/Factures/Paiements planifiés ensuite (extension additive de
-  `DOSSIERS[i]`, cf. TARGET_ARCHITECTURE.md).
+- RBAC formalisé (`PERMISSIONS`/`hasPermission`), remplace les `canXxx()` ad-hoc.
+- "Ma journée" (urgent/aujourd'hui/à venir) intégré en tête de l'accueil, par rôle.
+- Devis versionnés (catalogue de prestations, lignes, TVA, cycle brouillon→
+  envoyé→accepté/refusé, nouvelle version) + Factures (acompte/solde,
+  génération idempotente à l'acceptation) + Paiements (espèces/chèque/
+  virement, virement "annoncé" vs "confirmé" avant d'être compté comme
+  encaissé) — implémentés et testés de bout en bout (desktop + mobile) sur
+  l'onglet "Devis & factures" du dossier, visible pour admin/sales.
+  Diagnostic terrain re-vérifié non impacté après ce lot.
 - Modules Chantier/Poseur/Matériel/Achats/Marketing/SAV avancé : non
   démarrés, volontairement — voir DECISIONS.md D4 (anti-fake-feature).

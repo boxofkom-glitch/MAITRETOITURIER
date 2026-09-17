@@ -224,6 +224,25 @@ function savePointFieldsFromDOM(){
   }
   if(p.etat && p.etat!=="Non contrôlé") reformulatePoint(pointName, p);
 }
+function saveDevisLinesFromDOM(){
+  if(!state.dossierId) return;
+  const d = byId(state.dossierId);
+  if(!d) return;
+  const dv = latestDevis(d);
+  if(!dv || dv.statut!=="Brouillon") return;
+  const rows = document.querySelectorAll(".devis-line-input");
+  if(!rows.length) return;
+  rows.forEach(inp=>{
+    const idx = parseInt(inp.dataset.idx,10);
+    const line = dv.lignes[idx];
+    if(!line) return;
+    if(inp.dataset.field==="designation") line.designation = inp.value;
+    else if(inp.dataset.field==="qte") line.qte = parseFloat(inp.value)||0;
+    else if(inp.dataset.field==="prixUnitaire") line.prixUnitaireCt = Math.round((parseFloat(inp.value)||0)*100);
+    else if(inp.dataset.field==="tva") line.tvaPct = parseFloat(inp.value)||0;
+  });
+}
+
 function saveSynthFieldsFromDOM(){
   if(!state.dossierId) return;
   const d = byId(state.dossierId);
@@ -324,7 +343,9 @@ function seedDossiers(){
     prochaineRelance:null,
     compteRendu:"",
     visiteDate:null,
-    diagnostic:freshDiagnostic()
+    diagnostic:freshDiagnostic(),
+    devis:[],
+    factures:[]
   }, over);
 
   return [
@@ -346,6 +367,55 @@ const CONTRACTS = [
 const PARRAINAGES = [
   { parrain:"Marc Lefèvre", date:"9 sept.", clientApporte:"Pierre Dubois", affaire:"À contacter", recompense:80, suivi:"En attente", commercial:"Lucas Robert", dossierId:"TP-1047" }
 ];
+
+// ---------- Devis / Factures / Paiements (simulé, voir docs/erp/WORKFLOWS.md) ----------
+// Montants stockés en centimes (entiers) pour éviter le float naïf (spec §91).
+const SERVICE_CATALOG = [
+  { code:"COUV-TUILE", label:"Remplacement d’éléments de couverture", prixUnitaireCt:4500, tvaPct:10, unite:"u" },
+  { code:"COUV-FAIT", label:"Reprise de faîtage", prixUnitaireCt:38000, tvaPct:10, unite:"ml" },
+  { code:"ZING-GOUT", label:"Nettoyage et remise en état des gouttières", prixUnitaireCt:18000, tvaPct:10, unite:"forfait" },
+  { code:"ETAN-JOINT", label:"Reprise d’étanchéité (solin / noue)", prixUnitaireCt:32000, tvaPct:10, unite:"forfait" },
+  { code:"COUV-DEMOUSS", label:"Traitement anti-mousse de la couverture", prixUnitaireCt:22000, tvaPct:10, unite:"forfait" },
+  { code:"CHAR-REP", label:"Réparation localisée de charpente", prixUnitaireCt:65000, tvaPct:10, unite:"forfait" },
+  { code:"COUV-REFECTION", label:"Réfection complète de la couverture", prixUnitaireCt:850000, tvaPct:10, unite:"forfait" },
+  { code:"CONTROLE", label:"Visite de contrôle périodique", prixUnitaireCt:9000, tvaPct:20, unite:"forfait" }
+];
+function fmtEuros(ct){ return ((ct||0)/100).toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})+" €"; }
+function freshDevisLine(over){ return Object.assign({ designation:"", qte:1, prixUnitaireCt:0, tvaPct:10 }, over||{}); }
+function lineTotalHTct(l){ return Math.round((l.qte||0) * (l.prixUnitaireCt||0)); }
+function devisTotals(devis){
+  let htCt=0, tvaCt=0;
+  (devis.lignes||[]).forEach(l=>{
+    const ht = lineTotalHTct(l);
+    htCt += ht;
+    tvaCt += Math.round(ht * (l.tvaPct||0) / 100);
+  });
+  return { htCt, tvaCt, ttcCt: htCt+tvaCt };
+}
+function devisStatutCls(s){
+  if(s==="Accepté") return "green";
+  if(s==="Refusé") return "red";
+  if(s==="Envoyé") return "gold";
+  return "gray";
+}
+function nextDevisId(d){ return d.id+"-D"+(d.devis.length+1); }
+function nextFactureId(d){ return d.id+"-F"+(d.factures.length+1); }
+function latestDevis(d){ return d.devis.length ? d.devis[d.devis.length-1] : null; }
+function facturePaidCt(f){
+  return (f.paiements||[]).filter(p=>p.mode!=="Virement" || p.virementStatut==="Confirmé").reduce((s,p)=>s+p.montantCt,0);
+}
+function factureStatutFromPayments(f){
+  const paid = facturePaidCt(f);
+  if(paid<=0) return f.statut==="Brouillon" ? "Brouillon" : "Envoyée";
+  if(paid>=f.montantTtcCt) return "Payée";
+  return "Partiellement payée";
+}
+function factureStatutCls(s){
+  if(s==="Payée") return "green";
+  if(s==="Partiellement payée") return "gold";
+  if(s==="Envoyée") return "blue";
+  return "gray";
+}
 
 const ROLES = {
   admin:{ label:"Administration", avatar:"AD" },
@@ -1052,7 +1122,9 @@ function renderDossiersList(){
 
 function tabsForRole(){
   if(state.role==="tech") return [["info","Dossier & historique"],["diagnostic","Diagnostic terrain"],["rapport","Rapport PDF"]];
-  return [["info","Dossier & historique"],["diagnostic","Diagnostic terrain"],["rapport","Rapport PDF"],["commercial","Suivi commercial"]];
+  const tabs = [["info","Dossier & historique"],["diagnostic","Diagnostic terrain"],["rapport","Rapport PDF"],["commercial","Suivi commercial"]];
+  if(hasPermission("quote.create")) tabs.push(["devis","Devis & factures"]);
+  return tabs;
 }
 
 function renderDossierDetail(id){
@@ -1066,6 +1138,7 @@ function renderDossierDetail(id){
   else if(state.dossierTab==="diagnostic") body = renderDossierDiagnostic(d);
   else if(state.dossierTab==="rapport") body = renderDossierRapport(d);
   else if(state.dossierTab==="commercial") body = renderDossierCommercial(d);
+  else if(state.dossierTab==="devis") body = renderDossierDevis(d);
 
   if(state.dossierTab==="diagnostic" && diagEditable()){
     return `
@@ -1532,6 +1605,124 @@ function renderDossierCommercial(d){
     ${d.historique.map(h=>`<div class="row-item"><div><div class="row-sub">${esc(h.date)} · ${esc(h.auteur)}</div><div>${esc(h.texte)}</div></div></div>`).join("")}
   </div>
   `;
+}
+
+// ---------- Devis & factures (simulé, voir docs/erp/WORKFLOWS.md) ----------
+
+function renderFactureCard(d, f){
+  f.statut = factureStatutFromPayments(f);
+  const editable = f.statut==="Brouillon";
+  const paidCt = facturePaidCt(f);
+  const resteCt = Math.max(0, f.montantTtcCt - paidCt);
+  return `
+    <div class="card devis-sub-card">
+      <div class="card-header"><h3 style="font-size:13.5px">${esc(f.numero)} · ${esc(f.type)}</h3>${badge(f.statut, factureStatutCls(f.statut))}</div>
+      <div class="form-field"><label>Libellé</label><input type="text" id="factureLibelle-${f.id}" value="${esc(f.libelle||"")}" ${editable?"":"disabled"}></div>
+      <div class="form-field"><label>Montant TTC (€)</label><input type="number" min="0" step="0.01" id="factureMontant-${f.id}" value="${(f.montantTtcCt/100).toFixed(2)}" ${editable?"":"disabled"}></div>
+      <div class="form-field"><label>Échéance</label><input type="text" id="factureEcheance-${f.id}" placeholder="ex. 30 sept." value="${esc(f.echeance||"")}" ${editable?"":"disabled"}></div>
+      ${editable ? `
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn-secondary btn-sm" data-action="facture-save" data-id="${d.id}" data-fid="${f.id}">Enregistrer</button>
+        <button class="btn-primary btn-sm" data-action="facture-send" data-id="${d.id}" data-fid="${f.id}">Envoyer au client</button>
+      </div>` : `
+      <div class="devis-payments">
+        <div class="row-sub" style="margin-bottom:8px">Encaissé ${fmtEuros(paidCt)} sur ${fmtEuros(f.montantTtcCt)}${resteCt>0?` · reste ${fmtEuros(resteCt)}`:""}</div>
+        ${f.paiements.map(p=>`
+          <div class="row-item">
+            <div class="row-sub">${esc(p.date)} · ${esc(p.mode)}${p.mode==="Virement"?" · "+esc(p.virementStatut):""}</div>
+            <div style="display:flex;align-items:center;gap:10px">
+              ${fmtEuros(p.montantCt)}
+              ${p.mode==="Virement" && p.virementStatut==="Annoncé" && hasPermission("payment.register") ? `<button class="btn-ghost btn-sm" data-action="payment-confirm" data-id="${d.id}" data-fid="${f.id}" data-pid="${p.id}">Confirmer réception</button>` : ""}
+            </div>
+          </div>`).join("")}
+        ${resteCt>0 && hasPermission("payment.register") ? `
+        <div class="form-field" style="margin-top:10px">
+          <label>Nouveau paiement</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <input type="number" min="0" step="0.01" id="paiementMontant-${f.id}" placeholder="Montant €" style="max-width:120px">
+            <select id="paiementMode-${f.id}"><option>Espèces</option><option>Chèque</option><option>Virement</option></select>
+            <input type="text" id="paiementDate-${f.id}" placeholder="ex. 15 sept." style="max-width:110px">
+            <button class="btn-secondary btn-sm" data-action="payment-add" data-id="${d.id}" data-fid="${f.id}">Enregistrer le paiement</button>
+          </div>
+        </div>` : ""}
+      </div>`}
+    </div>`;
+}
+
+function renderDossierDevis(d){
+  const dv = latestDevis(d);
+  const canEditDv = !dv || dv.statut==="Brouillon";
+  const catalogOptions = SERVICE_CATALOG.map(s=>`<option value="${s.code}">${esc(s.label)} — ${fmtEuros(s.prixUnitaireCt)}</option>`).join("");
+
+  let devisBlock;
+  if(!dv){
+    devisBlock = `
+    <div class="card" style="text-align:center;padding:32px 20px">
+      <h3 style="margin-bottom:6px">Aucun devis pour ce dossier</h3>
+      <p style="color:var(--muted);margin-bottom:16px">Créez un premier devis à partir des travaux identifiés lors du diagnostic.</p>
+      ${hasPermission("quote.create") ? `<button class="btn-primary btn-sm" data-action="devis-new" data-id="${d.id}">+ Nouveau devis</button>` : ""}
+    </div>`;
+  } else {
+    const totals = devisTotals(dv);
+    devisBlock = `
+      <div class="card">
+        <div class="card-header">
+          <h3>Devis ${esc(dv.numero)} <span style="color:var(--muted);font-weight:400">v${dv.version}</span></h3>
+          ${badge(dv.statut, devisStatutCls(dv.statut))}
+        </div>
+        <div class="devis-table-wrap">
+          <table>
+            <thead><tr><th>Désignation</th><th>Qté</th><th>PU HT</th><th>TVA</th><th>Total HT</th><th></th></tr></thead>
+            <tbody>
+            ${dv.lignes.map((l,i)=>`
+              <tr>
+                <td>${canEditDv?`<input type="text" class="devis-line-input" data-idx="${i}" data-field="designation" value="${esc(l.designation)}" placeholder="Désignation">`:esc(l.designation)}</td>
+                <td style="width:64px">${canEditDv?`<input type="number" min="0" step="1" class="devis-line-input" data-idx="${i}" data-field="qte" value="${l.qte}">`:l.qte}</td>
+                <td style="width:100px">${canEditDv?`<input type="number" min="0" step="0.01" class="devis-line-input" data-idx="${i}" data-field="prixUnitaire" value="${(l.prixUnitaireCt/100).toFixed(2)}">`:fmtEuros(l.prixUnitaireCt)}</td>
+                <td style="width:64px">${canEditDv?`<input type="number" min="0" step="1" class="devis-line-input" data-idx="${i}" data-field="tva" value="${l.tvaPct}">`:l.tvaPct+"%"}</td>
+                <td style="white-space:nowrap">${fmtEuros(lineTotalHTct(l))}</td>
+                <td>${canEditDv && dv.lignes.length>1 ?`<button class="btn-ghost btn-sm" data-action="devis-remove-line" data-id="${d.id}" data-idx="${i}">✕</button>`:""}</td>
+              </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>
+        ${canEditDv?`
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0">
+          <button class="btn-secondary btn-sm" data-action="devis-add-line" data-id="${d.id}">+ Ligne libre</button>
+          <select id="devisCatalogSel" data-id="${d.id}" style="max-width:300px"><option value="">+ Ajouter depuis le catalogue…</option>${catalogOptions}</select>
+        </div>`:""}
+        <div class="devis-totals">
+          <div>Total HT <b>${fmtEuros(totals.htCt)}</b></div>
+          <div>TVA <b>${fmtEuros(totals.tvaCt)}</b></div>
+          <div>Total TTC <b>${fmtEuros(totals.ttcCt)}</b></div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+          ${canEditDv?`<button class="btn-primary btn-sm" data-action="devis-save" data-id="${d.id}">Enregistrer</button>`:""}
+          ${dv.statut==="Brouillon"?`<button class="btn-secondary btn-sm" data-action="devis-send" data-id="${d.id}">Marquer comme envoyé</button>`:""}
+          ${dv.statut==="Envoyé"?`<button class="btn-secondary btn-sm" data-action="devis-accept" data-id="${d.id}">Marquer accepté</button><button class="btn-ghost btn-sm" data-action="devis-reject" data-id="${d.id}">Marquer refusé</button>`:""}
+          ${dv.statut!=="Brouillon"?`<button class="btn-ghost btn-sm" data-action="devis-new-version" data-id="${d.id}">+ Nouvelle version</button>`:""}
+        </div>
+        ${dv.dateEnvoi?`<p class="form-help" style="margin-top:8px">Envoyé le ${esc(dv.dateEnvoi)}</p>`:""}
+      </div>
+      ${d.devis.length>1?`
+      <div class="card">
+        <h3 style="margin:0 0 10px;font-size:14.5px">Historique des versions</h3>
+        ${d.devis.slice(0,-1).reverse().map(v=>`<div class="row-item"><div><div class="row-title">${esc(v.numero)} · v${v.version}</div><div class="row-sub">${fmtEuros(devisTotals(v).ttcCt)}</div></div>${badge(v.statut, devisStatutCls(v.statut))}</div>`).join("")}
+      </div>`:""}`;
+  }
+
+  const facturesBlock = `
+    <div class="card">
+      <div class="card-header"><h3>Factures</h3>
+        ${dv && dv.statut==="Accepté" ? `<div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn-secondary btn-sm" data-action="facture-new" data-id="${d.id}" data-type="Acompte">+ Facture d’acompte</button>
+          <button class="btn-secondary btn-sm" data-action="facture-new" data-id="${d.id}" data-type="Solde">+ Facture de solde</button>
+        </div>` : ""}
+      </div>
+      ${!d.factures.length ? `<div class="empty-note">${dv && dv.statut==="Accepté" ? "Aucune facture pour l’instant." : "Le devis doit être accepté avant de pouvoir facturer."}</div>` : d.factures.map(f=>renderFactureCard(d,f)).join("")}
+    </div>`;
+
+  return devisBlock + facturesBlock;
 }
 
 // ---------- Agenda ----------
@@ -2356,11 +2547,146 @@ document.addEventListener("DOMContentLoaded", ()=>{
       render();
       return;
     }
+    if(action==="devis-new"){
+      const d = byId(t.dataset.id);
+      const numero = nextDevisId(d);
+      d.devis.push({ id:numero, numero, version:d.devis.length+1, statut:"Brouillon", lignes:[freshDevisLine()], dateCreation:"12 sept.", dateEnvoi:null });
+      render();
+      return;
+    }
+    if(action==="devis-new-version"){
+      const d = byId(t.dataset.id);
+      const prev = latestDevis(d);
+      const numero = nextDevisId(d);
+      d.devis.push({ id:numero, numero, version:d.devis.length+1, statut:"Brouillon", lignes:prev.lignes.map(l=>Object.assign({},l)), dateCreation:"12 sept.", dateEnvoi:null });
+      showToast("Nouvelle version du devis créée.");
+      render();
+      return;
+    }
+    if(action==="devis-add-line"){
+      saveDevisLinesFromDOM();
+      latestDevis(byId(t.dataset.id)).lignes.push(freshDevisLine());
+      render();
+      return;
+    }
+    if(action==="devis-remove-line"){
+      saveDevisLinesFromDOM();
+      const dv = latestDevis(byId(t.dataset.id));
+      dv.lignes.splice(parseInt(t.dataset.idx,10),1);
+      if(!dv.lignes.length) dv.lignes.push(freshDevisLine());
+      render();
+      return;
+    }
+    if(action==="devis-save"){
+      saveDevisLinesFromDOM();
+      showToast("Devis enregistré.");
+      render();
+      return;
+    }
+    if(action==="devis-send"){
+      saveDevisLinesFromDOM();
+      const d = byId(t.dataset.id);
+      const dv = latestDevis(d);
+      dv.statut = "Envoyé";
+      dv.dateEnvoi = "12 sept.";
+      d.montant = Math.round(devisTotals(dv).ttcCt/100);
+      if(d.commercialStage==="À contacter" || d.commercialStage==="Devis à préparer") d.commercialStage = "Devis envoyé";
+      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:"Devis "+dv.numero+" envoyé au client."});
+      showToast("Devis marqué comme envoyé.");
+      render();
+      return;
+    }
+    if(action==="devis-accept"){
+      const d = byId(t.dataset.id);
+      const dv = latestDevis(d);
+      dv.statut = "Accepté";
+      d.commercialStage = "Gagné";
+      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:"Devis "+dv.numero+" accepté par le client."});
+      showToast("Devis accepté.");
+      render();
+      return;
+    }
+    if(action==="devis-reject"){
+      const d = byId(t.dataset.id);
+      const dv = latestDevis(d);
+      dv.statut = "Refusé";
+      d.commercialStage = "Perdu";
+      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:"Devis "+dv.numero+" refusé par le client."});
+      showToast("Devis marqué comme refusé.");
+      render();
+      return;
+    }
+    if(action==="facture-new"){
+      const d = byId(t.dataset.id);
+      const type = t.dataset.type;
+      const dv = latestDevis(d);
+      if(d.factures.some(f=>f.devisId===dv.id && f.type===type)){ showToast("Une facture "+type.toLowerCase()+" existe déjà pour ce devis."); return; }
+      const numero = nextFactureId(d);
+      const totals = devisTotals(dv);
+      const montantTtcCt = type==="Acompte" ? Math.round(totals.ttcCt*0.3) : totals.ttcCt;
+      d.factures.push({ id:numero, numero, type, devisId:dv.id, libelle:type+" — "+dv.numero, montantTtcCt, statut:"Brouillon", echeance:null, paiements:[] });
+      render();
+      return;
+    }
+    if(action==="facture-save"){
+      const d = byId(t.dataset.id);
+      const f = d.factures.find(x=>x.id===t.dataset.fid);
+      f.libelle = document.getElementById("factureLibelle-"+f.id).value;
+      f.montantTtcCt = Math.round((parseFloat(document.getElementById("factureMontant-"+f.id).value)||0)*100);
+      f.echeance = document.getElementById("factureEcheance-"+f.id).value || null;
+      showToast("Facture enregistrée.");
+      render();
+      return;
+    }
+    if(action==="facture-send"){
+      const d = byId(t.dataset.id);
+      const f = d.factures.find(x=>x.id===t.dataset.fid);
+      f.statut = "Envoyée";
+      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:"Facture "+f.numero+" envoyée au client."});
+      showToast("Facture envoyée.");
+      render();
+      return;
+    }
+    if(action==="payment-add"){
+      const d = byId(t.dataset.id);
+      const f = d.factures.find(x=>x.id===t.dataset.fid);
+      const montant = parseFloat(document.getElementById("paiementMontant-"+f.id).value);
+      if(!montant || montant<=0){ showToast("Indiquez un montant valide."); return; }
+      const mode = document.getElementById("paiementMode-"+f.id).value;
+      const date = document.getElementById("paiementDate-"+f.id).value || "12 sept.";
+      const pid = f.id+"-P"+(f.paiements.length+1);
+      f.paiements.push({ id:pid, montantCt:Math.round(montant*100), mode, date, virementStatut: mode==="Virement" ? "Annoncé" : null });
+      f.statut = factureStatutFromPayments(f);
+      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:"Paiement de "+fmtEuros(Math.round(montant*100))+" enregistré sur "+f.numero+"."});
+      showToast(mode==="Virement" ? "Virement enregistré (annoncé, non encaissé)." : "Paiement enregistré.");
+      render();
+      return;
+    }
+    if(action==="payment-confirm"){
+      const d = byId(t.dataset.id);
+      const f = d.factures.find(x=>x.id===t.dataset.fid);
+      const p = f.paiements.find(x=>x.id===t.dataset.pid);
+      p.virementStatut = "Confirmé";
+      f.statut = factureStatutFromPayments(f);
+      showToast("Virement confirmé comme encaissé.");
+      render();
+      return;
+    }
   });
 
   document.getElementById("app").addEventListener("change", (e)=>{
     savePointFieldsFromDOM();
     saveSynthFieldsFromDOM();
+    saveDevisLinesFromDOM();
+    if(e.target.id==="devisCatalogSel"){
+      const code = e.target.value;
+      if(code){
+        const d = byId(e.target.dataset.id);
+        const svc = SERVICE_CATALOG.find(s=>s.code===code);
+        latestDevis(d).lignes.push(freshDevisLine({designation:svc.label, qte:1, prixUnitaireCt:svc.prixUnitaireCt, tvaPct:svc.tvaPct}));
+      }
+      render();
+    }
     if(e.target.id==="loginRole"){
       state.role = e.target.value;
       state.section = NAV[state.role][0][0];
