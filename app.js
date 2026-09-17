@@ -39,6 +39,40 @@ const ANOMALY_VOCAB = {
   autre:      {icon:"❓", label:"Autre", risk:"une évolution incertaine du désordre constaté"}
 };
 
+// Bibliothèque de connaissances "Le saviez-vous ?" (validée, pas improvisée par l'IA à
+// chaque génération — voir le cahier des charges brochure). Distincte du champ "risk" de
+// ANOMALY_VOCAB (qui sert à la phrase de vigilance personnalisée) : ici on explique le rôle
+// général de l'élément et un mécanisme possible, jamais une aggravation certaine.
+const DID_YOU_KNOW = {
+  casse:      { title:"Un élément endommagé protège moins bien", text:"Un élément de couverture cassé assure moins pleinement sa fonction de protection contre les intempéries. Une exposition prolongée peut favoriser des infiltrations, selon sa position et l’état des éléments environnants." },
+  fissure:    { title:"Une fissure peut évoluer avec le temps", text:"Un élément fissuré perd une partie de son étanchéité. Les cycles de gel et de chaleur peuvent, avec le temps, accentuer la fissure existante." },
+  deplace:    { title:"Un élément déplacé rompt la continuité de la couverture", text:"Un élément déplacé peut laisser un passage d’eau localisé et, selon les conditions de vent, mérite d’être surveillé." },
+  souleve:    { title:"Un soulèvement peut fragiliser l’étanchéité", text:"Un élément soulevé peut laisser l’eau s’infiltrer par en dessous lors de pluies battantes, même si aucune fuite n’est visible en usage courant." },
+  manquant:   { title:"Une zone non couverte reste exposée", text:"L’absence d’un élément de couverture laisse la zone concernée directement exposée aux intempéries, sans la protection habituellement assurée." },
+  malfixe:    { title:"Une fixation défaillante concerne la tenue de l’élément", text:"Un élément mal fixé peut bouger avec le temps et le vent, avec un risque de perte d’étanchéité au point de fixation." },
+  corrode:    { title:"Le rôle de la zinguerie dans la gestion de l’eau", text:"Les éléments de zinguerie assurent l’étanchéité et l’évacuation de l’eau aux points singuliers de la toiture. Leur dégradation progressive peut réduire cette fonction avec le temps." },
+  perce:      { title:"Une perforation crée un passage d’eau direct", text:"Un élément percé ne remplit plus sa fonction d’étanchéité au point concerné, avec un passage d’eau possible lors des précipitations." },
+  eau:        { title:"Une trace d’humidité mérite d’être suivie", text:"Une trace d’eau peut avoir des origines diverses. Sans identification précise de la source, l’humidité peut continuer à progresser dans les matériaux environnants." },
+  mousse:     { title:"Le rôle de l’entretien face aux mousses et lichens", text:"Une accumulation durable de mousses peut favoriser la rétention d’humidité sur certains matériaux de couverture. Avec le temps, cela peut contribuer à leur vieillissement et mérite une surveillance adaptée." },
+  use:        { title:"Un matériau poreux absorbe davantage l’eau", text:"Un matériau devenu poreux avec l’âge absorbe davantage d’eau qu’à l’origine, ce qui peut accélérer son vieillissement au fil des saisons." },
+  affaisse:   { title:"Une déformation traduit souvent une évolution progressive", text:"Un affaissement constaté résulte généralement d’une évolution progressive. Une surveillance permet de suivre son évolution dans le temps." },
+  ruissellement:{ title:"Le rôle des évacuations d’eaux pluviales", text:"Une évacuation d’eau obstruée peut perturber l’écoulement normal des eaux pluviales et favoriser débordements ou ruissellements indésirables." },
+  joint:      { title:"Le rôle des joints d’étanchéité", text:"Les joints assurent l’étanchéité aux points singuliers de la toiture (solins, noues, pénétrations). Leur dégradation progressive peut réduire la qualité de l’étanchéité à ces endroits." },
+  recouvrement:{ title:"Le recouvrement conditionne l’étanchéité de la couverture", text:"Un recouvrement insuffisant entre éléments peut laisser l’eau s’infiltrer lors de pluies battantes ou poussées par le vent, même sans dommage visible sur les éléments eux-mêmes." },
+  bois_humide:{ title:"Le bois humide est plus vulnérable", text:"Un taux d’humidité élevé dans le bois de charpente peut favoriser, avec le temps, le développement de champignons lignivores qui fragilisent progressivement la structure." },
+  moisissure: { title:"Une moisissure traduit une humidité persistante", text:"La présence de moisissure traduit généralement une humidité persistante. Sans traitement de la cause, elle peut continuer à se développer." },
+  insectes:   { title:"Les insectes xylophages fragilisent le bois", text:"Des traces d’insectes xylophages peuvent, avec le temps, se propager aux pièces de bois saines avoisinantes si elles ne sont pas traitées." },
+  ventil:     { title:"Le rôle de la ventilation de toiture", text:"Une ventilation insuffisante peut favoriser l’accumulation d’humidité dans les combles, ce qui peut à terme affecter la charpente et l’isolation." },
+  isolant:    { title:"Un isolant tassé perd en performance", text:"Un isolant tassé assure moins bien sa fonction thermique, ce qui peut se traduire par une perte de confort et une hausse de la consommation énergétique." },
+  instable:   { title:"Un élément instable présente un risque immédiat", text:"Un élément instable en toiture présente un risque de chute pouvant affecter des personnes ou des biens, et justifie une sécurisation rapide de la zone." },
+  secu:       { title:"Le rôle des équipements de sécurité en toiture", text:"Un équipement de sécurité absent ou non conforme augmente le risque lors de toute intervention future sur la toiture." }
+};
+function pickDidYouKnow(pt){
+  if(!pt || !pt.problems || !pt.problems.length) return null;
+  for(const pid of pt.problems){ if(DID_YOU_KNOW[pid]) return DID_YOU_KNOW[pid]; }
+  return null;
+}
+
 const POINT_ANOMALIES = {
   "Couverture et état des tuiles": ["casse","fissure","deplace","souleve","manquant","malfixe","use","mousse","autre"],
   "Éléments de finition et zinguerie": ["casse","deplace","manquant","mousse","eau","joint","corrode","autre"],
@@ -207,16 +241,20 @@ function savePointFieldsFromDOM(){
   if(!pointName) return;
   const p = d.diagnostic.points[pointName];
   if(!p) return;
+  // Ne flush/reformule que si les champs du diagnostic sont réellement présents dans le DOM
+  // (on est sur l'étape diagnostic de CE point) — sinon un change event ailleurs dans l'app
+  // (ex. filtre agenda, select devis) écraserait silencieusement le point en cours (bug corrigé).
   const decisionEl = document.getElementById("ptDecision");
-  if(decisionEl) p.decision = decisionEl.value;
   const commentEl = document.getElementById("ptComment");
-  if(commentEl) p.comment = commentEl.value;
   const problemsEl = document.getElementById("selProblems");
-  if(problemsEl) p.problems = Array.from(problemsEl.selectedOptions).map(o=>o.value);
   const extentEl = document.getElementById("selExtent");
-  if(extentEl) p.extent = extentEl.value;
   const versantEl = document.getElementById("selVersant");
   const positionEl = document.getElementById("selPosition");
+  if(!decisionEl && !commentEl && !problemsEl && !extentEl && !versantEl && !positionEl) return;
+  if(decisionEl) p.decision = decisionEl.value;
+  if(commentEl) p.comment = commentEl.value;
+  if(problemsEl) p.problems = Array.from(problemsEl.selectedOptions).map(o=>o.value);
+  if(extentEl) p.extent = extentEl.value;
   if(versantEl || positionEl){
     const versant = versantEl ? Array.from(versantEl.selectedOptions).map(o=>o.value) : [];
     const position = positionEl ? Array.from(positionEl.selectedOptions).map(o=>o.value) : [];
@@ -282,6 +320,7 @@ function claireDiagnostic(){
   const d = freshDiagnostic();
   d.points["Couverture et état des tuiles"] = {
     etat:"Défaut constaté",
+    problems:["fissure"],
     observation:"Exemple fictif : trois éléments de couverture fissurés sont signalés sur une zone localisée.",
     decision:"Réparer",
     pourquoi:"Le désordre décrit est localisé. Une reprise ciblée est proposée ; aucun constat documenté ne justifie une rénovation complète de la couverture.",
@@ -291,6 +330,7 @@ function claireDiagnostic(){
   };
   d.points["Étanchéité"] = {
     etat:"Défaut constaté",
+    problems:["joint"],
     observation:"Exemple fictif : raccord d’étanchéité à vérifier au droit d’une pénétration.",
     decision:"Contrôle complémentaire",
     pourquoi:"L’origine exacte du passage d’eau doit être confirmée avant de définir la réparation.",
@@ -610,7 +650,8 @@ function iconSvg(name, size){
     check:`<path d="M4.5 12.5l4.7 4.7L19.5 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`,
     ruler:`<rect x="3" y="9" width="18" height="6" rx="1" transform="rotate(-25 12 12)" fill="none" stroke="currentColor" stroke-width="1.5"/>`,
     layers:`<path d="M12 3l9 5-9 5-9-5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 13l9 5 9-5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>`,
-    clipboard:`<rect x="5" y="4.5" width="14" height="16" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="8.5" y="3" width="7" height="3" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="8" y1="10.5" x2="16" y2="10.5" stroke="currentColor" stroke-width="1.3"/><line x1="8" y1="14" x2="16" y2="14" stroke="currentColor" stroke-width="1.3"/><line x1="8" y1="17.5" x2="13" y2="17.5" stroke="currentColor" stroke-width="1.3"/>`
+    clipboard:`<rect x="5" y="4.5" width="14" height="16" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="8.5" y="3" width="7" height="3" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="8" y1="10.5" x2="16" y2="10.5" stroke="currentColor" stroke-width="1.3"/><line x1="8" y1="14" x2="16" y2="14" stroke="currentColor" stroke-width="1.3"/><line x1="8" y1="17.5" x2="13" y2="17.5" stroke="currentColor" stroke-width="1.3"/>`,
+    idea:`<path d="M9 18.5h6M9.7 21h4.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M12 2.8a6 6 0 0 0-3.4 10.9c.6.45 1 1.15 1 1.95v.35h4.8v-.35c0-.8.4-1.5 1-1.95A6 6 0 0 0 12 2.8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>`
   };
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24">${inner[name]||""}</svg>`;
 }
@@ -1374,6 +1415,7 @@ function pdfHead(){
 function pdfPointCard(p, i, d){
   const pt = d.diagnostic.points[p];
   const photo = pt.photos.find(ph=>ph.dataUrl);
+  const dyk = pickDidYouKnow(pt);
   return `
   <div class="pdf-point ${etatAccentCls(pt.etat)}">
     <div class="pdf-point-photo">
@@ -1386,9 +1428,10 @@ function pdfPointCard(p, i, d){
         ${etatPill(pt.etat)}
       </div>
       <div class="pdf-point-block">
-        <span class="pdf-point-label">Observation</span>
+        <span class="pdf-point-label">Notre observation</span>
         <p>${pt.observation?esc(pt.observation):"Non renseignée."}</p>
       </div>
+      ${dyk?`<div class="pdf-dyk"><div class="pdf-dyk-head">${iconSvg("idea",14)}<span>Le saviez-vous ?</span></div><p>${esc(dyk.text)}</p></div>`:""}
       <div class="pdf-point-block">
         <span class="pdf-point-label">Décision</span>
         <p><b>${esc(pt.decision)}</b>${pt.pourquoi?" — "+esc(pt.pourquoi):""}</p>
@@ -1444,6 +1487,7 @@ function renderReportDoc(d){
   const pointsFlowPage = `
     <div class="pdf-page-frame"><div class="pdf-page"><div class="pdf-page-pad pdf-points-flow">
       ${pdfHead()}
+      <div class="pdf-overline">Rapport ${esc(d.id)} · ${esc(d.client)}</div>
       <div class="pdf-h1">Points de contrôle</div>
       <div class="pdf-h1-sub">Constat, photo et risques associés pour chaque zone inspectée.</div>
       ${POINTS.map((p,i)=>pdfPointCard(p, i, d)).join("")}
@@ -1479,6 +1523,7 @@ function renderReportDoc(d){
 
     <div class="pdf-page-frame"><div class="pdf-page"><div class="pdf-page-pad">
       ${pdfHead()}
+      <div class="pdf-overline">Rapport ${esc(d.id)} · ${esc(d.client)}</div>
       <div class="pdf-h1">Synthèse du diagnostic</div>
       <div class="pdf-h1-sub">${controlledPoints.length} / ${POINTS.length} points contrôlés</div>
       <div class="pdf-stat-row">
@@ -1510,6 +1555,7 @@ function renderReportDoc(d){
     <div class="pdf-page-frame"><div class="pdf-page">
       <div class="pdf-page-pad">
         ${pdfHead()}
+        <div class="pdf-overline">Rapport ${esc(d.id)} · ${esc(d.client)}</div>
         <div class="pdf-h1">Préconisations &amp; plan d’action</div>
         <div class="pdf-h1-sub">Une intervention proportionnée aux constats, à valider avec le technicien.</div>
         ${s.preconisations?`<div class="pdf-lead">${esc(s.preconisations)}</div>`:""}
@@ -1532,6 +1578,12 @@ function renderReportDoc(d){
           <div class="pdf-step-card"><div class="pdf-step-num">1</div><div class="pdf-step-title">Devis détaillé</div><div class="pdf-step-text">Un chiffrage précis vous est transmis pour les travaux recommandés dans ce rapport.</div></div>
           <div class="pdf-step-card"><div class="pdf-step-num">2</div><div class="pdf-step-title">Planification</div><div class="pdf-step-text">Une date d’intervention est fixée avec vous selon la nature et l’urgence des travaux.</div></div>
           <div class="pdf-step-card"><div class="pdf-step-num">3</div><div class="pdf-step-title">Suivi après travaux</div><div class="pdf-step-text">Un point de contrôle peut être réalisé pour valider la bonne exécution.</div></div>
+        </div>
+
+        <div class="pdf-summary">
+          <div class="pdf-overline">En résumé</div>
+          <p class="pdf-summary-text">${esc(buildClosingSummary(d))}</p>
+          <div class="pdf-summary-sign">— L’équipe Maître Toiturier</div>
         </div>
       </div>
     </div></div>
