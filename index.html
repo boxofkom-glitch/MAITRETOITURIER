@@ -336,12 +336,15 @@ tr:last-child td{border-bottom:none}
 .pdf-cover-brand{position:absolute;top:10mm;left:15mm;right:15mm;display:flex;align-items:center;gap:12px;z-index:2}
 .pdf-cover-brand-name{font-size:15px;font-weight:800}
 .pdf-cover-brand-tag{font-size:10.5px;opacity:.85;letter-spacing:.03em}
-.pdf-cover-panel{position:absolute;left:0;right:0;bottom:0;top:52%;background:linear-gradient(160deg,#0b0b0b,#1e1712 55%,#4a3320);padding:14mm 15mm 12mm;box-sizing:border-box}
-.pdf-cover-label{font-size:11px;font-weight:700;letter-spacing:.08em;color:#e7c465;text-transform:uppercase;margin-bottom:8px}
-.pdf-cover-title{font-size:28px;font-weight:800;margin:0 0 10px;line-height:1.15;color:#fff}
+.pdf-cover-panel{position:absolute;left:0;right:0;bottom:0;top:52%;background:linear-gradient(160deg,#0b0b0b,#1e1712 55%,#4a3320);padding:14mm 15mm 12mm;box-sizing:border-box;overflow:hidden}
+.pdf-cover-chevron{position:absolute;top:-118px;left:0;right:0;height:180px;pointer-events:none}
+.pdf-cover-label{position:relative;font-size:11px;font-weight:700;letter-spacing:.08em;color:#e7c465;text-transform:uppercase;margin:14px 0 8px}
+.pdf-cover-title{position:relative;font-size:28px;font-weight:800;margin:0 0 10px;line-height:1.2;color:#fff}
+.pdf-cover-title span{color:#d4af37}
 .pdf-cover-sub{font-size:13px;color:#e9dfce;margin-bottom:18px;max-width:480px}
 .pdf-cover-info{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:14px 18px;margin-bottom:16px}
-.pdf-cover-info-label{font-size:9.5px;font-weight:700;letter-spacing:.06em;color:#e7c465;text-transform:uppercase;margin-top:8px}
+.pdf-cover-info-label{font-size:9.5px;font-weight:700;letter-spacing:.06em;color:#e7c465;text-transform:uppercase;margin-top:8px;display:flex;align-items:center;gap:5px}
+.pdf-cover-info-label:before{content:'';width:6px;height:6px;background:#d4af37;flex-shrink:0}
 .pdf-cover-info-label:nth-child(-n+2){margin-top:0}
 .pdf-cover-info-val{font-size:12.5px;color:#fff;margin-top:2px;font-weight:600}
 .pdf-cover-banner{display:flex;gap:12px;align-items:center;font-size:11.5px;color:#f3ead9}
@@ -349,8 +352,28 @@ tr:last-child td{border-bottom:none}
 .pdf-cover-banner-icon{width:34px;height:34px;border-radius:50%;background:rgba(231,196,101,.18);border:1px solid rgba(231,196,101,.5);color:#e7c465;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 
 /* Interior pages */
-.pdf-overline{font-size:10px;font-weight:800;letter-spacing:.16em;color:#b86f47;text-transform:uppercase;margin-bottom:7px}
+.pdf-overline{font-size:10px;font-weight:800;letter-spacing:.16em;color:#b86f47;text-transform:uppercase;margin-bottom:7px;display:flex;align-items:center;gap:6px}
+.pdf-overline:before{content:'';width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:7px solid #d4af37;flex-shrink:0}
 .pdf-h1{font-size:22px;font-weight:800;margin:0 0 3px}
+
+.pdf-banner{position:relative;background:#0b0b0b;margin:-15mm -15mm 22px;padding:11mm 15mm 20mm;overflow:hidden;clip-path:polygon(0 0,100% 0,100% 100%,0 86%)}
+.pdf-banner:after{content:'';position:absolute;left:0;right:0;bottom:0;height:6px;background:linear-gradient(90deg,#b86f47,#e7c465,#d4af37,#b86f47)}
+.pdf-banner .pdf-head{border-bottom-color:rgba(255,255,255,.18);margin-bottom:14px}
+.pdf-banner .pdf-head-name{color:#fff}
+.pdf-banner .pdf-head-tag{color:#e7c465}
+.pdf-banner .pdf-page-num{color:rgba(255,255,255,.5)}
+.pdf-banner .pdf-overline{color:#e7c465}
+.pdf-banner .pdf-overline:before{border-bottom-color:#e7c465}
+.pdf-banner .pdf-h1{color:#fff;font-size:27px}
+.pdf-banner .pdf-h1-sub{color:#d8cdb8;margin-bottom:0}
+.pdf-banner-cont{position:relative;background:#0b0b0b;margin:-15mm -15mm 20px;padding:11mm 15mm 16px;overflow:hidden}
+.pdf-banner-cont:after{content:'';position:absolute;left:0;right:0;bottom:0;height:4px;background:linear-gradient(90deg,#b86f47,#e7c465,#d4af37,#b86f47)}
+.pdf-banner-cont .pdf-head{border-bottom-color:rgba(255,255,255,.18);margin-bottom:10px}
+.pdf-banner-cont .pdf-head-name{color:#fff}
+.pdf-banner-cont .pdf-head-tag{color:#e7c465}
+.pdf-banner-cont .pdf-page-num{color:rgba(255,255,255,.5)}
+.pdf-banner-cont .pdf-overline{color:#e7c465;margin-bottom:0}
+.pdf-banner-cont .pdf-overline:before{border-bottom-color:#e7c465}
 .pdf-h1-sub{color:#6b6355;font-size:12px;margin-bottom:16px}
 
 .pdf-summary{margin-top:18px;padding:22px 24px;border-radius:16px;background:linear-gradient(160deg,#fbf6ea,#f2e6cd);border:1px solid #e3d3ad;position:relative}
@@ -378,6 +401,13 @@ tr:last-child td{border-bottom:none}
 .pdf-legend{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:11px}
 .pdf-legend-item{display:flex;align-items:center;gap:5px}
 .pdf-legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+.pdf-two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+.pdf-two-col .pdf-diagram{margin-bottom:0}
+.pdf-chart-card{border:1px solid #e7dcc6;border-radius:10px;overflow:hidden;background:#fdfbf6}
+.pdf-chart-legend{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:10px;padding:0 12px 10px}
+.pdf-chart-legend-item{display:flex;align-items:center;gap:5px}
+.pdf-chart-legend-item span{width:8px;height:8px;border-radius:2px;flex-shrink:0}
 
 .pdf-point{border:1px solid #e3d9c6;border-top:4px solid #d8cba4;border-radius:14px;overflow:hidden;margin-bottom:16px;background:#fffefb;box-shadow:0 3px 14px rgba(20,14,6,.06)}
 .pdf-point.st-red{border-top-color:#c0342a}
@@ -419,6 +449,7 @@ tr:last-child td{border-bottom:none}
 .pdf-checkbox{width:14px;height:14px;border:1.5px solid #d8cba4;border-radius:3px;flex-shrink:0}
 
 .pdf-page.pdf-backcover{height:297mm;background:linear-gradient(160deg,#0b0b0b,#1e1712 55%,#4a3320);color:#fff;display:flex;flex-direction:column}
+.pdf-backcover-topchev{position:absolute;top:0;left:0;right:0;height:60px;opacity:.5;transform:rotate(180deg)}
 .pdf-backcover-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 25mm}
 .pdf-backcover-name{font-size:21px;font-weight:800;margin-bottom:4px}
 .pdf-backcover-tag{font-size:11.5px;color:#e7c465;letter-spacing:.06em;text-transform:uppercase;margin-bottom:30px}

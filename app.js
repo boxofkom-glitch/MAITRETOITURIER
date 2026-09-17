@@ -678,6 +678,39 @@ function roofCutawaySvg(){
   </svg>`;
 }
 
+function etatDistributionChart(d){
+  const counts = {};
+  POINTS.forEach(p=>{ const e=d.diagnostic.points[p].etat||"Non contrôlé"; counts[e]=(counts[e]||0)+1; });
+  const order = [["Bon état","#2e7d5b"],["À surveiller","#d4af37"],["Défaut constaté","#b3413a"],["Urgent","#23262c"],["Pas vu","#8a8a8a"],["Non présent","#a8a190"],["Non contrôlé","#c9c2ae"]];
+  const bars = order.filter(([k])=>counts[k]);
+  if(!bars.length) return "";
+  const max = Math.max(1,...bars.map(([k])=>counts[k]));
+  const barW=40, gap=16, baseY=92, barMax=70;
+  const svgW = bars.length*(barW+gap)+gap;
+  const rects = bars.map(([k,color],i)=>{
+    const h = Math.max(4, Math.round((counts[k]/max)*barMax));
+    const x = gap + i*(barW+gap);
+    return `<rect x="${x}" y="${baseY-h}" width="${barW}" height="${h}" rx="4" fill="${color}"/><text x="${x+barW/2}" y="${baseY+15}" text-anchor="middle" font-size="10" font-weight="700" fill="#4a4433">${counts[k]}</text>`;
+  }).join("");
+  const svg = `<svg viewBox="0 0 ${svgW} 116" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${svgW}px;height:104px;display:block;margin:0 auto">${rects}</svg>`;
+  const legend = bars.map(([k,color])=>`<div class="pdf-chart-legend-item"><span style="background:${color}"></span>${esc(k)} (${counts[k]})</div>`).join("");
+  return `<div class="pdf-chart-card"><div class="pdf-diagram-title">Répartition des ${POINTS.length} points contrôlés</div>${svg}<div class="pdf-chart-legend">${legend}</div></div>`;
+}
+
+function coverChevronSvg(){
+  return `<svg viewBox="0 0 800 170" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" style="position:absolute;left:0;right:0;bottom:-1px;width:100%;height:110px;display:block">
+    <defs>
+      <linearGradient id="chevGold" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#f0d585"/>
+        <stop offset="55%" stop-color="#d4af37"/>
+        <stop offset="100%" stop-color="#8a5a2b"/>
+      </linearGradient>
+    </defs>
+    <path d="M0,170 L400,20 L800,170 Z" fill="#0b0b0b"/>
+    <path d="M40,170 L400,46 L760,170 Z" fill="url(#chevGold)"/>
+  </svg>`;
+}
+
 function backcoverArtSvg(){
   return `<svg viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg" style="position:absolute;left:50%;bottom:-30px;transform:translateX(-50%);width:900px;opacity:.07;pointer-events:none">
     <path d="M40 340 L400 80 L760 340" stroke="#d4af37" stroke-width="10" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
@@ -812,6 +845,7 @@ function repaginatePoints(root){
   if(groups.length<=1) return;
 
   const headNode = flow.querySelector(".pdf-head");
+  const overlineNode = flow.querySelector(".pdf-overline");
   const h1Node = flow.querySelector(".pdf-h1");
   const subNode = flow.querySelector(".pdf-h1-sub");
 
@@ -823,11 +857,19 @@ function repaginatePoints(root){
     const pad = document.createElement("div");
     pad.className = "pdf-page-pad";
     if(gi===0){
-      pad.appendChild(headNode);
-      pad.appendChild(h1Node);
-      pad.appendChild(subNode);
+      const banner = document.createElement("div");
+      banner.className = "pdf-banner";
+      banner.appendChild(headNode);
+      if(overlineNode) banner.appendChild(overlineNode);
+      banner.appendChild(h1Node);
+      banner.appendChild(subNode);
+      pad.appendChild(banner);
     } else {
-      pad.insertAdjacentHTML("beforeend", pdfHead());
+      const banner = document.createElement("div");
+      banner.className = "pdf-banner-cont";
+      banner.insertAdjacentHTML("beforeend", pdfHead());
+      if(overlineNode) banner.appendChild(overlineNode.cloneNode(true));
+      pad.appendChild(banner);
     }
     group.forEach(card=>pad.appendChild(card));
     page.appendChild(pad);
@@ -1429,7 +1471,7 @@ function pdfPointCard(p, i, d){
       </div>
       <div class="pdf-point-block">
         <span class="pdf-point-label">Notre observation</span>
-        <p>${pt.observation?esc(pt.observation):"Non renseignée."}</p>
+        <p>${pt.observation?esc(pt.observation):(pt.etat==="Bon état"?"Aucune anomalie n’a été observée sur cet élément lors du contrôle visuel des zones accessibles.":"Non renseignée.")}</p>
       </div>
       ${dyk?`<div class="pdf-dyk"><div class="pdf-dyk-head">${iconSvg("idea",14)}<span>Le saviez-vous ?</span></div><p>${esc(dyk.text)}</p></div>`:""}
       <div class="pdf-point-block">
@@ -1437,7 +1479,7 @@ function pdfPointCard(p, i, d){
         <p><b>${esc(pt.decision)}</b>${pt.pourquoi?" — "+esc(pt.pourquoi):""}</p>
       </div>
       ${pt.travaux?`<div class="pdf-point-block"><span class="pdf-point-label">Travaux proposés</span><p>${esc(pt.travaux)}</p></div>`:""}
-      ${pt.risque?`<div class="pdf-risk"><b>${iconSvg("warning",13)} Vigilance</b><span>${esc(pt.risque)}</span></div>`:""}
+      ${pt.risque && pt.etat!=="Bon état" && pt.etat!=="Non présent"?`<div class="pdf-risk"><b>${iconSvg("warning",13)} Vigilance</b><span>${esc(pt.risque)}</span></div>`:""}
     </div>
   </div>`;
 }
@@ -1486,10 +1528,12 @@ function renderReportDoc(d){
 
   const pointsFlowPage = `
     <div class="pdf-page-frame"><div class="pdf-page"><div class="pdf-page-pad pdf-points-flow">
-      ${pdfHead()}
-      <div class="pdf-overline">Rapport ${esc(d.id)} · ${esc(d.client)}</div>
-      <div class="pdf-h1">Points de contrôle</div>
-      <div class="pdf-h1-sub">Constat, photo et risques associés pour chaque zone inspectée.</div>
+      <div class="pdf-banner">
+        ${pdfHead()}
+        <div class="pdf-overline">Rapport ${esc(d.id)} · ${esc(d.client)}</div>
+        <div class="pdf-h1">Points de contrôle</div>
+        <div class="pdf-h1-sub">Constat, photo et risques associés pour chaque zone inspectée.</div>
+      </div>
       ${POINTS.map((p,i)=>pdfPointCard(p, i, d)).join("")}
     </div></div></div>`;
 
@@ -1503,8 +1547,9 @@ function renderReportDoc(d){
         <div><div class="pdf-cover-brand-name">Maître Toiturier</div><div class="pdf-cover-brand-tag">Expertise · Conseil · Toitures durables</div></div>
       </div>
       <div class="pdf-cover-panel">
-        <div class="pdf-cover-label">Dossier client</div>
-        <h1 class="pdf-cover-title">Rapport de diagnostic de toiture</h1>
+        <div class="pdf-cover-chevron">${coverChevronSvg()}</div>
+        <div class="pdf-cover-label">Étude personnalisée de votre toiture</div>
+        <h1 class="pdf-cover-title">Rapport de<br>diagnostic <span>toiture</span></h1>
         <div class="pdf-cover-sub">État des lieux, points de vigilance et actions recommandées, présentés zone par zone avec photos et préconisations.</div>
         <div class="pdf-cover-info">
           <div class="pdf-cover-info-label">Dossier</div><div class="pdf-cover-info-label">Client</div>
@@ -1522,10 +1567,12 @@ function renderReportDoc(d){
     </div></div>
 
     <div class="pdf-page-frame"><div class="pdf-page"><div class="pdf-page-pad">
-      ${pdfHead()}
-      <div class="pdf-overline">Rapport ${esc(d.id)} · ${esc(d.client)}</div>
-      <div class="pdf-h1">Synthèse du diagnostic</div>
-      <div class="pdf-h1-sub">${controlledPoints.length} / ${POINTS.length} points contrôlés</div>
+      <div class="pdf-banner">
+        ${pdfHead()}
+        <div class="pdf-overline">Rapport ${esc(d.id)} · ${esc(d.client)}</div>
+        <div class="pdf-h1">Synthèse du diagnostic</div>
+        <div class="pdf-h1-sub">${controlledPoints.length} / ${POINTS.length} points contrôlés</div>
+      </div>
       <div class="pdf-stat-row">
         <div class="pdf-stat-card"><div class="pdf-stat-card-top">${iconSvg("layers",14)} Couverture</div><div class="pdf-stat-val">${esc(s.typeCouverture)}</div></div>
         <div class="pdf-stat-card"><div class="pdf-stat-card-top">${iconSvg("ruler",14)} Surface estimée</div><div class="pdf-stat-val">${s.surface?esc(s.surface)+" m²":"—"}</div></div>
@@ -1533,12 +1580,15 @@ function renderReportDoc(d){
       </div>
       ${s.observations?`<div class="pdf-lead">${esc(s.observations)}</div>`:""}
 
-      <div class="pdf-diagram">
-        <div class="pdf-diagram-title">Comprendre les zones contrôlées</div>
-        <div class="pdf-diagram-art">${roofCutawaySvg()}</div>
-        <div class="pdf-diagram-layers">
-          ${DIAGRAM_LAYERS.map(l=>`<div class="pdf-diagram-layer"><div class="pdf-diagram-num">${l.n}</div><div class="pdf-diagram-swatch" style="background:${l.color}"></div>${esc(l.label)}</div>`).join("")}
+      <div class="pdf-two-col">
+        <div class="pdf-diagram">
+          <div class="pdf-diagram-title">Comprendre les zones contrôlées</div>
+          <div class="pdf-diagram-art">${roofCutawaySvg()}</div>
+          <div class="pdf-diagram-layers">
+            ${DIAGRAM_LAYERS.map(l=>`<div class="pdf-diagram-layer"><div class="pdf-diagram-num">${l.n}</div><div class="pdf-diagram-swatch" style="background:${l.color}"></div>${esc(l.label)}</div>`).join("")}
+          </div>
         </div>
+        ${etatDistributionChart(d)}
       </div>
       <div class="pdf-refs"><b>Références des observations</b>${refLines}</div>
 
@@ -1554,10 +1604,12 @@ function renderReportDoc(d){
 
     <div class="pdf-page-frame"><div class="pdf-page">
       <div class="pdf-page-pad">
-        ${pdfHead()}
-        <div class="pdf-overline">Rapport ${esc(d.id)} · ${esc(d.client)}</div>
-        <div class="pdf-h1">Préconisations &amp; plan d’action</div>
-        <div class="pdf-h1-sub">Une intervention proportionnée aux constats, à valider avec le technicien.</div>
+        <div class="pdf-banner">
+          ${pdfHead()}
+          <div class="pdf-overline">Rapport ${esc(d.id)} · ${esc(d.client)}</div>
+          <div class="pdf-h1">Préconisations &amp; plan d’action</div>
+          <div class="pdf-h1-sub">Une intervention proportionnée aux constats, à valider avec le technicien.</div>
+        </div>
         ${s.preconisations?`<div class="pdf-lead">${esc(s.preconisations)}</div>`:""}
         ${actionRows}
         <div class="pdf-action">
@@ -1589,6 +1641,7 @@ function renderReportDoc(d){
     </div></div>
 
     <div class="pdf-page-frame"><div class="pdf-page pdf-backcover">
+      <div class="pdf-backcover-topchev">${coverChevronSvg()}</div>
       ${backcoverArtSvg()}
       <div class="pdf-backcover-body">
         ${logoMark(52)}
