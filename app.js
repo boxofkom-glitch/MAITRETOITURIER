@@ -78,6 +78,24 @@ const ETAT_OPTIONS = [
 ];
 const AUTO_ADVANCE_ETATS = ["Bon état","Pas vu","Non présent"];
 
+const SYNTH_OBS_OPTIONS = [
+  "Inspection visuelle sur les zones accessibles.",
+  "Accès limité sur certaines zones.",
+  "État cohérent avec l’âge du bâtiment.",
+  "Plusieurs points de vigilance identifiés.",
+  "Aucune anomalie majeure constatée.",
+  "Traces d’entretien antérieur visibles.",
+  "Signes d’usure liés aux intempéries."
+];
+const SYNTH_PRECO_OPTIONS = [
+  "Devis détaillé à transmettre.",
+  "Contrôle complémentaire recommandé.",
+  "Entretien préventif conseillé (nettoyage, démoussage).",
+  "Intervention rapide recommandée (points urgents).",
+  "Suivi périodique conseillé.",
+  "Aucune intervention immédiate nécessaire."
+];
+
 function freshPoint(){
   return { etat:"Non contrôlé", problems:[], extent:"", zones:[], comment:"", decisionTouched:false, observation:"", decision:"Contrôle complémentaire", pourquoi:"", travaux:"", risque:"", photos:[] };
 }
@@ -205,6 +223,30 @@ function savePointFieldsFromDOM(){
     p.zones = [...versant, ...position];
   }
   if(p.etat && p.etat!=="Non contrôlé") reformulatePoint(pointName, p);
+}
+function saveSynthFieldsFromDOM(){
+  if(!state.dossierId) return;
+  const d = byId(state.dossierId);
+  if(!d) return;
+  const isLast = state.diagStep === POINTS.length+1;
+  if(!isLast) return;
+  const s = d.diagnostic.synthese;
+  const tcEl = document.getElementById("synTypeCouverture");
+  if(tcEl) s.typeCouverture = tcEl.value;
+  const surfEl = document.getElementById("synSurface");
+  if(surfEl) s.surface = surfEl.value;
+  const conclEl = document.getElementById("synConclusion");
+  if(conclEl) s.conclusion = conclEl.value;
+  const obsEl = document.getElementById("synObsSel");
+  if(obsEl){
+    const chosen = Array.from(obsEl.selectedOptions).map(o=>o.textContent.trim());
+    if(chosen.length) s.observations = chosen.join(" ");
+  }
+  const precoEl = document.getElementById("synPrecoSel");
+  if(precoEl){
+    const chosen = Array.from(precoEl.selectedOptions).map(o=>o.textContent.trim());
+    if(chosen.length) s.preconisations = chosen.join(" ");
+  }
 }
 function freshDiagnostic(){
   const points = {};
@@ -1056,8 +1098,18 @@ function renderDossierDiagnostic(d){
       <div class="form-field"><label>Surface estimée (m²)</label><input type="number" id="synSurface" value="${esc(s.surface)}"></div>
       <button class="btn-secondary btn-sm" data-action="diag-generate" data-id="${d.id}">Préparer la synthèse des constats</button>
       <div class="form-help">Assemble les états et observations saisis. Aucune analyse IA des photos.</div>
-      <div class="form-field" style="margin-top:14px"><label>Observations générales</label><textarea id="synObs" placeholder="Résumé et limites de l’inspection…">${esc(s.observations)}</textarea></div>
-      <div class="form-field"><label>Préconisations de travaux</label><textarea id="synPreco" placeholder="Travaux recommandés par le technicien…">${esc(s.preconisations)}</textarea></div>
+      <div class="form-field" style="margin-top:14px">
+        <label>Observations générales <span class="cascade-hint">plusieurs choix possibles</span></label>
+        <select id="synObsSel" multiple size="${Math.min(6,SYNTH_OBS_OPTIONS.length)}">
+          ${SYNTH_OBS_OPTIONS.map(t=>`<option ${s.observations && s.observations.includes(t)?"selected":""}>${esc(t)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="form-field">
+        <label>Préconisations de travaux <span class="cascade-hint">plusieurs choix possibles</span></label>
+        <select id="synPrecoSel" multiple size="${Math.min(6,SYNTH_PRECO_OPTIONS.length)}">
+          ${SYNTH_PRECO_OPTIONS.map(t=>`<option ${s.preconisations && s.preconisations.includes(t)?"selected":""}>${esc(t)}</option>`).join("")}
+        </select>
+      </div>
       <div class="form-field"><label>Conclusion et niveau d’urgence</label>
         <select id="synConclusion">
           ${["Bon état général","À surveiller","Travaux recommandés","Intervention urgente"].map(o=>`<option ${s.conclusion===o?"selected":""}>${o}</option>`).join("")}
@@ -1071,7 +1123,6 @@ function renderDossierDiagnostic(d){
   const pointName = POINTS[step-1];
   const p = d.diagnostic.points[pointName];
   const showCascade = p.etat && p.etat!=="Non contrôlé" && !AUTO_ADVANCE_ETATS.includes(p.etat);
-  const showPreview = p.etat && p.etat!=="Non contrôlé";
   const anomalyIds = POINT_ANOMALIES[pointName] || [];
   const problems = p.problems || [];
   const zones = p.zones || [];
@@ -1081,7 +1132,7 @@ function renderDossierDiagnostic(d){
   ${stepsNav}
   <div class="card">
     <div class="point-title">${esc(pointName)}</div>
-    <div class="point-sub">Appuyez sur l’état constaté. Si tout va bien, passage automatique au point suivant.</div>
+    <div class="point-sub">Sélectionnez l’état constaté, complétez si nécessaire, puis appuyez sur Suivant.</div>
 
     <div class="etat-btn-grid">
       ${ETAT_OPTIONS.map(o=>`
@@ -1104,21 +1155,20 @@ function renderDossierDiagnostic(d){
 
       <div class="form-field">
         <label>2. Combien / étendue ?</label>
-        <select id="selExtent">
-          <option value="">— Sélectionner —</option>
+        <select id="selExtent" multiple size="${EXTENT_OPTIONS.length}">
           ${EXTENT_OPTIONS.map(o=>`<option value="${o.id}" ${p.extent===o.id?"selected":""}>${o.icon} ${esc(o.label)}</option>`).join("")}
         </select>
       </div>
 
       <div class="form-field">
         <label>3. Où — versant ? <span class="cascade-hint">plusieurs choix possibles</span></label>
-        <select id="selVersant" multiple size="4">
+        <select id="selVersant" multiple size="${ZONE_VERSANT_OPTIONS.length}">
           ${ZONE_VERSANT_OPTIONS.map(o=>`<option value="${o.id}" ${zones.includes(o.id)?"selected":""}>${o.icon} ${esc(o.label)}</option>`).join("")}
         </select>
       </div>
       <div class="form-field">
         <label>Où — position ? <span class="cascade-hint">plusieurs choix possibles</span></label>
-        <select id="selPosition" multiple size="3">
+        <select id="selPosition" multiple size="${ZONE_POSITION_OPTIONS.length}">
           ${ZONE_POSITION_OPTIONS.map(o=>`<option value="${o.id}" ${zones.includes(o.id)?"selected":""}>${o.icon} ${esc(o.label)}</option>`).join("")}
         </select>
       </div>
@@ -1130,40 +1180,35 @@ function renderDossierDiagnostic(d){
         </select>
       </div>
 
-      <div style="font-weight:600;font-size:13px;margin:16px 0 10px">4. Photo</div>
-      <div class="row-sub" style="margin-bottom:10px">${p.photos.length} / 24</div>
-      ${p.photos.length ? `<div class="photo-grid">
-        ${p.photos.map((ph,i)=>`
-          <div class="photo-thumb">
-            ${ph.dataUrl ? `<img src="${ph.dataUrl}" alt="">` : `<div class="photo-placeholder">🖼</div>`}
-            <button class="photo-remove" data-action="remove-photo" data-id="${d.id}" data-step="${step}" data-idx="${i}">✕</button>
-          </div>`).join("")}
-      </div>` : ""}
-      <input type="file" id="photoGalleryInput" accept="image/*" multiple style="display:none" data-id="${d.id}" data-step="${step}">
-      <input type="file" id="photoCameraInput" accept="image/*" capture="environment" style="display:none" data-id="${d.id}" data-step="${step}">
-      <div style="display:flex;gap:10px">
-        <button class="btn-secondary btn-sm" style="flex:1" data-action="trigger-file" data-target="photoGalleryInput">Ajouter depuis la galerie</button>
-        <button class="btn-secondary btn-sm" style="flex:1" data-action="trigger-file" data-target="photoCameraInput">Prendre une photo</button>
+      <div class="form-field">
+        <label>5. Commentaire facultatif</label>
+        <textarea id="ptComment" placeholder="À préciser au clavier si besoin (facultatif)…">${esc(p.comment||"")}</textarea>
       </div>
-      <div class="form-help" style="margin-top:8px">JPG, PNG, WebP · 10 Mo par photo · 24 par visite</div>
-
-      <div class="cascade-label">5. Commentaire facultatif</div>
-      <textarea id="ptComment" placeholder="À préciser au clavier si besoin (facultatif)…">${esc(p.comment||"")}</textarea>
     </div>
     ` : ""}
 
-    ${showPreview ? `<div class="diag-preview-spacer"></div>` : ""}
+    <div class="cascade-label" style="margin-top:${showCascade?"4":"16"}px">${showCascade?"6":"2"}. Photo</div>
+    <div class="row-sub" style="margin-bottom:10px">${p.photos.length} / 24</div>
+    ${p.photos.length ? `<div class="photo-grid">
+      ${p.photos.map((ph,i)=>`
+        <div class="photo-thumb">
+          ${ph.dataUrl ? `<img src="${ph.dataUrl}" alt="">` : `<div class="photo-placeholder">🖼</div>`}
+          <button class="photo-remove" data-action="remove-photo" data-id="${d.id}" data-step="${step}" data-idx="${i}">✕</button>
+        </div>`).join("")}
+    </div>` : ""}
+    <input type="file" id="photoGalleryInput" accept="image/*" multiple style="display:none" data-id="${d.id}" data-step="${step}">
+    <input type="file" id="photoCameraInput" accept="image/*" capture="environment" style="display:none" data-id="${d.id}" data-step="${step}">
+    <div style="display:flex;gap:10px">
+      <button class="btn-secondary btn-sm" style="flex:1" data-action="trigger-file" data-target="photoGalleryInput">Ajouter depuis la galerie</button>
+      <button class="btn-secondary btn-sm" style="flex:1" data-action="trigger-file" data-target="photoCameraInput">Prendre une photo</button>
+    </div>
+    <div class="form-help" style="margin-top:8px">JPG, PNG, WebP · 10 Mo par photo · 24 par visite</div>
 
     <div class="modal-actions">
       <button class="btn-secondary" data-action="diag-save-point" data-id="${d.id}" data-step="${step}">Enregistrer le brouillon</button>
       <button class="btn-primary" data-action="diag-next" data-id="${d.id}" data-step="${step}">Suivant →</button>
     </div>
-  </div>
-  ${showPreview ? `
-  <div class="diag-preview">
-    <div class="diag-preview-label">Aperçu du texte rapport</div>
-    <div class="diag-preview-text">${esc(p.observation)}</div>
-  </div>` : ""}`;
+  </div>`;
 }
 
 function pdfHead(){
@@ -1993,6 +2038,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(!t) return;
     const action = t.dataset.action;
     savePointFieldsFromDOM();
+    saveSynthFieldsFromDOM();
 
     if(action==="modal-overlay"){ if(e.target===t){ state.modal=null; render(); } return; }
     if(action==="modal-close"){ state.modal=null; render(); return; }
@@ -2180,13 +2226,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
         p.problems = []; p.extent = ""; p.zones = []; p.comment = "";
       }
       reformulatePoint(pointName, p);
-      if(AUTO_ADVANCE_ETATS.includes(p.etat)){
-        state.diagStep = Math.min(POINTS.length+1, stepNum+1);
-        render();
-        scrollContentTop();
-      } else {
-        render();
-      }
+      render();
       return;
     }
     if(action==="diag-step"){ state.diagStep = parseInt(t.dataset.step,10); render(); scrollContentTop(); return; }
@@ -2211,8 +2251,10 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const d = byId(t.dataset.id);
       d.diagnostic.synthese.typeCouverture = document.getElementById("synTypeCouverture").value;
       d.diagnostic.synthese.surface = document.getElementById("synSurface").value;
-      d.diagnostic.synthese.observations = document.getElementById("synObs").value;
-      d.diagnostic.synthese.preconisations = document.getElementById("synPreco").value;
+      const obsChosen = Array.from(document.getElementById("synObsSel").selectedOptions).map(o=>o.textContent.trim());
+      if(obsChosen.length) d.diagnostic.synthese.observations = obsChosen.join(" ");
+      const precoChosen = Array.from(document.getElementById("synPrecoSel").selectedOptions).map(o=>o.textContent.trim());
+      if(precoChosen.length) d.diagnostic.synthese.preconisations = precoChosen.join(" ");
       d.diagnostic.synthese.conclusion = document.getElementById("synConclusion").value;
       d.diagnostic.rapportPret = true;
       d.statut = "Rapport prêt";
@@ -2235,6 +2277,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
 
   document.getElementById("app").addEventListener("change", (e)=>{
     savePointFieldsFromDOM();
+    saveSynthFieldsFromDOM();
     if(e.target.id==="loginRole"){
       state.role = e.target.value;
       state.section = NAV[state.role][0][0];
@@ -2271,7 +2314,9 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const d = byId(state.dossierId);
       const pointName = POINTS[state.diagStep-1];
       const p = d.diagnostic.points[pointName];
-      p.extent = e.target.value;
+      const selected = Array.from(e.target.selectedOptions).map(o=>o.value);
+      const newly = selected.find(v=>v!==p.extent);
+      p.extent = newly!==undefined ? newly : (selected[0]||"");
       reformulatePoint(pointName, p);
       render();
     }
