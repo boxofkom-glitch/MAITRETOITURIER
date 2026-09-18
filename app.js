@@ -851,6 +851,74 @@ function factureTotals(d, f){
   return { htCt: f.montantTtcCt - tvaCt, tvaCt, ttcCt: f.montantTtcCt };
 }
 
+// ---------- Conditions de règlement : acompte oui/non, paiement en N fois, mode ----------
+const PAY_MODES = ["Virement","Chèque","Carte bancaire","Espèces"];
+const PAY_FOIS = [1,2,3,4,6,10];
+
+function paiementDefaults(){ return {acompte:true, acomptePct:30, fois:1, mode:"Virement"}; }
+function devisPaiement(dv){ return Object.assign(paiementDefaults(), (dv && dv.paiement) || {}); }
+function acompteTtcCt(dv){ const p = devisPaiement(dv); return p.acompte ? Math.round(devisTotals(dv).ttcCt * p.acomptePct / 100) : 0; }
+
+function paiementSummary(dv){
+  const p = devisPaiement(dv);
+  const ttc = devisTotals(dv).ttcCt;
+  const ac = acompteTtcCt(dv);
+  const reste = ttc - ac;
+  const parts = [];
+  if(p.acompte) parts.push(`acompte de ${p.acomptePct} % (${fmtEuros(ac)}) à l’acceptation`);
+  const label = p.acompte ? "solde" : "règlement";
+  parts.push(p.fois>1 ? `${label} en ${p.fois} fois (${p.fois} × ${fmtEuros(Math.round(reste/p.fois))})` : `${label} en une fois (${fmtEuros(reste)})`);
+  return `Règlement : ${parts.join(", puis ")}, par ${p.mode==="Carte bancaire" ? "carte bancaire" : p.mode.toLowerCase()}.`;
+}
+
+function buildEcheances(ttcCt, fois, start){
+  const n = Math.max(1, fois);
+  const base = Math.floor(ttcCt / n);
+  const arr = [];
+  for(let i=0;i<n;i++){
+    arr.push({date:fmtDayMonth(addDays(start, 30*i)), montantCt: i===n-1 ? ttcCt - base*(n-1) : base});
+  }
+  return arr;
+}
+
+function factureLabel(d, f){
+  if(f.type==="Acompte") return "Facture d’acompte";
+  const dv = findDevis(d, f.devisId);
+  const hasAc = d.factures.some(x=>x.devisId===f.devisId && x.type==="Acompte") || (dv && devisPaiement(dv).acompte);
+  return hasAc ? "Facture de solde" : "Facture";
+}
+
+// Statut de chaque échéance d'une facture, d'après les règlements encaissés.
+function echeancesStatus(f){
+  const paid = facturePaidCt(f);
+  let cum = 0;
+  return (f.echeances||[]).map(e=>{
+    cum += e.montantCt;
+    return Object.assign({}, e, {reglee: paid >= cum - 1});
+  });
+}
+
+function createFacture(d, dv, type, o){
+  o = o || {};
+  const p = devisPaiement(dv);
+  const ttc = devisTotals(dv).ttcCt;
+  const acomptes = d.factures.filter(x=>x.devisId===dv.id && x.type==="Acompte").reduce((s,x)=>s+x.montantTtcCt,0);
+  const montant = o.montantCt!=null ? o.montantCt : (type==="Acompte" ? acompteTtcCt(dv) : Math.max(0, ttc - acomptes));
+  const fois = type==="Acompte" ? 1 : (o.fois || p.fois);
+  const echeances = buildEcheances(montant, fois, addDays(TODAY_REF, 15));
+  if(o.echeance) echeances[0].date = o.echeance;
+  const numero = nextFactureId(d);
+  const f = {
+    id:numero, numero, type, devisId:dv.id,
+    libelle: type==="Acompte" ? `Acompte de ${p.acomptePct} %` : (p.acompte ? "Solde des travaux" : "Règlement des travaux"),
+    montantTtcCt: montant, statut:"Brouillon", date:"12 sept.",
+    echeance: echeances[0].date, echeances, fois, mode: o.mode || p.mode, paiements:[]
+  };
+  d.factures.push(f);
+  d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:factureLabel(d, f)+" créée ("+fmtEuros(montant)+")."});
+  return f;
+}
+
 function docPill(kind, doc){
   if(kind==="devis"){
     const m = {
@@ -938,6 +1006,10 @@ function docPages(d, o){
 
 function renderDevisDoc(d, dv){
   const t = devisTotals(dv);
+  const p = devisPaiement(dv);
+  const valid = dv.validite || 30;
+  const totals = [["Total HT", fmtEuros(t.htCt)], ["TVA", fmtEuros(t.tvaCt)], ["Total TTC", fmtEuros(t.ttcCt), true]];
+  if(p.acompte) totals.push(["Acompte à l’acceptation ("+p.acomptePct+" %)", fmtEuros(acompteTtcCt(dv))]);
   return docPages(d, {
     topTitle: "Devis",
     topNum: "N° "+dv.numero+(dv.version>1?" · v"+dv.version:""),
@@ -945,11 +1017,11 @@ function renderDevisDoc(d, dv){
     zoneCont: "Suite du devis",
     title: "Devis",
     pill: docPill("devis", dv),
-    details: `Date : ${esc(dv.dateEnvoi||dv.dateCreation||"12 sept.")}<br>Validité : 30 jours<br>Dossier ${esc(d.id)} — ${esc(d.motif)}`,
+    details: `Date : ${esc(dv.dateEnvoi||dv.dateCreation||"12 sept.")}<br>Validité : ${valid} jours<br>Objet : ${esc(dv.objet||d.motif)}`,
     rows: docRowsFromDevis(dv),
-    bannerLabel: "Conditions",
-    bannerText: "Devis valable 30 jours à compter de sa date d’émission. Acompte de 30 % à l’acceptation. Pour accepter : réponse écrite ou signature précédée de la mention « Bon pour accord ». Document de démonstration : conditions à adapter.",
-    totals: docTotalsHtml([["Total HT", fmtEuros(t.htCt)], ["TVA", fmtEuros(t.tvaCt)], ["Total TTC", fmtEuros(t.ttcCt), true]])
+    bannerLabel: "Conditions de règlement",
+    bannerText: `${esc(paiementSummary(dv))} Devis valable ${valid} jours. Pour accepter : réponse écrite ou signature précédée de « Bon pour accord ». Document de démonstration : conditions à adapter.`,
+    totals: docTotalsHtml(totals)
   });
 }
 
@@ -958,7 +1030,12 @@ function renderFactureDoc(d, f){
   const dv = findDevis(d, f.devisId);
   const paid = facturePaidCt(f);
   const reste = Math.max(0, f.montantTtcCt - paid);
+  const modeTxt = (f.mode||"Virement")==="Carte bancaire" ? "carte bancaire" : (f.mode||"Virement").toLowerCase();
   const pays = (f.paiements||[]).map(p=>`${esc(p.date)} · ${esc(p.mode)}${p.mode==="Virement"?" ("+esc(p.virementStatut)+")":""} : ${fmtEuros(p.montantCt)}`).join("<br>");
+  const ech = (f.echeances||[]);
+  const echTxt = ech.length>1
+    ? "Règlement en "+ech.length+" fois par "+modeTxt+" :<br>"+echeancesStatus(f).map((e,i)=>`${i+1}/${ech.length} · ${esc(e.date)} : ${fmtEuros(e.montantCt)}${e.reglee?" ✓":""}`).join("<br>")
+    : "Règlement en une fois par "+modeTxt+".";
 
   // Le détail des travaux est celui du devis : mêmes libellés, mêmes quantités.
   let rows;
@@ -973,12 +1050,13 @@ function renderFactureDoc(d, f){
     const dt = devisTotals(dv);
     if(f.type==="Acompte"){
       if(paid===0) totals.push(["Total des travaux TTC", fmtEuros(dt.ttcCt)]);
-      totals.push(["Acompte 30 % HT", fmtEuros(t.htCt)], ["TVA", fmtEuros(t.tvaCt)], ["Acompte TTC", fmtEuros(t.ttcCt), true]);
+      totals.push(["Acompte "+devisPaiement(dv).acomptePct+" % HT", fmtEuros(t.htCt)], ["TVA", fmtEuros(t.tvaCt)], ["Acompte TTC", fmtEuros(t.ttcCt), true]);
     } else {
       const acompte = d.factures.filter(x=>x.devisId===dv.id && x.type==="Acompte" && x.id!==f.id).reduce((s,x)=>s+x.montantTtcCt,0);
       totals.push(["Total des travaux TTC", fmtEuros(dt.ttcCt)]);
       if(acompte>0) totals.push(["Acompte déjà facturé", "− "+fmtEuros(acompte)]);
-      totals.push(["Solde TTC (dont TVA "+fmtEuros(t.tvaCt)+")", fmtEuros(t.ttcCt), true]);
+      if(paid===0) totals.push(["dont TVA", fmtEuros(t.tvaCt)]);
+      totals.push(["Solde TTC", fmtEuros(t.ttcCt), true]);
     }
   } else {
     totals.push(["Total HT", fmtEuros(t.htCt)], ["TVA", fmtEuros(t.tvaCt)], ["Total TTC", fmtEuros(t.ttcCt), true]);
@@ -988,15 +1066,15 @@ function renderFactureDoc(d, f){
   return docPages(d, {
     topTitle: "Facture",
     topNum: "N° "+f.numero,
-    zone: f.type==="Acompte" ? "Facture d’acompte" : "Facture de solde",
+    zone: factureLabel(d, f),
     zoneCont: "Suite de la facture",
     title: "Facture",
     pill: docPill("facture", f),
-    details: `Date : ${esc(f.date||"12 sept.")}<br>Échéance : ${esc(f.echeance||"à réception")}<br>Dossier ${esc(d.id)} — ${esc(d.motif)}`,
+    details: `Date : ${esc(f.date||"12 sept.")}<br>Échéance : ${ech.length>1 ? "en "+ech.length+" fois" : esc(f.echeance||"à réception")}<br>Objet : ${esc((dv&&dv.objet)||d.motif)}`,
     rows,
     bannerIcon: "check",
-    bannerLabel: paid>0 ? "Règlements reçus" : "Règlement",
-    bannerText: (paid>0 ? pays+"<br>" : "") + "Règlement par virement, chèque ou espèces. Facture de démonstration : mentions légales et coordonnées bancaires à renseigner.",
+    bannerLabel: paid>0 ? "Règlements et échéances" : "Règlement",
+    bannerText: (paid>0 ? pays+"<br>" : "") + echTxt + " Facture de démonstration : mentions légales et coordonnées bancaires à renseigner.",
     totals: docTotalsHtml(totals)
   });
 }
@@ -1026,10 +1104,12 @@ function devisMessage(d, dv, channel){
   const wa = channel==="whatsapp";
   const sign = d.commercial || "L’équipe Maître Toiturier";
   const ttc = fmtEuros(devisTotals(dv).ttcCt);
+  const valid = dv.validite || 30;
+  const pay = paiementSummary(dv);
   if(wa){
-    return `Bonjour ${d.client} 👋\n\nMerci de nous faire confiance pour votre toiture ! 🏠\nSuite à notre visite, voici votre devis n° ${dv.numero} (${ttc} TTC), en pièce jointe.\n\nIl détaille, poste par poste, les travaux recommandés à l’issue du diagnostic.\n\nIl est valable 30 jours. Pour l’accepter, il vous suffit de me répondre « OK » ici ou de m’appeler : je m’occupe ensuite de tout (planification, matériel, chantier). ✅\n\nSi vous souhaitez ajuster quoi que ce soit, on le fait ensemble avec plaisir. 😊\n\n${sign}\nMaître Toiturier — www.maitretoiturier.fr`;
+    return `Bonjour ${d.client} 👋\n\nMerci de nous faire confiance pour votre toiture ! 🏠\nSuite à notre visite, voici votre devis n° ${dv.numero} (${ttc} TTC), en pièce jointe.\n\nIl détaille, poste par poste, les travaux recommandés à l’issue du diagnostic.\n\n💳 ${pay}\n\nIl est valable ${valid} jours. Pour l’accepter, il vous suffit de me répondre « OK » ici ou de m’appeler : je m’occupe ensuite de tout (planification, matériel, chantier). ✅\n\nSi vous souhaitez ajuster quoi que ce soit, on le fait ensemble avec plaisir. 😊\n\n${sign}\nMaître Toiturier — www.maitretoiturier.fr`;
   }
-  return `Bonjour ${d.client},\n\nMerci de la confiance que vous nous accordez pour votre toiture.\n\nSuite à notre visite, je vous adresse avec plaisir, en pièce jointe, votre devis n° ${dv.numero} d’un montant de ${ttc} TTC. Il détaille, poste par poste, les travaux recommandés à l’issue du diagnostic.\n\nCe devis est valable 30 jours. Pour l’accepter, il suffit de me répondre par retour de message ou de m’appeler : je m’occupe ensuite de la planification, du matériel et du chantier.\n\nSi vous souhaitez ajuster quoi que ce soit, nous le ferons ensemble avec plaisir.\n\nBien cordialement,\n\n${sign}\nMaître Toiturier\nwww.maitretoiturier.fr`;
+  return `Bonjour ${d.client},\n\nMerci de la confiance que vous nous accordez pour votre toiture.\n\nSuite à notre visite, je vous adresse avec plaisir, en pièce jointe, votre devis n° ${dv.numero} d’un montant de ${ttc} TTC. Il détaille, poste par poste, les travaux recommandés à l’issue du diagnostic.\n\n${pay}\n\nCe devis est valable ${valid} jours. Pour l’accepter, il suffit de me répondre par retour de message ou de m’appeler : je m’occupe ensuite de la planification, du matériel et du chantier.\n\nSi vous souhaitez ajuster quoi que ce soit, nous le ferons ensemble avec plaisir.\n\nBien cordialement,\n\n${sign}\nMaître Toiturier\nwww.maitretoiturier.fr`;
 }
 
 function factureMessage(d, f, channel){
@@ -1037,16 +1117,17 @@ function factureMessage(d, f, channel){
   const sign = d.commercial || "L’équipe Maître Toiturier";
   const ttc = fmtEuros(f.montantTtcCt);
   const paid = factureStatutFromPayments(f)==="Payée";
-  const kind = f.type==="Acompte" ? "d’acompte" : "de solde";
-  const middle = paid
-    ? `Elle est déjà réglée : un grand merci pour votre règlement et votre confiance !`
-    : (f.type==="Acompte"
-        ? `Vous pouvez la régler par virement, chèque ou espèces. Dès réception de l’acompte, nous planifions votre chantier.`
-        : `Vous pouvez la régler par virement, chèque ou espèces.`);
+  const kind = f.type==="Acompte" ? "d’acompte" : (factureLabel(d, f)==="Facture de solde" ? "de solde" : "");
+  const mode = (f.mode||"Virement")==="Carte bancaire" ? "carte bancaire" : (f.mode||"Virement").toLowerCase();
+  const ech = f.echeances||[];
+  let middle;
+  if(paid) middle = "Elle est déjà réglée : un grand merci pour votre règlement et votre confiance !";
+  else if(ech.length>1) middle = `Vous pouvez la régler en ${ech.length} fois par ${mode} : ${ech.map(e=>`${fmtEuros(e.montantCt)} le ${e.date}`).join(", ")}.`;
+  else middle = `Vous pouvez la régler par ${mode}, d’ici le ${f.echeance||"délai convenu"}.` + (f.type==="Acompte" ? " Dès réception de l’acompte, nous planifions votre chantier." : "");
   if(wa){
-    return `Bonjour ${d.client} 👋\n\nVoici votre facture ${kind} n° ${f.numero} (${ttc} TTC), en pièce jointe. 🧾\n\n${middle}${paid?" 🙏":""}\n\nN’hésitez pas à me contacter pour la moindre question. 😊\n\n${sign}\nMaître Toiturier — www.maitretoiturier.fr`;
+    return `Bonjour ${d.client} 👋\n\nVoici votre facture ${kind?kind+" ":""}n° ${f.numero} (${ttc} TTC), en pièce jointe. 🧾\n\n${middle}${paid?" 🙏":""}\n\nN’hésitez pas à me contacter pour la moindre question. 😊\n\n${sign}\nMaître Toiturier — www.maitretoiturier.fr`;
   }
-  return `Bonjour ${d.client},\n\nVeuillez trouver ci-joint votre facture ${kind} n° ${f.numero} d’un montant de ${ttc} TTC.\n\n${middle}\n\nN’hésitez pas à me contacter pour toute question.\n\nBien cordialement,\n\n${sign}\nMaître Toiturier\nwww.maitretoiturier.fr`;
+  return `Bonjour ${d.client},\n\nVeuillez trouver ci-joint votre facture ${kind?kind+" ":""}n° ${f.numero} d’un montant de ${ttc} TTC.\n\n${middle}\n\nN’hésitez pas à me contacter pour toute question.\n\nBien cordialement,\n\n${sign}\nMaître Toiturier\nwww.maitretoiturier.fr`;
 }
 
 function docMessage(d, kind, docId, channel){
@@ -1119,6 +1200,10 @@ function renderDocuments(){
   return `
   <div class="page-header">
     <div><h1>Devis & factures</h1><p>Tous les documents commerciaux, en PDF, prêts à être envoyés.</p></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      ${hasPermission("quote.create") ? `<button class="btn-primary" data-action="wizard-devis">+ Nouveau devis</button>` : ""}
+      ${hasPermission("invoice.create") ? `<button class="btn-secondary" data-action="wizard-facture">+ Nouvelle facture</button>` : ""}
+    </div>
   </div>
   <div class="stat-grid">
     ${stat("Devis en attente", fmtEuros(attente), devis.filter(x=>x.dv.statut==="Envoyé").length+" devis envoyé(s)")}
@@ -1184,6 +1269,440 @@ function addSampleDocs(list){
     const ch = freshChantier(); ch.statut = "Planifié"; ch.dateDebut = "14 sept."; ch.equipe = ["Yanis Costa"];
     d.chantier = ch;
   }
+
+  // Conditions de règlement et échéanciers des exemples
+  const P = (id, over)=>{ const dd = get(id); if(dd) (dd.devis||[]).forEach(v=>{ v.objet = v.objet || dd.motif; v.validite = v.validite || 30; v.paiement = Object.assign(paiementDefaults(), over); }); };
+  P("TP-1042", {acompte:true, acomptePct:30, fois:2, mode:"Chèque"});
+  P("TP-1041", {acompte:true, acomptePct:30, fois:2, mode:"Virement"});
+  P("TP-1043", {acompte:false, acomptePct:30, fois:1, mode:"Carte bancaire"});
+  list.forEach(dd=>(dd.factures||[]).forEach(f=>{
+    const dv = findDevis(dd, f.devisId);
+    f.mode = f.mode || (dv ? devisPaiement(dv).mode : "Virement");
+    if(!f.echeances){ f.fois = 1; f.echeances = [{date:f.echeance||"12 sept.", montantCt:f.montantTtcCt}]; }
+  }));
+  const mm = get("TP-1041");
+  if(mm){
+    const f2 = mm.factures.find(x=>x.id==="TP-1041-F2");
+    const half = Math.floor(f2.montantTtcCt/2), rest = f2.montantTtcCt-half;
+    f2.mode = "Chèque"; f2.fois = 2;
+    f2.echeances = [{date:"29 août", montantCt:half}, {date:"12 sept.", montantCt:rest}];
+    f2.paiements = [{id:"TP-1041-F2-P1", montantCt:half, mode:"Chèque", date:"29 août", virementStatut:null}, {id:"TP-1041-F2-P2", montantCt:rest, mode:"Chèque", date:"11 sept.", virementStatut:null}];
+  }
+}
+
+// ---------- Suppressions (toujours confirmées) ----------
+function stampHist(d, texte){
+  d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte});
+}
+
+function askDelete(ds){
+  const d = ds.id ? byId(ds.id) : null;
+  const what = ds.what;
+  if(what==="devis"){
+    askConfirm("Supprimer ce devis ?", "Le brouillon "+ds.doc+" sera définitivement supprimé.", ()=>{
+      d.devis = d.devis.filter(x=>x.id!==ds.doc);
+      stampHist(d, "Brouillon de devis "+ds.doc+" supprimé.");
+      showToast("Devis supprimé.");
+    });
+  } else if(what==="facture"){
+    askConfirm("Supprimer cette facture ?", "Le brouillon "+ds.doc+" sera définitivement supprimé.", ()=>{
+      d.factures = d.factures.filter(x=>x.id!==ds.doc);
+      stampHist(d, "Brouillon de facture "+ds.doc+" supprimé.");
+      showToast("Facture supprimée.");
+    });
+  } else if(what==="paiement"){
+    askConfirm("Supprimer ce paiement ?", "Le paiement sera retiré de la facture, dont le reste dû sera recalculé.", ()=>{
+      const f = findFacture(d, ds.doc);
+      f.paiements = f.paiements.filter(x=>x.id!==ds.pid);
+      f.statut = factureStatutFromPayments(f);
+      if(f.statut==="Brouillon") f.statut = "Envoyée";
+      stampHist(d, "Paiement supprimé sur "+f.numero+".");
+      showToast("Paiement supprimé.");
+    });
+  } else if(what==="note"){
+    askConfirm("Supprimer cette note ?", "Cette note interne sera définitivement supprimée.", ()=>{
+      d.notes.splice(parseInt(ds.nid,10),1);
+      showToast("Note supprimée.");
+    });
+  } else if(what==="task"){
+    askConfirm("Supprimer cette tâche ?", "La tâche sera définitivement supprimée.", ()=>{
+      d.taches = (d.taches||[]).filter(x=>x.id!==ds.tid);
+      showToast("Tâche supprimée.");
+    });
+  } else if(what==="visite"){
+    askConfirm("Retirer la visite ?", "Le rendez-vous sera retiré de l’agenda ; le dossier repassera à programmer.", ()=>{
+      d.visiteDate = null; d.visiteHeure = null;
+      if(d.statut==="Planifié") d.statut = "Nouvelle";
+      stampHist(d, "Visite retirée de l’agenda.");
+      showToast("Visite retirée.");
+    }, "Retirer");
+  } else if(what==="diagnostic"){
+    askConfirm("Réinitialiser le diagnostic ?", "Tous les contrôles, photos et la synthèse de ce dossier seront effacés. Le rapport PDF ne sera plus disponible.", ()=>{
+      d.diagnostic = freshDiagnostic();
+      if(d.statut==="Rapport prêt") d.statut = d.visiteDate ? "Planifié" : "Nouvelle";
+      state.diagStep = 1;
+      stampHist(d, "Diagnostic réinitialisé.");
+      showToast("Diagnostic réinitialisé.");
+    }, "Réinitialiser");
+  } else if(what==="dossier"){
+    askConfirm("Supprimer ce dossier client ?", "Le dossier de "+d.client+" (diagnostic, devis, factures, chantier) sera définitivement supprimé. Cette action est irréversible.", ()=>{
+      DOSSIERS = DOSSIERS.filter(x=>x.id!==d.id);
+      state.dossierId = null; state.section = "dossiers";
+      showToast("Dossier supprimé.");
+    });
+  } else if(what==="incident"){
+    askConfirm("Supprimer cet incident ?", "L’incident sera retiré du chantier.", ()=>{
+      d.chantier.incidents.splice(parseInt(ds.idx,10),1);
+      showToast("Incident supprimé.");
+    });
+  } else if(what==="contract"){
+    askConfirm("Supprimer ce contrat d’entretien ?", "La fiche du contrat sera définitivement supprimée.", ()=>{
+      CONTRACTS.splice(parseInt(ds.idx,10),1);
+      showToast("Contrat supprimé.");
+    });
+  } else if(what==="parrainage"){
+    askConfirm("Supprimer ce parrainage ?", "La recommandation sera définitivement supprimée.", ()=>{
+      PARRAINAGES.splice(parseInt(ds.idx,10),1);
+      showToast("Parrainage supprimé.");
+    });
+  }
+}
+
+// ---------- Confirmation de suppression ----------
+let CONFIRM_RUN = null;
+function askConfirm(title, text, run, yesLabel){
+  CONFIRM_RUN = run;
+  state.modal = {type:"confirm", title, text, yesLabel:yesLabel||"Supprimer"};
+  render();
+}
+function modalConfirm(m){
+  return modalWrap(m.title, `<p style="margin:0 0 18px;line-height:1.5">${esc(m.text)}</p>
+    <div class="modal-actions"><button class="btn-danger" data-action="confirm-yes">${esc(m.yesLabel)}</button><button class="btn-secondary" data-action="modal-close">Annuler</button></div>`);
+}
+
+// ---------- Assistant de création : devis et facture ----------
+const WZ_STEPS = {
+  devis: ["Client", "Prestations", "Paiement", "Récapitulatif"],
+  facture: ["Devis", "Règlement", "Récapitulatif"]
+};
+
+// Prestations du catalogue suggérées d'après les constats du diagnostic (jamais imposées).
+const ANOMALY_TO_SERVICE = {
+  casse:"COUV-TUILE", fissure:"COUV-TUILE", deplace:"COUV-TUILE", souleve:"COUV-TUILE", manquant:"COUV-TUILE", malfixe:"COUV-TUILE", use:"COUV-TUILE",
+  joint:"ETAN-JOINT", recouvrement:"ETAN-JOINT", perce:"ETAN-JOINT", eau:"ETAN-JOINT",
+  mousse:"COUV-DEMOUSS", ruissellement:"ZING-GOUT", corrode:"ZING-GOUT",
+  bois_humide:"CHAR-REP", moisissure:"CHAR-REP", insectes:"CHAR-REP", affaisse:"CHAR-REP"
+};
+function diagSuggestions(d){
+  const out = [];
+  POINTS.forEach(p=>{
+    const pt = d.diagnostic.points[p];
+    if(!["Défaut constaté","À surveiller","Urgent"].includes(pt.etat)) return;
+    (pt.problems||[]).forEach(pid=>{
+      const code = ANOMALY_TO_SERVICE[pid];
+      if(code && !out.find(o=>o.code===code)) out.push({code, reason:p});
+    });
+  });
+  return out;
+}
+
+function wzNew(kind, dossierId){
+  state.wizard = {kind, step:1, dossierId:dossierId||null, data:{}};
+  if(kind==="devis") wzInitDevis(); else wzInitFacture();
+  state.modal = {type:"wizard"};
+  render();
+}
+
+function wzInitDevis(){
+  const w = state.wizard, d = w.dossierId ? byId(w.dossierId) : null;
+  w.data = {objet: d ? d.motif : "", validite:30, lignes:[freshDevisLine()], acompte:"1", acomptePct:30, fois:1, mode:"Virement"};
+  if(d && d.devis.length){
+    const prev = latestDevis(d), pp = devisPaiement(prev);
+    Object.assign(w.data, {objet: prev.objet||d.motif, validite: prev.validite||30, lignes: prev.lignes.map(l=>Object.assign({},l)), acompte: pp.acompte?"1":"0", acomptePct: pp.acomptePct, fois: pp.fois, mode: pp.mode});
+  }
+}
+
+function wzInitFacture(){
+  const w = state.wizard;
+  w.data = {devisId:null, type:null, montant:"", echeance:"", mode:"Virement", fois:1};
+  wzPickDevisForDossier();
+}
+
+function wzAcceptedDevis(d){
+  const acc = d.devis.filter(x=>x.statut==="Accepté");
+  return acc.length ? acc[acc.length-1] : null;
+}
+
+function wzFactureTypes(d, dv){
+  const p = devisPaiement(dv);
+  const hasAc = d.factures.some(f=>f.devisId===dv.id && f.type==="Acompte");
+  const hasSolde = d.factures.some(f=>f.devisId===dv.id && f.type==="Solde");
+  const types = [];
+  if(p.acompte && !hasAc) types.push({v:"Acompte", label:"Facture d’acompte ("+p.acomptePct+" %)"});
+  if(!hasSolde) types.push({v:"Solde", label:(p.acompte||hasAc) ? "Facture de solde" : "Facture complète"});
+  return types;
+}
+
+function wzPickDevisForDossier(){
+  const w = state.wizard, x = w.data;
+  const d = w.dossierId ? byId(w.dossierId) : null;
+  const dv = d ? wzAcceptedDevis(d) : null;
+  x.devisId = dv ? dv.id : null;
+  const types = dv ? wzFactureTypes(d, dv) : [];
+  x.type = types.length ? types[0].v : null;
+  wzFactureDefaults();
+}
+
+function wzFactureDefaults(){
+  const w = state.wizard, x = w.data;
+  const d = w.dossierId ? byId(w.dossierId) : null;
+  const dv = d && x.devisId ? findDevis(d, x.devisId) : null;
+  if(!dv || !x.type){ x.montant = ""; return; }
+  const p = devisPaiement(dv);
+  const ttc = devisTotals(dv).ttcCt;
+  const acomptes = d.factures.filter(f=>f.devisId===dv.id && f.type==="Acompte").reduce((s,f)=>s+f.montantTtcCt,0);
+  const montant = x.type==="Acompte" ? acompteTtcCt(dv) : Math.max(0, ttc - acomptes);
+  x.montant = (montant/100).toFixed(2);
+  x.mode = p.mode;
+  x.fois = x.type==="Acompte" ? 1 : p.fois;
+  x.echeance = fmtDayMonth(addDays(TODAY_REF, 15));
+}
+
+// Relit les champs de l'assistant dans son état (appelé avant toute navigation ou re-rendu).
+function wzFlush(){
+  const w = state.wizard;
+  if(!w || !state.modal || state.modal.type!=="wizard") return;
+  document.querySelectorAll("[data-wz]").forEach(el=>{
+    const k = el.dataset.wz;
+    if(k==="dossier") return;
+    let v = el.value;
+    if(k==="validite"||k==="acomptePct"||k==="fois") v = parseInt(v,10);
+    w.data[k] = v;
+  });
+  const lignes = w.data.lignes;
+  if(lignes){
+    document.querySelectorAll(".wz-line").forEach(inp=>{
+      const l = lignes[parseInt(inp.dataset.idx,10)];
+      if(!l) return;
+      const f = inp.dataset.field;
+      if(f==="designation") l.designation = inp.value;
+      else if(f==="qte") l.qte = parseFloat(inp.value)||0;
+      else if(f==="prixUnitaire") l.prixUnitaireCt = Math.round((parseFloat(inp.value)||0)*100);
+      else if(f==="tva") l.tvaPct = parseFloat(inp.value)||0;
+    });
+  }
+}
+
+function wzDevisFromData(){
+  const x = state.wizard.data;
+  const lignes = x.lignes.filter(l=>l.designation.trim() && l.qte>0);
+  return {lignes, paiement:{acompte:x.acompte==="1", acomptePct:x.acomptePct, fois:x.fois, mode:x.mode}};
+}
+
+function wzTotalsHtml(dvLike){
+  const t = devisTotals(dvLike);
+  return `<div class="wz-tot"><span>Total HT</span><b>${fmtEuros(t.htCt)}</b></div><div class="wz-tot"><span>TVA</span><b>${fmtEuros(t.tvaCt)}</b></div><div class="wz-tot big"><span>Total TTC</span><b>${fmtEuros(t.ttcCt)}</b></div>`;
+}
+
+function wzScheduleHtml(dvLike){
+  const p = devisPaiement(dvLike), ttc = devisTotals(dvLike).ttcCt, ac = acompteTtcCt(dvLike);
+  const rows = [];
+  if(p.acompte) rows.push(`<div class="wz-sched"><span>Acompte ${p.acomptePct} % · à l’acceptation</span><b>${fmtEuros(ac)}</b></div>`);
+  buildEcheances(ttc-ac, p.fois, addDays(TODAY_REF, 15)).forEach((e,i,a)=>{
+    rows.push(`<div class="wz-sched"><span>${p.acompte?"Solde":"Règlement"}${a.length>1?" "+(i+1)+"/"+a.length:""} · ${esc(e.date)}</span><b>${fmtEuros(e.montantCt)}</b></div>`);
+  });
+  return rows.join("") + `<div class="wz-sched mode"><span>Mode de règlement</span><b>${esc(p.mode)}</b></div>`;
+}
+
+// Mise à jour "à chaud" des totaux, sans re-rendu (pour ne pas perdre le focus pendant la saisie).
+function wzUpdateLive(){
+  const w = state.wizard;
+  if(!w || w.kind!=="devis") return;
+  const tot = document.getElementById("wzTotals");
+  if(tot) tot.innerHTML = wzTotalsHtml(wzDevisFromData());
+  const rows = document.querySelectorAll(".wz-line-row");
+  rows.forEach((row,i)=>{
+    const l = w.data.lignes[i]; const el = row.querySelector(".wz-line-total");
+    if(l && el) el.textContent = fmtEuros(lineTotalHTct(l));
+  });
+  const sch = document.getElementById("wzSchedule");
+  if(sch) sch.innerHTML = wzScheduleHtml(wzDevisFromData());
+}
+
+function renderWizard(){
+  const w = state.wizard;
+  const steps = WZ_STEPS[w.kind];
+  const d = w.dossierId ? byId(w.dossierId) : null;
+  const last = w.step === steps.length;
+  const stepper = `<div class="wz-steps">${steps.map((s,i)=>`<div class="wz-step ${i+1===w.step?"on":(i+1<w.step?"done":"")}"><span>${i+1<w.step?"✓":i+1}</span><em>${esc(s)}</em></div>`).join("")}</div>`;
+  let body = "";
+  let nav = "";
+  if(w.kind==="devis") body = wzDevisStep(w, d); else body = wzFactureStep(w, d);
+
+  const prev = w.step>1 ? `<button class="btn-secondary" data-action="wz-prev">← Retour</button>` : `<button class="btn-secondary" data-action="modal-close">Annuler</button>`;
+  if(!last){
+    nav = `${prev}<button class="btn-primary" data-action="wz-next">Continuer →</button>`;
+  } else if(w.kind==="devis"){
+    nav = `${prev}<button class="btn-secondary" data-action="wz-create" data-send="0">Créer le devis</button><button class="btn-primary" data-action="wz-create" data-send="1">Créer et envoyer</button>`;
+  } else {
+    nav = `${prev}<button class="btn-secondary" data-action="wz-create" data-send="0">Créer la facture</button><button class="btn-primary" data-action="wz-create" data-send="1">Créer et envoyer</button>`;
+  }
+  const title = w.kind==="devis" ? "Nouveau devis" : "Nouvelle facture";
+  return `<div class="modal-overlay" data-action="modal-overlay"><div class="modal modal-wide">
+    <div class="modal-header"><h3>${title}</h3><button class="modal-close" data-action="modal-close">✕</button></div>
+    ${stepper}
+    <div class="wz-body">${body}</div>
+    <div class="modal-actions wz-nav">${nav}</div>
+  </div></div>`;
+}
+
+function wzClientCard(d){
+  if(!d) return `<div class="empty-note">Choisissez un dossier client pour continuer.</div>`;
+  return `<div class="wz-client"><div class="row-avatar">${initials(d.client)}</div><div><div class="row-title">${esc(d.client)}</div><div class="row-sub">${esc(d.adresse)}, ${esc(d.ville)}</div><div class="row-sub">${esc(d.email||"")}${d.telephone?" · "+esc(d.telephone):""}</div></div></div>`;
+}
+
+function wzDevisStep(w, d){
+  const x = w.data;
+  if(w.step===1){
+    const opts = visibleDossiers().map(dd=>`<option value="${dd.id}" ${dd.id===w.dossierId?"selected":""}>${esc(dd.client)} · ${esc(dd.ville)}</option>`).join("");
+    return `<p class="wz-intro">Commençons par le client et l’objet des travaux.</p>
+      <div class="form-field"><label>Dossier client</label><select data-wz="dossier" data-wz-rerender="1"><option value="">Choisir un client…</option>${opts}</select></div>
+      ${wzClientCard(d)}
+      <div class="form-field"><label>Objet des travaux</label><input type="text" data-wz="objet" value="${esc(x.objet)}" placeholder="Ex. Réparation de la couverture et de l’étanchéité"></div>
+      <div class="form-field"><label>Validité du devis</label><select data-wz="validite">${[15,30,60,90].map(n=>`<option value="${n}" ${x.validite===n?"selected":""}>${n} jours</option>`).join("")}</select></div>`;
+  }
+  if(w.step===2){
+    const sugg = d ? diagSuggestions(d).filter(sg=>!x.lignes.some(l=>l.code===sg.code)) : [];
+    const catalogOptions = SERVICE_CATALOG.map(s=>`<option value="${s.code}">${esc(s.label)} — ${fmtEuros(s.prixUnitaireCt)}</option>`).join("");
+    return `<p class="wz-intro">Ajoutez les prestations : chaque ligne apparaîtra à l’identique sur le devis et sur les factures.</p>
+      ${sugg.length ? `<div class="wz-sugg"><div class="wz-sugg-t">Suggéré d’après le diagnostic</div>${sugg.map(s=>{ const svc = SERVICE_CATALOG.find(c=>c.code===s.code); return `<button class="wz-chip" data-action="wz-add-sugg" data-code="${s.code}">+ ${esc(svc.label)} <small>${esc(s.reason)}</small></button>`; }).join("")}</div>` : ""}
+      <div class="wz-lines">
+        <div class="wz-line-head"><span>Désignation</span><span>Qté</span><span>PU HT €</span><span>TVA</span><span>Total HT</span><span></span></div>
+        ${x.lignes.map((l,i)=>`<div class="wz-line-row">
+          <input class="wz-line" data-idx="${i}" data-field="designation" value="${esc(l.designation)}" placeholder="Désignation">
+          <input class="wz-line" data-idx="${i}" data-field="qte" type="number" min="0" step="1" value="${l.qte}">
+          <input class="wz-line" data-idx="${i}" data-field="prixUnitaire" type="number" min="0" step="0.01" value="${(l.prixUnitaireCt/100).toFixed(2)}">
+          <select class="wz-line" data-idx="${i}" data-field="tva">${[0,5.5,10,20].map(t=>`<option value="${t}" ${l.tvaPct===t?"selected":""}>${t} %</option>`).join("")}</select>
+          <span class="wz-line-total">${fmtEuros(lineTotalHTct(l))}</span>
+          <button class="btn-ghost btn-sm" data-action="wz-remove-line" data-idx="${i}" ${x.lignes.length<2?"disabled":""}>✕</button>
+        </div>`).join("")}
+      </div>
+      <div class="wz-addbar"><button class="btn-secondary btn-sm" data-action="wz-add-line">+ Ligne libre</button>
+        <select id="wzCatalog"><option value="">+ Ajouter depuis le catalogue…</option>${catalogOptions}</select></div>
+      <div class="wz-totals" id="wzTotals">${wzTotalsHtml(wzDevisFromData())}</div>`;
+  }
+  if(w.step===3){
+    const acompte = x.acompte==="1";
+    const dvLike = wzDevisFromData();
+    return `<p class="wz-intro">Comment le client règle-t-il ? Ces conditions figureront sur le devis et détermineront les factures.</p>
+      <div class="wz-grid">
+        <div class="form-field"><label>Acompte à l’acceptation</label><select data-wz="acompte" data-wz-rerender="1"><option value="1" ${acompte?"selected":""}>Avec acompte</option><option value="0" ${!acompte?"selected":""}>Sans acompte</option></select></div>
+        ${acompte ? `<div class="form-field"><label>Montant de l’acompte</label><select data-wz="acomptePct" data-wz-rerender="1">${[20,30,40,50].map(n=>`<option value="${n}" ${x.acomptePct===n?"selected":""}>${n} %</option>`).join("")}</select></div>` : ""}
+        <div class="form-field"><label>${acompte?"Solde payable en":"Règlement en"}</label><select data-wz="fois" data-wz-rerender="1">${PAY_FOIS.map(n=>`<option value="${n}" ${x.fois===n?"selected":""}>${n===1?"1 fois":n+" fois"}</option>`).join("")}</select></div>
+        <div class="form-field"><label>Mode de règlement</label><select data-wz="mode" data-wz-rerender="1">${PAY_MODES.map(m=>`<option ${x.mode===m?"selected":""}>${m}</option>`).join("")}</select></div>
+      </div>
+      <div class="wz-preview"><div class="wz-sugg-t">Échéancier prévu</div><div id="wzSchedule">${wzScheduleHtml(dvLike)}</div></div>`;
+  }
+  const dvLike = wzDevisFromData();
+  return `<p class="wz-intro">Vérifiez avant de créer : rien n’est envoyé tant que vous ne le décidez pas.</p>
+    <div class="wz-recap">
+      <div class="wz-recap-row"><span>Client</span><b>${esc(d?d.client:"—")}</b></div>
+      <div class="wz-recap-row"><span>Objet</span><b>${esc(x.objet)}</b></div>
+      <div class="wz-recap-row"><span>Prestations</span><b>${dvLike.lignes.length} ligne${dvLike.lignes.length>1?"s":""}</b></div>
+      <div class="wz-recap-row"><span>Validité</span><b>${x.validite} jours</b></div>
+    </div>
+    <div class="wz-totals">${wzTotalsHtml(dvLike)}</div>
+    <div class="wz-preview"><div class="wz-sugg-t">Conditions de règlement</div>${wzScheduleHtml(dvLike)}</div>`;
+}
+
+function wzFactureStep(w, d){
+  const x = w.data;
+  const dv = d && x.devisId ? findDevis(d, x.devisId) : null;
+  if(w.step===1){
+    const dossiers = visibleDossiers().filter(dd=>dd.devis.some(v=>v.statut==="Accepté"));
+    const opts = dossiers.map(dd=>`<option value="${dd.id}" ${dd.id===w.dossierId?"selected":""}>${esc(dd.client)} · ${esc(dd.ville)}</option>`).join("");
+    const types = dv ? wzFactureTypes(d, dv) : [];
+    let info = "";
+    if(!dossiers.length) info = `<div class="empty-note">Aucun devis accepté à facturer pour l’instant.</div>`;
+    else if(d && !dv) info = `<div class="empty-note">Ce dossier n’a pas de devis accepté.</div>`;
+    else if(dv && !types.length) info = `<div class="empty-note">Toutes les factures de ce devis sont déjà créées.</div>`;
+    return `<p class="wz-intro">Choisissez le devis accepté à facturer.</p>
+      <div class="form-field"><label>Dossier client</label><select data-wz="dossier" data-wz-rerender="1"><option value="">Choisir un client…</option>${opts}</select></div>
+      ${wzClientCard(d)}
+      ${dv ? `<div class="wz-recap"><div class="wz-recap-row"><span>Devis accepté</span><b>${esc(dv.numero)} · ${fmtEuros(devisTotals(dv).ttcCt)} TTC</b></div><div class="wz-recap-row"><span>Conditions</span><b>${esc(paiementSummary(dv).replace("Règlement : ",""))}</b></div></div>` : ""}
+      ${types.length ? `<div class="form-field"><label>Type de facture</label><select data-wz="type" data-wz-rerender="1">${types.map(t=>`<option value="${t.v}" ${x.type===t.v?"selected":""}>${esc(t.label)}</option>`).join("")}</select></div>` : info}`;
+  }
+  if(w.step===2){
+    const montantCt = Math.round((parseFloat(x.montant)||0)*100);
+    const ech = buildEcheances(montantCt, x.type==="Acompte"?1:x.fois, addDays(TODAY_REF,15));
+    if(x.echeance) ech[0].date = x.echeance;
+    return `<p class="wz-intro">Montant, échéance et mode de règlement.</p>
+      <div class="wz-grid">
+        <div class="form-field"><label>Montant TTC (€)</label><input type="number" min="0" step="0.01" data-wz="montant" value="${esc(x.montant)}"></div>
+        <div class="form-field"><label>Première échéance</label><input type="text" data-wz="echeance" value="${esc(x.echeance)}" placeholder="ex. 27 sept."></div>
+        <div class="form-field"><label>Mode de règlement</label><select data-wz="mode" data-wz-rerender="1">${PAY_MODES.map(m=>`<option ${x.mode===m?"selected":""}>${m}</option>`).join("")}</select></div>
+        ${x.type==="Acompte" ? "" : `<div class="form-field"><label>Payable en</label><select data-wz="fois" data-wz-rerender="1">${PAY_FOIS.map(n=>`<option value="${n}" ${x.fois===n?"selected":""}>${n===1?"1 fois":n+" fois"}</option>`).join("")}</select></div>`}
+      </div>
+      <div class="wz-preview"><div class="wz-sugg-t">Échéancier</div>${ech.map((e,i)=>`<div class="wz-sched"><span>${ech.length>1?(i+1)+"/"+ech.length+" · ":""}${esc(e.date)}</span><b>${fmtEuros(e.montantCt)}</b></div>`).join("")}<div class="wz-sched mode"><span>Mode de règlement</span><b>${esc(x.mode)}</b></div></div>`;
+  }
+  const montantCt = Math.round((parseFloat(x.montant)||0)*100);
+  return `<p class="wz-intro">Vérifiez avant de créer.</p>
+    <div class="wz-recap">
+      <div class="wz-recap-row"><span>Client</span><b>${esc(d?d.client:"—")}</b></div>
+      <div class="wz-recap-row"><span>Type</span><b>${x.type==="Acompte" ? "Facture d’acompte" : (dv && (devisPaiement(dv).acompte || d.factures.some(f=>f.devisId===dv.id&&f.type==="Acompte")) ? "Facture de solde" : "Facture complète")}</b></div>
+      <div class="wz-recap-row"><span>Détail</span><b>Reprend les ${dv?dv.lignes.length:0} lignes du devis</b></div>
+      <div class="wz-recap-row"><span>Règlement</span><b>${x.type==="Acompte"||x.fois===1?"en une fois":"en "+x.fois+" fois"} · ${esc(x.mode)}</b></div>
+    </div>
+    <div class="wz-totals"><div class="wz-tot big"><span>Montant TTC</span><b>${fmtEuros(montantCt)}</b></div></div>`;
+}
+
+function wzNext(){
+  wzFlush();
+  const w = state.wizard, x = w.data;
+  const d = w.dossierId ? byId(w.dossierId) : null;
+  if(w.kind==="devis"){
+    if(w.step===1){
+      if(!d){ showToast("Choisissez un dossier client."); return; }
+      if(!x.objet.trim()){ showToast("Indiquez l’objet des travaux."); return; }
+    }
+    if(w.step===2){
+      if(!wzDevisFromData().lignes.some(l=>l.prixUnitaireCt>0)){ showToast("Ajoutez au moins une prestation avec un prix."); return; }
+    }
+  } else {
+    if(w.step===1){
+      if(!d || !x.devisId || !x.type){ showToast("Choisissez un dossier avec un devis à facturer."); return; }
+    }
+    if(w.step===2){
+      if(!(parseFloat(x.montant)>0)){ showToast("Indiquez un montant."); return; }
+    }
+  }
+  w.step++;
+  render();
+}
+
+function wzCreate(send){
+  wzFlush();
+  const w = state.wizard, x = w.data, d = byId(w.dossierId);
+  if(w.kind==="devis"){
+    const numero = nextDevisId(d);
+    const dvLike = wzDevisFromData();
+    const dv = {id:numero, numero, version:d.devis.length+1, statut:"Brouillon", lignes:dvLike.lignes, dateCreation:"12 sept.", dateEnvoi:null, objet:x.objet.trim(), validite:x.validite, paiement:dvLike.paiement};
+    d.devis.push(dv);
+    d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:"Devis "+numero+" créé ("+fmtEuros(devisTotals(dv).ttcCt)+" TTC)."});
+    state.wizard = null;
+    if(send) state.modal = {type:"send", id:d.id, kind:"devis", docId:dv.id, phase:"choose"};
+    else { state.modal = null; state.section="dossiers"; state.dossierId=d.id; state.dossierTab="devis"; }
+    render();
+    if(!send) showToast("Devis créé en brouillon.");
+    return;
+  }
+  const dv = findDevis(d, x.devisId);
+  const f = createFacture(d, dv, x.type, {montantCt: Math.round((parseFloat(x.montant)||0)*100), echeance:x.echeance, mode:x.mode, fois:x.fois});
+  state.wizard = null;
+  if(send) state.modal = {type:"send", id:d.id, kind:"facture", docId:f.id, phase:"choose"};
+  else { state.modal = null; state.section="dossiers"; state.dossierId=d.id; state.dossierTab="devis"; }
+  render();
+  if(!send) showToast("Facture créée en brouillon.");
 }
 
 async function prepareSend(d, channel){
@@ -2220,13 +2739,15 @@ function renderFactureCard(d, f){
   return `
     <div class="card devis-sub-card">
       <div class="card-header"><h3 style="font-size:13.5px">${esc(f.numero)} · ${esc(f.type)}</h3><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${badge(f.statut, factureStatutCls(f.statut))}<button class="btn-ghost btn-sm" data-action="doc-pdf" data-id="${d.id}" data-kind="facture" data-doc="${f.id}">PDF</button>${hasPermission("invoice.create")?`<button class="btn-secondary btn-sm" data-action="modal-send-doc" data-id="${d.id}" data-kind="facture" data-doc="${f.id}">Envoyer</button>`:""}</div></div>
+      <p class="form-help" style="margin:0 0 10px">${(f.echeances||[]).length>1 ? "Règlement en "+f.echeances.length+" fois par "+esc(f.mode||"virement").toLowerCase()+" : "+echeancesStatus(f).map(e=>fmtEuros(e.montantCt)+" le "+esc(e.date)+(e.reglee?" ✓":"")).join(" · ") : "Règlement en une fois par "+esc((f.mode||"Virement").toLowerCase())}</p>
       <div class="form-field"><label>Libellé</label><input type="text" id="factureLibelle-${f.id}" value="${esc(f.libelle||"")}" ${editable?"":"disabled"}></div>
       <div class="form-field"><label>Montant TTC (€)</label><input type="number" min="0" step="0.01" id="factureMontant-${f.id}" value="${(f.montantTtcCt/100).toFixed(2)}" ${editable?"":"disabled"}></div>
       <div class="form-field"><label>Échéance</label><input type="text" id="factureEcheance-${f.id}" placeholder="ex. 30 sept." value="${esc(f.echeance||"")}" ${editable?"":"disabled"}></div>
       ${editable ? `
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn-secondary btn-sm" data-action="facture-save" data-id="${d.id}" data-fid="${f.id}">Enregistrer</button>
-        <button class="btn-primary btn-sm" data-action="facture-send" data-id="${d.id}" data-fid="${f.id}">Envoyer au client</button>
+        <button class="btn-primary btn-sm" data-action="facture-send" data-id="${d.id}" data-fid="${f.id}">Marquer comme envoyée</button>
+        <button class="btn-ghost btn-sm" data-action="ask-delete" data-what="facture" data-id="${d.id}" data-doc="${f.id}">Supprimer</button>
       </div>` : `
       <div class="devis-payments">
         <div class="row-sub" style="margin-bottom:8px">Encaissé ${fmtEuros(paidCt)} sur ${fmtEuros(f.montantTtcCt)}${resteCt>0?` · reste ${fmtEuros(resteCt)}`:""}</div>
@@ -2235,6 +2756,7 @@ function renderFactureCard(d, f){
             <div class="row-sub">${esc(p.date)} · ${esc(p.mode)}${p.mode==="Virement"?" · "+esc(p.virementStatut):""}</div>
             <div style="display:flex;align-items:center;gap:10px">
               ${fmtEuros(p.montantCt)}
+              ${hasPermission("payment.register") ? `<button class="btn-ghost btn-sm" data-action="ask-delete" data-what="paiement" data-id="${d.id}" data-doc="${f.id}" data-pid="${p.id}">✕</button>` : ""}
               ${p.mode==="Virement" && p.virementStatut==="Annoncé" && hasPermission("payment.register") ? `<button class="btn-ghost btn-sm" data-action="payment-confirm" data-id="${d.id}" data-fid="${f.id}" data-pid="${p.id}">Confirmer réception</button>` : ""}
             </div>
           </div>`).join("")}
@@ -2243,7 +2765,7 @@ function renderFactureCard(d, f){
           <label>Nouveau paiement</label>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <input type="number" min="0" step="0.01" id="paiementMontant-${f.id}" placeholder="Montant €" style="max-width:120px">
-            <select id="paiementMode-${f.id}"><option>Espèces</option><option>Chèque</option><option>Virement</option></select>
+            <select id="paiementMode-${f.id}">${PAY_MODES.map(m=>`<option ${(f.mode||"")===m?"selected":""}>${m}</option>`).join("")}</select>
             <input type="text" id="paiementDate-${f.id}" placeholder="ex. 15 sept." style="max-width:110px">
             <button class="btn-secondary btn-sm" data-action="payment-add" data-id="${d.id}" data-fid="${f.id}">Enregistrer le paiement</button>
           </div>
@@ -2263,7 +2785,7 @@ function renderDossierDevis(d){
     <div class="card" style="text-align:center;padding:32px 20px">
       <h3 style="margin-bottom:6px">Aucun devis pour ce dossier</h3>
       <p style="color:var(--muted);margin-bottom:16px">Créez un premier devis à partir des travaux identifiés lors du diagnostic.</p>
-      ${hasPermission("quote.create") ? `<button class="btn-primary btn-sm" data-action="devis-new" data-id="${d.id}">+ Nouveau devis</button>` : ""}
+      ${hasPermission("quote.create") ? `<button class="btn-primary btn-sm" data-action="wizard-devis" data-id="${d.id}">+ Nouveau devis</button>` : ""}
     </div>`;
   } else {
     const totals = devisTotals(dv);
@@ -2303,10 +2825,12 @@ function renderDossierDevis(d){
           ${canEditDv?`<button class="btn-primary btn-sm" data-action="devis-save" data-id="${d.id}">Enregistrer</button>`:""}
           ${dv.statut==="Brouillon"?`<button class="btn-secondary btn-sm" data-action="devis-send" data-id="${d.id}">Marquer comme envoyé</button>`:""}
           ${dv.statut==="Envoyé"?`<button class="btn-secondary btn-sm" data-action="devis-accept" data-id="${d.id}">Marquer accepté</button><button class="btn-ghost btn-sm" data-action="devis-reject" data-id="${d.id}">Marquer refusé</button>`:""}
-          ${dv.statut!=="Brouillon"?`<button class="btn-ghost btn-sm" data-action="devis-new-version" data-id="${d.id}">+ Nouvelle version</button>`:""}
+          ${dv.statut!=="Brouillon"?`<button class="btn-ghost btn-sm" data-action="wizard-devis" data-id="${d.id}">+ Nouvelle version</button>`:""}
           <button class="btn-ghost btn-sm" data-action="doc-pdf" data-id="${d.id}" data-kind="devis" data-doc="${dv.id}">Télécharger le PDF</button>
           ${hasPermission("quote.send")?`<button class="btn-secondary btn-sm" data-action="modal-send-doc" data-id="${d.id}" data-kind="devis" data-doc="${dv.id}">Envoyer au client</button>`:""}
+          ${dv.statut==="Brouillon" && hasPermission("quote.create")?`<button class="btn-ghost btn-sm" data-action="ask-delete" data-what="devis" data-id="${d.id}" data-doc="${dv.id}">Supprimer</button>`:""}
         </div>
+        <p class="form-help" style="margin-top:10px">${esc(paiementSummary(dv))}</p>
         ${dv.dateEnvoi?`<p class="form-help" style="margin-top:8px">Envoyé le ${esc(dv.dateEnvoi)}</p>`:""}
       </div>
       ${d.devis.length>1?`
@@ -2319,10 +2843,7 @@ function renderDossierDevis(d){
   const facturesBlock = `
     <div class="card">
       <div class="card-header"><h3>Factures</h3>
-        ${dv && dv.statut==="Accepté" ? `<div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn-secondary btn-sm" data-action="facture-new" data-id="${d.id}" data-type="Acompte">+ Facture d’acompte</button>
-          <button class="btn-secondary btn-sm" data-action="facture-new" data-id="${d.id}" data-type="Solde">+ Facture de solde</button>
-        </div>` : ""}
+        ${dv && dv.statut==="Accepté" && hasPermission("invoice.create") ? `<button class="btn-secondary btn-sm" data-action="wizard-facture" data-id="${d.id}">+ Nouvelle facture</button>` : ""}
       </div>
       ${!d.factures.length ? `<div class="empty-note">${dv && dv.statut==="Accepté" ? "Aucune facture pour l’instant." : "Le devis doit être accepté avant de pouvoir facturer."}</div>` : d.factures.map(f=>renderFactureCard(d,f)).join("")}
     </div>`;
@@ -2905,6 +3426,8 @@ function buildModal(){
   if(m.type==="choose") return modalChooseDossier();
   if(m.type==="info") return modalInfo(m.msg);
   if(m.type==="send") return modalSendClient(byId(m.id));
+  if(m.type==="wizard") return renderWizard();
+  if(m.type==="confirm") return modalConfirm(m);
   return "";
 }
 
@@ -3239,7 +3762,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const d = byId(t.dataset.id);
       const prev = latestDevis(d);
       const numero = nextDevisId(d);
-      d.devis.push({ id:numero, numero, version:d.devis.length+1, statut:"Brouillon", lignes:prev.lignes.map(l=>Object.assign({},l)), dateCreation:"12 sept.", dateEnvoi:null });
+      d.devis.push({ id:numero, numero, version:d.devis.length+1, statut:"Brouillon", lignes:prev.lignes.map(l=>Object.assign({},l)), dateCreation:"12 sept.", dateEnvoi:null, objet:prev.objet, validite:prev.validite, paiement:prev.paiement?Object.assign({},prev.paiement):undefined });
       showToast("Nouvelle version du devis créée.");
       render();
       return;
@@ -3301,19 +3824,23 @@ document.addEventListener("DOMContentLoaded", ()=>{
       render();
       return;
     }
-    if(action==="facture-new"){
-      const d = byId(t.dataset.id);
-      const type = t.dataset.type;
-      const dv = latestDevis(d);
-      if(d.factures.some(f=>f.devisId===dv.id && f.type===type)){ showToast("Une facture "+type.toLowerCase()+" existe déjà pour ce devis."); return; }
-      const numero = nextFactureId(d);
-      const totals = devisTotals(dv);
-      const acomptes = d.factures.filter(x=>x.devisId===dv.id && x.type==="Acompte").reduce((s,x)=>s+x.montantTtcCt,0);
-      const montantTtcCt = type==="Acompte" ? Math.round(totals.ttcCt*0.3) : Math.max(0, totals.ttcCt - acomptes);
-      d.factures.push({ id:numero, numero, type, devisId:dv.id, libelle:type==="Acompte" ? "Acompte de 30 %" : "Solde des travaux", montantTtcCt, statut:"Brouillon", date:"12 sept.", echeance:null, paiements:[] });
-      render();
-      return;
+    if(action==="ask-delete"){ askDelete(t.dataset); return; }
+    if(action==="wizard-devis"){ wzNew("devis", t.dataset.id||null); return; }
+    if(action==="wizard-facture"){ wzNew("facture", t.dataset.id||null); return; }
+    if(action==="wz-next"){ wzNext(); return; }
+    if(action==="wz-prev"){ wzFlush(); state.wizard.step = Math.max(1, state.wizard.step-1); render(); return; }
+    if(action==="wz-create"){ wzCreate(t.dataset.send==="1"); return; }
+    if(action==="wz-add-line"){ wzFlush(); state.wizard.data.lignes.push(freshDevisLine()); render(); return; }
+    if(action==="wz-remove-line"){ wzFlush(); const ls = state.wizard.data.lignes; ls.splice(parseInt(t.dataset.idx,10),1); if(!ls.length) ls.push(freshDevisLine()); render(); return; }
+    if(action==="wz-add-sugg"){
+      wzFlush();
+      const svc = SERVICE_CATALOG.find(c=>c.code===t.dataset.code);
+      const ls = state.wizard.data.lignes;
+      const line = freshDevisLine({designation:svc.label, qte:1, prixUnitaireCt:svc.prixUnitaireCt, tvaPct:svc.tvaPct, code:svc.code});
+      if(ls.length===1 && !ls[0].designation && !ls[0].prixUnitaireCt) ls[0] = line; else ls.push(line);
+      render(); return;
     }
+    if(action==="confirm-yes"){ const fn = CONFIRM_RUN; CONFIRM_RUN = null; state.modal = null; if(fn) fn(); render(); return; }
     if(action==="facture-save"){
       const d = byId(t.dataset.id);
       const f = d.factures.find(x=>x.id===t.dataset.fid);
@@ -3402,6 +3929,30 @@ document.addEventListener("DOMContentLoaded", ()=>{
     savePointFieldsFromDOM();
     saveSynthFieldsFromDOM();
     saveDevisLinesFromDOM();
+    if(e.target.dataset && e.target.dataset.wz){
+      wzFlush();
+      const k = e.target.dataset.wz;
+      if(k==="dossier"){
+        state.wizard.dossierId = e.target.value || null;
+        if(state.wizard.kind==="devis") wzInitDevis(); else wzInitFacture();
+        render();
+      } else if(e.target.dataset.wzRerender){
+        if(state.wizard.kind==="facture" && k==="type") wzFactureDefaults();
+        render();
+      } else wzUpdateLive();
+      return;
+    }
+    if(e.target.classList && e.target.classList.contains("wz-line")){ wzFlush(); wzUpdateLive(); return; }
+    if(e.target.id==="wzCatalog"){
+      wzFlush();
+      const svc = SERVICE_CATALOG.find(c=>c.code===e.target.value);
+      if(svc){
+        const ls = state.wizard.data.lignes;
+        const line = freshDevisLine({designation:svc.label, qte:1, prixUnitaireCt:svc.prixUnitaireCt, tvaPct:svc.tvaPct, code:svc.code});
+        if(ls.length===1 && !ls[0].designation && !ls[0].prixUnitaireCt) ls[0] = line; else ls.push(line);
+      }
+      render(); return;
+    }
     if(e.target.id==="devisCatalogSel"){
       const code = e.target.value;
       if(code){
