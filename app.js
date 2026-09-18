@@ -878,48 +878,79 @@ function docTotalsHtml(lines){
   return `<div class="pp-totals">${lines.map(([label, val, big])=>`<div class="pp-tot${big?" big":""}"><span>${esc(label)}</span><b>${esc(val)}</b></div>`).join("")}</div>`;
 }
 
-function docShell(d, o){
-  const infoCards = `<div class="pp-cards c2 pp-docrow">
+function docRowsFromDevis(dv){
+  return dv.lignes.map(l=>`<tr><td>${esc(l.designation||"—")}</td><td class="r">${l.qte}</td><td class="r">${fmtEuros(l.prixUnitaireCt)}</td><td class="r">${l.tvaPct} %</td><td class="r">${fmtEuros(lineTotalHTct(l))}</td></tr>`);
+}
+
+function docSubRow(text){
+  return `<tr class="pp-tbl-h2"><td colspan="5">${esc(text)}</td></tr>`;
+}
+
+// Découpe les lignes en pages : 1 page jusqu'à 6 lignes, sinon 1re page (infos client, sans totaux),
+// pages intermédiaires (tableau seul) puis dernière page (tableau + conditions + totaux).
+function docPaginate(n){
+  if(n<=6) return [{from:0, to:n, first:true, last:true}];
+  const pages = [];
+  let take = Math.min(9, n-3);
+  pages.push({from:0, to:take, first:true, last:false});
+  let start = take;
+  while(n-start > 8){
+    take = Math.min(15, n-start-3);
+    pages.push({from:start, to:start+take, first:false, last:false});
+    start += take;
+  }
+  pages.push({from:start, to:n, first:false, last:true});
+  return pages;
+}
+
+function docPage(d, o, pg, idx, total){
+  const info = pg.first ? `<div class="pp-cards c2 pp-docrow">
       ${ppCard("house","Client",`<b>${esc(d.client)}</b><br>${esc(d.adresse)}, ${esc(d.ville)}<br>${esc(d.email||"")}${d.telephone?" · "+esc(d.telephone):""}`)}
       ${ppCard("clipboard","Détails",o.details)}
-    </div>`;
-  const body = `${infoCards}
-    <div class="pp-card pp-tablecard"><div class="pp-fit pp-tblwrap">${o.table}</div></div>
-    <div class="pp-vig">
+    </div>` : "";
+  const more = pg.last ? "" : `<div class="pp-tbl-more">Suite page ${idx+2} / ${total} →</div>`;
+  const banner = pg.last ? `<div class="pp-vig">
       <div class="pp-vig-main"><div class="pp-vig-ic">${iconSvg(o.bannerIcon||"shield",40)}</div><div class="pp-vig-body"><div class="pp-vig-label">${esc(o.bannerLabel)}</div><div class="pp-vig-txt pp-fit">${o.bannerText}</div></div></div>
       ${o.totals}
-    </div>`;
+    </div>` : "";
+  const body = `${info}
+    <div class="pp-card pp-tablecard"><div class="pp-fit pp-tblwrap">${docTable(o.rows.slice(pg.from, pg.to).join(""))}${more}</div></div>
+    ${banner}`;
   return ppShell(d, {
     photo: ppPhoto("cover"),
     photoAlign: "xMinYMid",
     topTitle: o.topTitle,
     topNum: o.topNum,
     icon: "doc",
-    zone: o.zone,
+    zone: pg.first ? o.zone : (o.zoneCont||"Suite"),
     title: o.title,
     titleFs: 46,
     pill: o.pill,
     body,
-    pagenum: false
+    pagenum: total>1
   });
+}
+
+function docPages(d, o){
+  const pgs = docPaginate(o.rows.length);
+  return `<div class="pdf-doc">${pgs.map((pg,i)=>docPage(d, o, pg, i, pgs.length)).join("")}</div>`;
 }
 
 function renderDevisDoc(d, dv){
   const t = devisTotals(dv);
-  const rows = dv.lignes.map(l=>`<tr><td>${esc(l.designation||"—")}</td><td class="r">${l.qte}</td><td class="r">${fmtEuros(l.prixUnitaireCt)}</td><td class="r">${l.tvaPct} %</td><td class="r">${fmtEuros(lineTotalHTct(l))}</td></tr>`).join("");
-  const page = docShell(d, {
+  return docPages(d, {
     topTitle: "Devis",
     topNum: "N° "+dv.numero+(dv.version>1?" · v"+dv.version:""),
     zone: "Proposition commerciale",
+    zoneCont: "Suite du devis",
     title: "Devis",
     pill: docPill("devis", dv),
     details: `Date : ${esc(dv.dateEnvoi||dv.dateCreation||"12 sept.")}<br>Validité : 30 jours<br>Dossier ${esc(d.id)} — ${esc(d.motif)}`,
-    table: docTable(rows),
+    rows: docRowsFromDevis(dv),
     bannerLabel: "Conditions",
     bannerText: "Devis valable 30 jours à compter de sa date d’émission. Acompte de 30 % à l’acceptation. Pour accepter : réponse écrite ou signature précédée de la mention « Bon pour accord ». Document de démonstration : conditions à adapter.",
     totals: docTotalsHtml([["Total HT", fmtEuros(t.htCt)], ["TVA", fmtEuros(t.tvaCt)], ["Total TTC", fmtEuros(t.ttcCt), true]])
   });
-  return `<div class="pdf-doc">${page}</div>`;
 }
 
 function renderFactureDoc(d, f){
@@ -927,24 +958,47 @@ function renderFactureDoc(d, f){
   const dv = findDevis(d, f.devisId);
   const paid = facturePaidCt(f);
   const reste = Math.max(0, f.montantTtcCt - paid);
-  const rows = `<tr><td>${esc(f.libelle||f.type)}${dv?`<br><span class="pp-tbl-sub">Rappel : devis ${esc(dv.numero)} — ${fmtEuros(devisTotals(dv).ttcCt)} TTC</span>`:""}</td><td class="r">1</td><td class="r">${fmtEuros(t.htCt)}</td><td class="r">${t.htCt?Math.round(t.tvaCt/t.htCt*100):0} %</td><td class="r">${fmtEuros(t.htCt)}</td></tr>`;
   const pays = (f.paiements||[]).map(p=>`${esc(p.date)} · ${esc(p.mode)}${p.mode==="Virement"?" ("+esc(p.virementStatut)+")":""} : ${fmtEuros(p.montantCt)}`).join("<br>");
-  const totals = [["Total HT", fmtEuros(t.htCt)], ["TVA", fmtEuros(t.tvaCt)], ["Total TTC", fmtEuros(t.ttcCt), true]];
+
+  // Le détail des travaux est celui du devis : mêmes libellés, mêmes quantités.
+  let rows;
+  if(dv){
+    rows = [docSubRow(f.type==="Acompte" ? "Travaux prévus (détail du devis accepté)" : "Travaux réalisés")].concat(docRowsFromDevis(dv));
+  } else {
+    rows = [`<tr><td>${esc(f.libelle||f.type)}</td><td class="r">1</td><td class="r">${fmtEuros(t.htCt)}</td><td class="r">—</td><td class="r">${fmtEuros(t.htCt)}</td></tr>`];
+  }
+
+  const totals = [];
+  if(dv){
+    const dt = devisTotals(dv);
+    if(f.type==="Acompte"){
+      if(paid===0) totals.push(["Total des travaux TTC", fmtEuros(dt.ttcCt)]);
+      totals.push(["Acompte 30 % HT", fmtEuros(t.htCt)], ["TVA", fmtEuros(t.tvaCt)], ["Acompte TTC", fmtEuros(t.ttcCt), true]);
+    } else {
+      const acompte = d.factures.filter(x=>x.devisId===dv.id && x.type==="Acompte" && x.id!==f.id).reduce((s,x)=>s+x.montantTtcCt,0);
+      totals.push(["Total des travaux TTC", fmtEuros(dt.ttcCt)]);
+      if(acompte>0) totals.push(["Acompte déjà facturé", "− "+fmtEuros(acompte)]);
+      totals.push(["Solde TTC (dont TVA "+fmtEuros(t.tvaCt)+")", fmtEuros(t.ttcCt), true]);
+    }
+  } else {
+    totals.push(["Total HT", fmtEuros(t.htCt)], ["TVA", fmtEuros(t.tvaCt)], ["Total TTC", fmtEuros(t.ttcCt), true]);
+  }
   if(paid>0){ totals.push(["Déjà réglé", fmtEuros(paid)]); totals.push(["Reste à payer", fmtEuros(reste)]); }
-  const page = docShell(d, {
+
+  return docPages(d, {
     topTitle: "Facture",
     topNum: "N° "+f.numero,
     zone: f.type==="Acompte" ? "Facture d’acompte" : "Facture de solde",
+    zoneCont: "Suite de la facture",
     title: "Facture",
     pill: docPill("facture", f),
     details: `Date : ${esc(f.date||"12 sept.")}<br>Échéance : ${esc(f.echeance||"à réception")}<br>Dossier ${esc(d.id)} — ${esc(d.motif)}`,
-    table: docTable(rows),
+    rows,
     bannerIcon: "check",
     bannerLabel: paid>0 ? "Règlements reçus" : "Règlement",
     bannerText: (paid>0 ? pays+"<br>" : "") + "Règlement par virement, chèque ou espèces. Facture de démonstration : mentions légales et coordonnées bancaires à renseigner.",
     totals: docTotalsHtml(totals)
   });
-  return `<div class="pdf-doc">${page}</div>`;
 }
 
 function docHtml(d, kind, docId){
@@ -1110,8 +1164,8 @@ function addSampleDocs(list){
     d.devis = [dv];
     d.montant = Math.round(ttc/100);
     d.factures = [
-      {id:"TP-1041-F1", numero:"TP-1041-F1", type:"Acompte", devisId:dv.id, libelle:"Acompte 30 % — "+dv.numero, montantTtcCt:acompte, statut:"Payée", date:"24 juil.", echeance:"3 août", paiements:[{id:"TP-1041-F1-P1", montantCt:acompte, mode:"Virement", date:"26 juil.", virementStatut:"Confirmé"}]},
-      {id:"TP-1041-F2", numero:"TP-1041-F2", type:"Solde", devisId:dv.id, libelle:"Solde — "+dv.numero, montantTtcCt:ttc-acompte, statut:"Payée", date:"29 août", echeance:"12 sept.", paiements:[{id:"TP-1041-F2-P1", montantCt:ttc-acompte, mode:"Chèque", date:"2 sept.", virementStatut:null}]}
+      {id:"TP-1041-F1", numero:"TP-1041-F1", type:"Acompte", devisId:dv.id, libelle:"Acompte de 30 %", montantTtcCt:acompte, statut:"Payée", date:"24 juil.", echeance:"3 août", paiements:[{id:"TP-1041-F1-P1", montantCt:acompte, mode:"Virement", date:"26 juil.", virementStatut:"Confirmé"}]},
+      {id:"TP-1041-F2", numero:"TP-1041-F2", type:"Solde", devisId:dv.id, libelle:"Solde des travaux", montantTtcCt:ttc-acompte, statut:"Payée", date:"29 août", echeance:"12 sept.", paiements:[{id:"TP-1041-F2-P1", montantCt:ttc-acompte, mode:"Chèque", date:"2 sept.", virementStatut:null}]}
     ];
     const ch = freshChantier();
     ch.statut = "Clôturé"; ch.equipe = ["Marc Petit","Nadia Cools"]; ch.dateDebut = "4 août"; ch.dateFin = "28 août";
@@ -1126,7 +1180,7 @@ function addSampleDocs(list){
     d.devis = [dv];
     d.montant = Math.round(devisTotals(dv).ttcCt/100);
     d.commercialStage = "Gagné";
-    d.factures = [{id:"TP-1043-F1", numero:"TP-1043-F1", type:"Solde", devisId:dv.id, libelle:"Contrôle annuel de toiture — "+dv.numero, montantTtcCt:devisTotals(dv).ttcCt, statut:"Envoyée", date:"10 sept.", echeance:"26 sept.", paiements:[]}];
+    d.factures = [{id:"TP-1043-F1", numero:"TP-1043-F1", type:"Solde", devisId:dv.id, libelle:"Solde des travaux", montantTtcCt:devisTotals(dv).ttcCt, statut:"Envoyée", date:"10 sept.", echeance:"26 sept.", paiements:[]}];
     const ch = freshChantier(); ch.statut = "Planifié"; ch.dateDebut = "14 sept."; ch.equipe = ["Yanis Costa"];
     d.chantier = ch;
   }
@@ -3254,8 +3308,9 @@ document.addEventListener("DOMContentLoaded", ()=>{
       if(d.factures.some(f=>f.devisId===dv.id && f.type===type)){ showToast("Une facture "+type.toLowerCase()+" existe déjà pour ce devis."); return; }
       const numero = nextFactureId(d);
       const totals = devisTotals(dv);
-      const montantTtcCt = type==="Acompte" ? Math.round(totals.ttcCt*0.3) : totals.ttcCt;
-      d.factures.push({ id:numero, numero, type, devisId:dv.id, libelle:type+" — "+dv.numero, montantTtcCt, statut:"Brouillon", date:"12 sept.", echeance:null, paiements:[] });
+      const acomptes = d.factures.filter(x=>x.devisId===dv.id && x.type==="Acompte").reduce((s,x)=>s+x.montantTtcCt,0);
+      const montantTtcCt = type==="Acompte" ? Math.round(totals.ttcCt*0.3) : Math.max(0, totals.ttcCt - acomptes);
+      d.factures.push({ id:numero, numero, type, devisId:dv.id, libelle:type==="Acompte" ? "Acompte de 30 %" : "Solde des travaux", montantTtcCt, statut:"Brouillon", date:"12 sept.", echeance:null, paiements:[] });
       render();
       return;
     }
