@@ -2040,6 +2040,7 @@ function ppSynthesePage(d){
     : "Aucun point signalé pour le moment.";
   return ppShell(d, {
     photo: ppPhoto("synthese"),
+    photoAlign: "xMidYMax",
     icon: "clipboard",
     zone: "Points contrôlés",
     title: "Synthèse du diagnostic",
