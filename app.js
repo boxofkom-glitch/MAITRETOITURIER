@@ -697,68 +697,6 @@ function iconSvg(name, size){
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24">${inner[name]||""}</svg>`;
 }
 
-function logoMark(size){
-  size = size||36;
-  return `<div style="width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-    <img src="assets/logo-icon.png" alt="" style="width:100%;height:100%;object-fit:contain">
-  </div>`;
-}
-
-function roofCutawaySvg(){
-  return `<svg viewBox="0 0 520 190" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block">
-    <polygon points="20,150 260,30 500,150" fill="none" stroke="#8f551f" stroke-width="2"/>
-    <polygon points="20,150 260,30 260,150" fill="none" stroke="#8f551f" stroke-width="0"/>
-    <polygon points="40,144 260,44 260,144" fill="#c47a3a" opacity=".9"/>
-    <polygon points="260,44 480,144 260,144" fill="#a8681f" opacity=".9"/>
-    <polygon points="52,148 260,58 260,148" fill="#4a4f5a" opacity=".85"/>
-    <polygon points="260,58 468,148 260,148" fill="#4a4f5a" opacity=".65"/>
-    <rect x="80" y="148" width="360" height="14" fill="#8a5a2b"/>
-    <rect x="90" y="162" width="340" height="16" fill="#d8b45a"/>
-    <rect x="90" y="178" width="340" height="10" fill="#c7cbd3"/>
-    <circle cx="260" cy="44" r="5" fill="#7a4a1c"/>
-  </svg>`;
-}
-
-function etatDistributionChart(d){
-  const counts = {};
-  POINTS.forEach(p=>{ const e=d.diagnostic.points[p].etat||"Non contrôlé"; counts[e]=(counts[e]||0)+1; });
-  const order = [["Bon état","#2e7d5b"],["À surveiller","#d4af37"],["Défaut constaté","#b3413a"],["Urgent","#23262c"],["Pas vu","#8a8a8a"],["Non présent","#a8a190"],["Non contrôlé","#c9c2ae"]];
-  const bars = order.filter(([k])=>counts[k]);
-  if(!bars.length) return "";
-  const max = Math.max(1,...bars.map(([k])=>counts[k]));
-  const barW=40, gap=16, baseY=92, barMax=70;
-  const svgW = bars.length*(barW+gap)+gap;
-  const rects = bars.map(([k,color],i)=>{
-    const h = Math.max(4, Math.round((counts[k]/max)*barMax));
-    const x = gap + i*(barW+gap);
-    return `<rect x="${x}" y="${baseY-h}" width="${barW}" height="${h}" rx="4" fill="${color}"/><text x="${x+barW/2}" y="${baseY+15}" text-anchor="middle" font-size="10" font-weight="700" fill="#4a4433">${counts[k]}</text>`;
-  }).join("");
-  const svg = `<svg viewBox="0 0 ${svgW} 116" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:${svgW}px;height:104px;display:block;margin:0 auto">${rects}</svg>`;
-  const legend = bars.map(([k,color])=>`<div class="pdf-chart-legend-item"><span style="background:${color}"></span>${esc(k)} (${counts[k]})</div>`).join("");
-  return `<div class="pdf-chart-card"><div class="pdf-diagram-title">Répartition des ${POINTS.length} points contrôlés</div>${svg}<div class="pdf-chart-legend">${legend}</div></div>`;
-}
-
-function coverChevronSvg(){
-  return `<svg viewBox="0 0 800 170" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" style="position:absolute;left:0;right:0;bottom:-1px;width:100%;height:110px;display:block">
-    <defs>
-      <linearGradient id="chevGold" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#f0d585"/>
-        <stop offset="55%" stop-color="#d4af37"/>
-        <stop offset="100%" stop-color="#8a5a2b"/>
-      </linearGradient>
-    </defs>
-    <path d="M0,170 L400,20 L800,170 Z" fill="#0b0b0b"/>
-    <path d="M40,170 L400,46 L760,170 Z" fill="url(#chevGold)"/>
-  </svg>`;
-}
-
-function backcoverArtSvg(){
-  return `<svg viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg" style="position:absolute;left:50%;bottom:-30px;transform:translateX(-50%);width:900px;opacity:.07;pointer-events:none">
-    <path d="M40 340 L400 80 L760 340" stroke="#d4af37" stroke-width="10" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M140 300 V400 H660 V300" stroke="#d4af37" stroke-width="10" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>`;
-}
-
 function actionLabelFor(pointName, decision){
   if(decision==="Réparer") return "Réparer — "+pointName;
   if(decision==="Remplacer") return "Remplacer — "+pointName;
@@ -1431,10 +1369,6 @@ function renderDossierDiagnostic(d){
   </div>`;
 }
 
-function pdfHead(){
-  return `<div class="pdf-head">${logoMark(24)}<div class="pdf-head-name">Maître Toiturier</div><div class="pdf-head-tag">Rapport de diagnostic</div><div class="pdf-page-num"></div></div>`;
-}
-
 let ppUid = 0;
 function ppStatus(etat){
   const map = {
@@ -1475,56 +1409,6 @@ function ppBackdropSvg(photoUrl){
   </svg>`;
 }
 
-function pdfPointPage(p, i, d){
-  const pt = d.diagnostic.points[p];
-  const photos = (pt.photos||[]).filter(ph=>ph.dataUrl);
-  const st = ppStatus(pt.etat);
-  const dyk = pickDidYouKnow(pt);
-  const obs = pt.observation || (pt.etat==="Bon état" ? "Aucune anomalie n’a été observée sur cet élément lors du contrôle visuel des zones accessibles." : "Non renseignée.");
-  const showVig = !!pt.risque && pt.etat!=="Bon état" && pt.etat!=="Non présent";
-  const card = (icon,label,html)=>`<div class="pp-card"><div class="pp-card-ic">${iconSvg(icon,30)}</div><div class="pp-card-body"><div class="pp-card-label">${label}</div><div class="pp-card-txt pp-fit">${html}</div></div></div>`;
-  const cards = [
-    card("doc","Notre observation",esc(obs)),
-    dyk ? card("idea","Le saviez-vous ?",esc(dyk.text)) : "",
-    card("wrench","Décision",`<b>${esc(pt.decision)}</b>${pt.pourquoi?" — "+esc(pt.pourquoi):""}`),
-    pt.travaux ? card("helmet","Travaux proposés",esc(pt.travaux)) : ""
-  ].filter(Boolean);
-  const titleFs = p.length<=12 ? 46 : (p.length<=24 ? 40 : 34);
-  const thumbs = photos.slice(1,3);
-  return `
-  <div class="pdf-page-frame"><div class="pdf-page pdf-pointpage">
-    ${ppBackdropSvg(photos[0] ? photos[0].dataUrl : "")}
-    ${photos[0] ? "" : `<div class="pp-photo-ph">${iconSvg("camera",44)}<span>Photo à ajouter</span></div>`}
-    ${thumbs.length ? `<div class="pp-thumbs">${thumbs.map(t=>`<img src="${t.dataUrl}" alt="">`).join("")}</div>` : ""}
-    <img class="pp-logo" src="assets/logo-lockup.png" alt="Maître Toiturier">
-    <div class="pp-services">Couverture<br>Zinguerie<br>Rénovation<br>Entretien</div>
-    <div class="pp-tagline">Votre toit,<br>notre expertise<br>durable.</div>
-    <div class="pp-topright"><div class="pp-topright-t">Rapport de diagnostic</div><div class="pp-topright-n">N° ${esc(d.id)}</div><div class="pp-topright-line"></div></div>
-    <div class="pp-num">${String(i+1).padStart(2,"0")}</div>
-    <div class="pp-titleblock">
-      <div class="pp-zone">Zone de contrôle</div>
-      <div class="pp-title" style="font-size:${titleFs}px">${esc(p)}</div>
-      <div class="pp-title-line"></div>
-    </div>
-    <div class="pp-pill pp-pill-${st.cls}">
-      <div class="pp-pill-ic">${st.mark==="check" ? iconSvg("check",20) : "<span>!</span>"}</div>
-      <div class="pp-pill-tx"><div class="pp-pill-main">${esc(st.label)}</div><div class="pp-pill-sub">${esc(st.sub)}</div></div>
-    </div>
-    <div class="pp-body">
-      <div class="pp-cards n${cards.length}">${cards.join("")}</div>
-      <div class="pp-vig ${showVig?"":"only-quote"}">
-        ${showVig ? `<div class="pp-vig-main"><div class="pp-vig-ic">${iconSvg("warning",40)}</div><div class="pp-vig-body"><div class="pp-vig-label">Vigilance</div><div class="pp-vig-txt pp-fit">${esc(pt.risque)}</div></div></div>` : ""}
-        <div class="pp-vig-quote"><div class="pp-vig-qm">”</div><div class="pp-vig-qt">Un toit bien entretenu aujourd’hui, c’est un patrimoine préservé demain.</div><div class="pp-vig-ql"></div></div>
-      </div>
-    </div>
-    <div class="pp-foot">
-      <div class="pp-foot-item">${iconSvg("pin",20)}<span>${esc(d.ville)}</span></div>
-      <div class="pp-foot-item">${iconSvg("globe",20)}<span>www.maitretoiturier.fr</span></div>
-      <div class="pdf-page-num pp-pagenum"></div>
-    </div>
-  </div></div>`;
-}
-
 // Réduit la taille du texte des blocs .pp-fit qui débordent de leur cadre (longues remarques).
 function fitPointPages(root){
   root = root || document;
@@ -1556,155 +1440,215 @@ function buildClosingSummary(d){
   return [opening, s.observations, closing].filter(Boolean).join(" ");
 }
 
-function renderReportDoc(d){
-  const s = d.diagnostic.synthese;
-  const controlledPoints = POINTS.filter(p=>d.diagnostic.points[p].etat!=="Non contrôlé");
-  const flaggedPoints = POINTS.filter(p=>["Défaut constaté","À surveiller","Urgent"].includes(d.diagnostic.points[p].etat));
-  const conclusionCls = s.conclusion==="Bon état général" ? "green" : s.conclusion==="À surveiller" ? "gold" : "red";
+// Photo de couverture en data-URL (les <image> d'un SVG rendu par html2canvas ne peuvent pas lire un fichier externe).
+let COVER_PHOTO = "";
+(function preloadCoverPhoto(){
+  const im = new Image();
+  im.onload = ()=>{
+    try{
+      const w = Math.min(1200, im.naturalWidth), h = Math.round(im.naturalHeight * w / im.naturalWidth);
+      const c = document.createElement("canvas"); c.width = w; c.height = h;
+      c.getContext("2d").drawImage(im, 0, 0, w, h);
+      COVER_PHOTO = c.toDataURL("image/jpeg", .85);
+      if(typeof render === "function" && state && state.appStage==="app") render();
+    }catch(e){}
+  };
+  im.src = "assets/cover-roof.jpg";
+})();
 
-  const refLines = flaggedPoints.map(p=>{
-    const pt = d.diagnostic.points[p];
-    const layer = POINT_LAYER[p] || 1;
-    return `<div><b>Repère ${layer}</b> · ${esc(p)}${pt.observation?" — "+esc(pt.observation):""}</div>`;
-  }).join("") || `<div>Aucun point signalé pour le moment.</div>`;
+function ppConclusion(c){
+  const sub = "Conclusion du diagnostic";
+  if(c==="Bon état général") return {cls:"ok", label:"Bon état général", sub, mark:"check"};
+  if(c==="À surveiller") return {cls:"warn", label:"À surveiller", sub, mark:"!"};
+  if(c==="Travaux recommandés") return {cls:"bad", label:"Travaux recommandés", sub, mark:"!"};
+  if(c==="Intervention urgente") return {cls:"urgent", label:"Intervention urgente", sub, mark:"!"};
+  return {cls:"gray", label:c||"À finaliser", sub, mark:"!"};
+}
 
-  const actionRows = flaggedPoints.map((p,i)=>{
-    const pt = d.diagnostic.points[p];
-    return `<div class="pdf-action">
-      <div class="pdf-action-num">${i+1}</div>
-      <div>
-        <div class="pdf-action-title">${esc(actionLabelFor(p, pt.decision))}</div>
-        <div class="pdf-action-scope">Concerne : ${esc(p)}</div>
-        <div class="pdf-action-detail">${esc(pt.travaux || pt.pourquoi || "À définir avec le technicien.")}</div>
-      </div>
-    </div>`;
-  }).join("");
-  const finalRowNum = flaggedPoints.length+1;
+function ppCard(icon, label, html){
+  const ic = icon.charAt(0)==="<" ? icon : iconSvg(icon,30);
+  return `<div class="pp-card"><div class="pp-card-ic">${ic}</div><div class="pp-card-body"><div class="pp-card-label">${label}</div><div class="pp-card-txt pp-fit">${html}</div></div></div>`;
+}
 
-  const pointsFlowPage = POINTS.map((p,i)=>pdfPointPage(p, i, d)).join("");
+function ppBanner(icon, label, html, rightHtml, cls){
+  return `<div class="pp-vig ${cls||""}">
+    ${html ? `<div class="pp-vig-main"><div class="pp-vig-ic">${iconSvg(icon,40)}</div><div class="pp-vig-body"><div class="pp-vig-label">${label}</div><div class="pp-vig-txt pp-fit">${html}</div></div></div>` : ""}
+    ${rightHtml}
+  </div>`;
+}
+const PP_QUOTE = `<div class="pp-vig-quote"><div class="pp-vig-qm">”</div><div class="pp-vig-qt">Un toit bien entretenu aujourd’hui, c’est un patrimoine préservé demain.</div><div class="pp-vig-ql"></div></div>`;
 
+// Coquille commune à toutes les pages du rapport (même mise en page que le modèle fourni).
+function ppShell(d, o){
+  const cards = (o.cards||[]).filter(Boolean);
+  const cols = o.cols || (cards.length===2 ? 1 : 2);
+  const rows = o.rows || (cols===1 ? cards.length : Math.max(2, Math.ceil(cards.length/2)));
+  const pill = o.pill;
   return `
-  <div class="pdf-doc">
+  <div class="pdf-page-frame"><div class="pdf-page pdf-pointpage">
+    ${ppBackdropSvg(o.photo||"")}
+    ${o.photo ? "" : `<div class="pp-photo-ph">${iconSvg("camera",44)}<span>Photo à ajouter</span></div>`}
+    ${o.thumbs && o.thumbs.length ? `<div class="pp-thumbs">${o.thumbs.map(t=>`<img src="${t}" alt="">`).join("")}</div>` : ""}
+    <img class="pp-logo" src="assets/logo-lockup.png" alt="Maître Toiturier">
+    <div class="pp-services">Couverture<br>Zinguerie<br>Rénovation<br>Entretien</div>
+    <div class="pp-tagline">Votre toit,<br>notre expertise<br>durable.</div>
+    <div class="pp-topright"><div class="pp-topright-t">Rapport de diagnostic</div><div class="pp-topright-n">N° ${esc(d.id)}</div><div class="pp-topright-line"></div></div>
+    ${o.num ? `<div class="pp-num">${o.num}</div>` : (o.icon ? `<div class="pp-num pp-num-ic">${iconSvg(o.icon,124)}</div>` : "")}
+    <div class="pp-titleblock">
+      <div class="pp-zone">${o.zone}</div>
+      <div class="pp-title" style="font-size:${o.titleFs||40}px">${o.title}</div>
+      <div class="pp-title-line"></div>
+    </div>
+    ${pill ? `<div class="pp-pill pp-pill-${pill.cls}">
+      <div class="pp-pill-ic">${pill.mark==="check" ? iconSvg("check",20) : "<span>!</span>"}</div>
+      <div class="pp-pill-tx"><div class="pp-pill-main">${esc(pill.label)}</div><div class="pp-pill-sub">${esc(pill.sub)}</div></div>
+    </div>` : ""}
+    <div class="pp-body">
+      <div class="pp-cards ${o.cardsCls||""} ${cols===2?"c2":"c1"}" style="grid-template-rows:repeat(${rows},minmax(0,1fr))">${cards.join("")}</div>
+      ${o.banner}
+    </div>
+    <div class="pp-foot">
+      <div class="pp-foot-item">${iconSvg("pin",20)}<span>${esc(d.ville)}</span></div>
+      <div class="pp-foot-item">${iconSvg("globe",20)}<span>www.maitretoiturier.fr</span></div>
+      ${o.pagenum===false ? `<div class="pp-pagenum"></div>` : `<div class="pdf-page-num pp-pagenum"></div>`}
+    </div>
+  </div></div>`;
+}
 
-    <div class="pdf-page-frame"><div class="pdf-page pdf-cover">
-      <div class="pdf-cover-photo"><img src="assets/cover-roof.jpg" alt=""></div>
-      <div class="pdf-cover-brand">
-        ${logoMark(38)}
-        <div><div class="pdf-cover-brand-name">Maître Toiturier</div><div class="pdf-cover-brand-tag">Expertise · Conseil · Toitures durables</div></div>
-      </div>
-      <div class="pdf-cover-panel">
-        <div class="pdf-cover-chevron">${coverChevronSvg()}</div>
-        <div class="pdf-cover-label">Étude personnalisée de votre toiture</div>
-        <h1 class="pdf-cover-title">Rapport de<br>diagnostic <span>toiture</span></h1>
-        <div class="pdf-cover-sub">État des lieux, points de vigilance et actions recommandées, présentés zone par zone avec photos et préconisations.</div>
-        <div class="pdf-cover-info">
-          <div class="pdf-cover-info-label">Dossier</div><div class="pdf-cover-info-label">Client</div>
-          <div class="pdf-cover-info-val">${esc(d.id)}</div><div class="pdf-cover-info-val">${esc(d.client)}</div>
-          <div class="pdf-cover-info-label">Date de visite</div><div class="pdf-cover-info-label">Adresse du bien</div>
-          <div class="pdf-cover-info-val">${esc(d.visiteDate)}</div><div class="pdf-cover-info-val">${esc(d.adresse)}, ${esc(d.ville)}</div>
-          <div class="pdf-cover-info-label">Technicien</div><div class="pdf-cover-info-label">Conclusion</div>
-          <div class="pdf-cover-info-val">${esc(d.technicien)}</div><div class="pdf-cover-info-val">${esc(s.conclusion||"À finaliser")}</div>
-        </div>
-        <div class="pdf-cover-banner">
-          <span class="pdf-cover-banner-icon">${iconSvg("shield",18)}</span>
-          <div><b>Prévenir les désordres. Prioriser les bonnes actions.</b>Une lecture claire de votre toiture, selon les zones accessibles.</div>
-        </div>
-      </div>
-    </div></div>
+function pdfPointPage(p, i, d){
+  const pt = d.diagnostic.points[p];
+  const photos = (pt.photos||[]).filter(ph=>ph.dataUrl);
+  const st = ppStatus(pt.etat);
+  const dyk = pickDidYouKnow(pt);
+  const obs = pt.observation || (pt.etat==="Bon état" ? "Aucune anomalie n’a été observée sur cet élément lors du contrôle visuel des zones accessibles." : "Non renseignée.");
+  const showVig = !!pt.risque && pt.etat!=="Bon état" && pt.etat!=="Non présent";
+  return ppShell(d, {
+    photo: photos[0] ? photos[0].dataUrl : "",
+    thumbs: photos.slice(1,3).map(t=>t.dataUrl),
+    num: String(i+1).padStart(2,"0"),
+    zone: "Zone de contrôle",
+    title: esc(p),
+    titleFs: p.length<=12 ? 46 : (p.length<=24 ? 40 : 34),
+    pill: st,
+    cards: [
+      ppCard("doc","Notre observation",esc(obs)),
+      dyk ? ppCard("idea","Le saviez-vous ?",esc(dyk.text)) : "",
+      ppCard("wrench","Décision",`<b>${esc(pt.decision)}</b>${pt.pourquoi?" — "+esc(pt.pourquoi):""}`),
+      pt.travaux ? ppCard("helmet","Travaux proposés",esc(pt.travaux)) : ""
+    ],
+    banner: ppBanner("warning","Vigilance", showVig ? esc(pt.risque) : "", PP_QUOTE, showVig ? "" : "only-quote")
+  });
+}
 
-    <div class="pdf-page-frame"><div class="pdf-page"><div class="pdf-page-pad">
-      <div class="pdf-banner">
-        ${pdfHead()}
-        <div class="pdf-overline">Rapport ${esc(d.id)} · ${esc(d.client)}</div>
-        <div class="pdf-h1">Synthèse du diagnostic</div>
-        <div class="pdf-h1-sub">${controlledPoints.length} / ${POINTS.length} points contrôlés</div>
-      </div>
-      <div class="pdf-stat-row">
-        <div class="pdf-stat-card"><div class="pdf-stat-card-top">${iconSvg("layers",14)} Couverture</div><div class="pdf-stat-val">${esc(s.typeCouverture)}</div></div>
-        <div class="pdf-stat-card"><div class="pdf-stat-card-top">${iconSvg("ruler",14)} Surface estimée</div><div class="pdf-stat-val">${s.surface?esc(s.surface)+" m²":"—"}</div></div>
-        <div class="pdf-stat-card"><div class="pdf-stat-card-top">${iconSvg("clipboard",14)} Conclusion</div>${badge(s.conclusion||"À finaliser", conclusionCls)}</div>
-      </div>
-      ${s.observations?`<div class="pdf-lead">${esc(s.observations)}</div>`:""}
+function ppBarsHtml(d){
+  const counts = {};
+  POINTS.forEach(p=>{ const e=d.diagnostic.points[p].etat||"Non contrôlé"; counts[e]=(counts[e]||0)+1; });
+  const order = [["Bon état","#2e7d5b"],["À surveiller","#d4af37"],["Défaut constaté","#b3413a"],["Urgent","#23262c"],["Pas vu","#8a8a8a"],["Non présent","#a8a190"],["Non contrôlé","#c9c2ae"]].filter(([k])=>counts[k]);
+  const max = Math.max(1,...order.map(([k])=>counts[k]));
+  const bw=34, gap=14, base=52, top=44;
+  const w = order.length*(bw+gap)+gap;
+  const rects = order.map(([k,c],i)=>{
+    const h = Math.max(4, Math.round(counts[k]/max*top)), x = gap+i*(bw+gap);
+    return `<rect x="${x}" y="${base-h}" width="${bw}" height="${h}" rx="3" fill="${c}"/><text x="${x+bw/2}" y="${base+11}" text-anchor="middle" font-size="9" font-weight="700" fill="#4a4433">${counts[k]}</text>`;
+  }).join("");
+  const legend = order.map(([k,c])=>`<span class="pp-leg"><i style="background:${c}"></i>${esc(k)}</span>`).join("");
+  return `<svg viewBox="0 0 ${w} 66" xmlns="http://www.w3.org/2000/svg" style="display:block;height:52px;width:auto;max-width:100%">${rects}</svg><div class="pp-legs">${legend}</div>`;
+}
 
-      <div class="pdf-two-col">
-        <div class="pdf-diagram">
-          <div class="pdf-diagram-title">Comprendre les zones contrôlées</div>
-          <div class="pdf-diagram-art">${roofCutawaySvg()}</div>
-          <div class="pdf-diagram-layers">
-            ${DIAGRAM_LAYERS.map(l=>`<div class="pdf-diagram-layer"><div class="pdf-diagram-num">${l.n}</div><div class="pdf-diagram-swatch" style="background:${l.color}"></div>${esc(l.label)}</div>`).join("")}
-          </div>
-        </div>
-        ${etatDistributionChart(d)}
-      </div>
-      <div class="pdf-refs"><b>Références des observations</b>${refLines}</div>
+function ppCoverPhoto(){ return COVER_PHOTO || "assets/cover-roof.jpg"; }
 
-      <div class="pdf-legend">
-        <div class="pdf-legend-item"><span class="pdf-legend-dot" style="background:var(--green)"></span>Bon état général</div>
-        <div class="pdf-legend-item"><span class="pdf-legend-dot" style="background:var(--gold)"></span>À surveiller</div>
-        <div class="pdf-legend-item"><span class="pdf-legend-dot" style="background:var(--red)"></span>Travaux recommandés</div>
-        <div class="pdf-legend-item"><span class="pdf-legend-dot" style="background:var(--red)"></span>Intervention urgente</div>
-      </div>
-    </div></div></div>
+function ppCoverPage(d){
+  const s = d.diagnostic.synthese;
+  return ppShell(d, {
+    photo: ppCoverPhoto(),
+    zone: "Étude personnalisée de votre toiture",
+    icon: "house",
+    title: "Rapport de diagnostic de toiture",
+    titleFs: 33,
+    pill: ppConclusion(s.conclusion),
+    cardsCls: "big",
+    cards: [
+      ppCard("house","Client",esc(d.client)),
+      ppCard("pin","Adresse du bien",`${esc(d.adresse)}<br>${esc(d.ville)}`),
+      ppCard("clipboard","Dossier et visite",`${esc(d.id)}<br>Visite du ${esc(d.visiteDate||"—")}`),
+      ppCard("helmet","Technicien",esc(d.technicien||"À affecter"))
+    ],
+    banner: ppBanner("shield","Notre engagement","Prévenir les désordres. Prioriser les bonnes actions. Une lecture claire de votre toiture, selon les zones accessibles.", PP_QUOTE),
+    pagenum: false
+  });
+}
 
-    ${pointsFlowPage}
+function ppSynthesePage(d){
+  const s = d.diagnostic.synthese;
+  const controlled = POINTS.filter(p=>d.diagnostic.points[p].etat!=="Non contrôlé");
+  const flagged = POINTS.filter(p=>["Défaut constaté","À surveiller","Urgent"].includes(d.diagnostic.points[p].etat));
+  const flaggedHtml = flagged.length
+    ? flagged.map(p=>`<b>${esc(p)}</b> — ${esc(d.diagnostic.points[p].etat)}`).join("<br>")
+    : "Aucun point signalé pour le moment.";
+  return ppShell(d, {
+    photo: ppCoverPhoto(),
+    num: String(controlled.length).padStart(2,"0"),
+    zone: "Points contrôlés",
+    title: "Synthèse du diagnostic",
+    titleFs: 36,
+    pill: ppConclusion(s.conclusion),
+    cards: [
+      ppCard("doc","Notre observation", s.observations ? esc(s.observations) : "Aucune observation générale renseignée."),
+      ppCard("layers","Couverture", `<b>${esc(s.typeCouverture||"—")}</b><br>Surface estimée : ${s.surface?esc(s.surface)+" m²":"—"}<br>${controlled.length} / ${POINTS.length} points contrôlés`),
+      ppCard("clipboard","Répartition des contrôles", ppBarsHtml(d)),
+      ppCard("warning","Points signalés", flaggedHtml)
+    ],
+    banner: ppBanner("wrench","Préconisations", esc(s.preconisations || "À définir avec le technicien."), PP_QUOTE)
+  });
+}
 
-    <div class="pdf-page-frame"><div class="pdf-page">
-      <div class="pdf-page-pad">
-        <div class="pdf-banner">
-          ${pdfHead()}
-          <div class="pdf-overline">Rapport ${esc(d.id)} · ${esc(d.client)}</div>
-          <div class="pdf-h1">Préconisations &amp; plan d’action</div>
-          <div class="pdf-h1-sub">Une intervention proportionnée aux constats, à valider avec le technicien.</div>
-        </div>
-        ${s.preconisations?`<div class="pdf-lead">${esc(s.preconisations)}</div>`:""}
-        ${actionRows}
-        <div class="pdf-action">
-          <div class="pdf-action-num">${finalRowNum}</div>
-          <div>
-            <div class="pdf-action-title">Documenter et suivre</div>
-            <div class="pdf-action-scope">Concerne : tous les contrôles</div>
-            <div class="pdf-action-detail">Conserver les photos après intervention et signaler les zones restées inaccessibles.</div>
-          </div>
-        </div>
-        <div class="pdf-checklist">
-          <div class="pdf-checklist-item"><span class="pdf-checkbox"></span>Demander un devis détaillé</div>
-          <div class="pdf-checklist-item"><span class="pdf-checkbox"></span>Prévoir un échange avec le technicien</div>
-        </div>
+function ppPlanPage(d){
+  const flagged = POINTS.filter(p=>["Défaut constaté","À surveiller","Urgent"].includes(d.diagnostic.points[p].etat));
+  const urgent = flagged.some(p=>d.diagnostic.points[p].etat==="Urgent");
+  const actions = flagged.map((p,i)=>{
+    const pt = d.diagnostic.points[p];
+    return ppCard(`<div class="pp-badge">${i+1}</div>`, esc(actionLabelFor(p, pt.decision)), esc(pt.travaux || pt.pourquoi || "À définir avec le technicien."));
+  });
+  actions.push(ppCard(`<div class="pp-badge">${flagged.length+1}</div>`, "Documenter et suivre", "Conserver les photos après intervention et signaler les zones restées inaccessibles."));
+  const steps = `<div class="pp-steps"><div class="pp-vig-label">Et maintenant ?</div>
+    <div class="pp-step"><b>1</b>Devis détaillé</div><div class="pp-step"><b>2</b>Planification</div><div class="pp-step"><b>3</b>Suivi après travaux</div></div>`;
+  return ppShell(d, {
+    photo: ppCoverPhoto(),
+    num: String(actions.length).padStart(2,"0"),
+    zone: "Préconisations",
+    title: "Plan d’action",
+    titleFs: 40,
+    pill: flagged.length
+      ? {cls: urgent?"urgent":"bad", label: flagged.length+" point"+(flagged.length>1?"s":"")+" à traiter", sub:"Selon les constats de la visite", mark:"!"}
+      : {cls:"ok", label:"Rien à traiter", sub:"Selon les constats de la visite", mark:"check"},
+    cards: actions,
+    banner: ppBanner("clipboard","En résumé", esc(buildClosingSummary(d)), steps)
+  });
+}
 
-        <div style="font-weight:700;font-size:12.5px;margin:18px 0 10px">Et maintenant ?</div>
-        <div class="pdf-steps">
-          <div class="pdf-step-card"><div class="pdf-step-num">1</div><div class="pdf-step-title">Devis détaillé</div><div class="pdf-step-text">Un chiffrage précis vous est transmis pour les travaux recommandés dans ce rapport.</div></div>
-          <div class="pdf-step-card"><div class="pdf-step-num">2</div><div class="pdf-step-title">Planification</div><div class="pdf-step-text">Une date d’intervention est fixée avec vous selon la nature et l’urgence des travaux.</div></div>
-          <div class="pdf-step-card"><div class="pdf-step-num">3</div><div class="pdf-step-title">Suivi après travaux</div><div class="pdf-step-text">Un point de contrôle peut être réalisé pour valider la bonne exécution.</div></div>
-        </div>
+function ppBackPage(d){
+  return ppShell(d, {
+    photo: ppCoverPhoto(),
+    icon: "check",
+    zone: "Merci de votre confiance",
+    title: "À votre disposition",
+    titleFs: 40,
+    cards: [
+      ppCard("globe","Nous contacter","www.maitretoiturier.fr<br>Téléphone : à renseigner<br>E-mail : à renseigner"),
+      ppCard("check","Et maintenant ?","Ce rapport vous a été remis à l’issue de la visite diagnostic. Notre équipe reste à votre disposition pour répondre à vos questions et organiser les travaux recommandés.")
+    ],
+    banner: ppBanner("shield","Information","Document de démonstration. Contrôle visuel des zones accessibles, selon les observations renseignées par le technicien. Ce rapport n’est pas une certification.", PP_QUOTE),
+    pagenum: false
+  });
+}
 
-        <div class="pdf-summary">
-          <div class="pdf-overline">En résumé</div>
-          <p class="pdf-summary-text">${esc(buildClosingSummary(d))}</p>
-          <div class="pdf-summary-sign">— L’équipe Maître Toiturier</div>
-        </div>
-      </div>
-    </div></div>
-
-    <div class="pdf-page-frame"><div class="pdf-page pdf-backcover">
-      <div class="pdf-backcover-topchev">${coverChevronSvg()}</div>
-      ${backcoverArtSvg()}
-      <div class="pdf-backcover-body">
-        ${logoMark(52)}
-        <div class="pdf-backcover-name" style="margin-top:16px">Maître Toiturier</div>
-        <div class="pdf-backcover-tag">Expertise · Conseil · Toitures durables</div>
-        <div class="pdf-backcover-divider"></div>
-        <div class="pdf-backcover-thanks">Merci de votre confiance</div>
-        <div class="pdf-backcover-sub">Ce rapport vous a été remis à l’issue de la visite diagnostic. Notre équipe reste à votre disposition pour répondre à vos questions et organiser les travaux recommandés.</div>
-        <div class="pdf-backcover-contact">
-          <b>Nous contacter</b>
-          maitretoiturier.fr<br>
-          Téléphone : à renseigner<br>
-          E-mail : à renseigner
-        </div>
-      </div>
-      <div class="pdf-backcover-legal">Document de démonstration. Contrôle visuel des zones accessibles, selon les observations renseignées par le technicien. Ce rapport n’est pas une certification.</div>
-    </div></div>
+function renderReportDoc(d){
+  return `<div class="pdf-doc">
+    ${ppCoverPage(d)}
+    ${ppSynthesePage(d)}
+    ${POINTS.map((p,i)=>pdfPointPage(p,i,d)).join("")}
+    ${ppPlanPage(d)}
+    ${ppBackPage(d)}
   </div>`;
 }
 

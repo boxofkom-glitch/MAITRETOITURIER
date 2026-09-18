@@ -38,7 +38,7 @@
 html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font-body);overflow-x:hidden;-webkit-font-smoothing:antialiased}
 body{background:radial-gradient(1100px 600px at 15% -10%,rgba(212,175,55,.09),transparent 60%),radial-gradient(900px 560px at 100% 0%,rgba(184,111,71,.07),transparent 55%),var(--bg);background-attachment:fixed}
 button,select,input,textarea{font-family:inherit}
-h1,h2,h3,.wordmark,.point-title,.pdf-cover-title,.pdf-h1,.pdf-backcover-thanks,.pdf-backcover-name,.stat-value,.list-card .lc-name{font-family:var(--font-display)}
+h1,h2,h3,.wordmark,.point-title,.stat-value,.list-card .lc-name{font-family:var(--font-display)}
 button{transition:background-color .18s var(--ease),border-color .18s var(--ease),color .18s var(--ease),transform .12s var(--ease),box-shadow .18s var(--ease)}
 button:active{transform:scale(.97)}
 a,button,.nav-btn,.tab-btn,.pill-btn{-webkit-tap-highlight-color:transparent}
@@ -320,12 +320,7 @@ tr:last-child td{border-bottom:none}
 
 .pdf-doc{display:flex;flex-direction:column;align-items:center;gap:28px;padding:28px 0}
 .pdf-page{width:210mm;min-height:297mm;background:#f5f1e9;box-shadow:0 10px 34px rgba(20,14,6,.16);position:relative;overflow:hidden;box-sizing:border-box;font-family:inherit;color:#232017}
-.pdf-page:not(.pdf-cover):not(.pdf-backcover):not(.pdf-pointpage):after{content:'';position:absolute;left:0;right:0;bottom:0;height:7px;background:linear-gradient(90deg,#b86f47,#e7c465,#d4af37,#b86f47)}
-.pdf-page-pad{padding:15mm 15mm 12mm}
 
-.pdf-head{display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:1.5px solid #e7dcc6}
-.pdf-head-name{font-size:12.5px;font-weight:800}
-.pdf-head-tag{margin-left:auto;font-size:10px;font-weight:700;letter-spacing:.07em;color:#d4af37;text-transform:uppercase}
 .pdf-page-num{font-size:9.5px;color:#9c8f74;margin-left:10px;white-space:nowrap}
 
 /* ---- Page "point de contrôle" (une page A4 par contrôle) ---- */
@@ -359,10 +354,10 @@ tr:last-child td{border-bottom:none}
 .pp-pill-gray{background:#e9e5da;border-color:#d3cdbb;color:#4d4838}.pp-pill-gray .pp-pill-ic{background:#8b8676}
 .pp-body{position:absolute;left:28px;right:28px;top:544px;height:432px;display:flex;flex-direction:column;gap:14px;z-index:3}
 .pp-cards{flex:1;min-height:0;display:grid;grid-template-rows:repeat(2,minmax(0,1fr));gap:14px}
-.pp-cards.n3,.pp-cards.n4{grid-template-columns:1fr 1fr}
-.pp-cards.n2{grid-template-columns:1fr}
-.pp-cards.n2 .pp-card-txt{font-size:12.5px}
-.pp-cards.n3 .pp-card:last-child{grid-column:1/-1}
+.pp-cards.c2{grid-template-columns:1fr 1fr}
+.pp-cards.c1{grid-template-columns:1fr}
+.pp-cards.c1 .pp-card-txt{font-size:12.5px}
+.pp-cards.c2>.pp-card:last-child:nth-child(odd){grid-column:1/-1}
 .pp-card{display:flex;gap:12px;background:#ece5d5;border-radius:7px;padding:13px 16px;box-shadow:0 1px 6px rgba(70,45,10,.12);min-height:0;overflow:hidden}
 .pp-card-ic{flex:0 0 32px;color:#8a5a2b}
 .pp-card-body{flex:1;min-width:0;display:flex;flex-direction:column}
@@ -382,117 +377,33 @@ tr:last-child td{border-bottom:none}
 .pp-vig.only-quote{justify-content:center}
 .pp-vig.only-quote .pp-vig-quote{flex:0 1 420px;align-items:center;text-align:center}
 .pp-vig.only-quote .pp-vig-ql{margin-left:auto;margin-right:auto}
+.pp-num-ic{left:40px;top:392px;width:124px;height:124px;color:rgba(176,142,88,.6)}
+.pp-num-ic svg{width:124px;height:124px}
+.pp-cards.big .pp-card-txt{font-size:14px;font-weight:600}
+.pp-badge{width:30px;height:30px;border-radius:50%;background:#8a5a2b;color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.pp-steps{flex:.8;display:flex;flex-direction:column;justify-content:center;gap:7px;padding-left:6px}
+.pp-step{display:flex;align-items:center;gap:10px;font-size:11.5px;color:#f2eadb}
+.pp-step b{width:20px;height:20px;border-radius:50%;background:#d4af37;color:#171310;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.pp-legs{display:flex;flex-wrap:wrap;gap:2px 10px;margin-top:4px;font-size:9px}
+.pp-leg{display:flex;align-items:center;gap:4px}
+.pp-leg i{width:7px;height:7px;border-radius:2px;display:inline-block}
 .pp-foot{position:absolute;left:43px;right:43px;top:1048px;height:50px;border-top:1px solid rgba(212,175,55,.75);display:flex;align-items:center;justify-content:space-between;color:#e9dfc8;font-size:10.5px;z-index:3;padding-top:2px}
 .pp-foot-item{display:flex;align-items:center;gap:9px}
 .pp-foot-item svg{color:#d4af37}
 .pp-pagenum{color:#e9dfc8;font-size:10.5px;letter-spacing:.06em;margin:0}
 
 /* Cover */
-.pdf-page.pdf-cover{color:#fff;height:297mm}
-.pdf-cover-photo{position:absolute;top:0;left:0;right:0;height:52%}
-.pdf-cover-photo img{width:100%;height:100%;object-fit:cover;display:block}
-.pdf-cover-photo:after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(8,7,6,.55) 0%,rgba(8,7,6,.05) 30%,rgba(8,7,6,.05) 70%,#0b0b0b 100%)}
-.pdf-cover-brand{position:absolute;top:10mm;left:15mm;right:15mm;display:flex;align-items:center;gap:12px;z-index:2}
-.pdf-cover-brand-name{font-size:15px;font-weight:800}
-.pdf-cover-brand-tag{font-size:10.5px;opacity:.85;letter-spacing:.03em}
-.pdf-cover-panel{position:absolute;left:0;right:0;bottom:0;top:52%;background:linear-gradient(160deg,#0b0b0b,#1e1712 55%,#4a3320);padding:14mm 15mm 12mm;box-sizing:border-box;overflow:hidden}
-.pdf-cover-chevron{position:absolute;top:-118px;left:0;right:0;height:180px;pointer-events:none}
-.pdf-cover-label{position:relative;font-size:11px;font-weight:700;letter-spacing:.08em;color:#e7c465;text-transform:uppercase;margin:14px 0 8px}
-.pdf-cover-title{position:relative;font-size:28px;font-weight:800;margin:0 0 10px;line-height:1.2;color:#fff}
-.pdf-cover-title span{color:#d4af37}
-.pdf-cover-sub{font-size:13px;color:#e9dfce;margin-bottom:18px;max-width:480px}
-.pdf-cover-info{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:14px 18px;margin-bottom:16px}
-.pdf-cover-info-label{font-size:9.5px;font-weight:700;letter-spacing:.06em;color:#e7c465;text-transform:uppercase;margin-top:8px;display:flex;align-items:center;gap:5px}
-.pdf-cover-info-label:before{content:'';width:6px;height:6px;background:#d4af37;flex-shrink:0}
-.pdf-cover-info-label:nth-child(-n+2){margin-top:0}
-.pdf-cover-info-val{font-size:12.5px;color:#fff;margin-top:2px;font-weight:600}
-.pdf-cover-banner{display:flex;gap:12px;align-items:center;font-size:11.5px;color:#f3ead9}
-.pdf-cover-banner b{display:block;font-size:12.5px;color:#fff;margin-bottom:2px}
-.pdf-cover-banner-icon{width:34px;height:34px;border-radius:50%;background:rgba(231,196,101,.18);border:1px solid rgba(231,196,101,.5);color:#e7c465;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 
 /* Interior pages */
-.pdf-overline{font-size:10px;font-weight:800;letter-spacing:.16em;color:#b86f47;text-transform:uppercase;margin-bottom:7px;display:flex;align-items:center;gap:6px}
-.pdf-overline:before{content:'';width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:7px solid #d4af37;flex-shrink:0}
-.pdf-h1{font-size:22px;font-weight:800;margin:0 0 3px}
 
-.pdf-banner{position:relative;background:#0b0b0b;margin:-15mm -15mm 22px;padding:11mm 15mm 20mm;overflow:hidden;clip-path:polygon(0 0,100% 0,100% 100%,0 86%)}
-.pdf-banner:after{content:'';position:absolute;left:0;right:0;bottom:0;height:6px;background:linear-gradient(90deg,#b86f47,#e7c465,#d4af37,#b86f47)}
-.pdf-banner .pdf-head{border-bottom-color:rgba(255,255,255,.18);margin-bottom:14px}
-.pdf-banner .pdf-head-name{color:#fff}
-.pdf-banner .pdf-head-tag{color:#e7c465}
-.pdf-banner .pdf-page-num{color:rgba(255,255,255,.5)}
-.pdf-banner .pdf-overline{color:#e7c465}
-.pdf-banner .pdf-overline:before{border-bottom-color:#e7c465}
-.pdf-banner .pdf-h1{color:#fff;font-size:27px}
-.pdf-banner .pdf-h1-sub{color:#d8cdb8;margin-bottom:0}
-.pdf-h1-sub{color:#6b6355;font-size:12px;margin-bottom:16px}
 
-.pdf-summary{margin-top:18px;padding:22px 24px;border-radius:16px;background:linear-gradient(160deg,#fbf6ea,#f2e6cd);border:1px solid #e3d3ad;position:relative}
-.pdf-summary .pdf-overline{color:#8a5a2b}
-.pdf-summary-text{font-size:13px;line-height:1.8;font-style:italic;color:#2b2213;margin:0}
-.pdf-summary-sign{margin-top:14px;font-size:10.5px;font-weight:700;letter-spacing:.03em;color:#8a5a2b;text-align:right}
 
-.pdf-stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
-.pdf-stat-card{border:1px solid #e7dcc6;border-radius:10px;padding:11px 12px;background:#fffdf8}
-.pdf-stat-card-top{display:flex;align-items:center;gap:6px;color:#d4af37;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-bottom:5px}
-.pdf-stat-val{font-size:13px;font-weight:700}
-.pdf-lead{font-size:12px;margin-bottom:14px;padding:10px 13px;background:#fffdf8;border-radius:9px;border-left:3px solid #d4af37}
 
-.pdf-diagram{border:1px solid #e7dcc6;border-radius:10px;overflow:hidden;margin-bottom:12px}
-.pdf-diagram-title{font-size:10px;font-weight:700;letter-spacing:.05em;color:#6b6355;text-transform:uppercase;padding:8px 12px;background:#fffdf8}
-.pdf-diagram-art{padding:10px 12px 2px;background:#fdfbf6;text-align:center}
-.pdf-diagram-art svg{max-width:360px}
-.pdf-diagram-layers{display:flex;flex-wrap:wrap;gap:0}
-.pdf-diagram-layer{display:flex;align-items:center;gap:8px;padding:7px 12px;border-top:1px solid #efe7d6;font-size:11.5px;width:50%;box-sizing:border-box}
-.pdf-diagram-num{width:18px;height:18px;border-radius:50%;background:#d4af37;color:#fff;font-size:9.5px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.pdf-diagram-swatch{width:11px;height:11px;border-radius:3px;flex-shrink:0}
-.pdf-refs{font-size:11.5px;margin-bottom:12px}
-.pdf-refs b{display:block;margin-bottom:4px;font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:#6b6355}
-.pdf-refs div{padding:2px 0}
-.pdf-legend{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:11px}
-.pdf-legend-item{display:flex;align-items:center;gap:5px}
-.pdf-legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 
-.pdf-two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
-.pdf-two-col .pdf-diagram{margin-bottom:0}
-.pdf-chart-card{border:1px solid #e7dcc6;border-radius:10px;overflow:hidden;background:#fdfbf6}
-.pdf-chart-legend{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:10px;padding:0 12px 10px}
-.pdf-chart-legend-item{display:flex;align-items:center;gap:5px}
-.pdf-chart-legend-item span{width:8px;height:8px;border-radius:2px;flex-shrink:0}
 
-.pdf-risk{display:flex;gap:8px;align-items:flex-start;background:#fbf3f2;border-left:3px solid #c0342a;border-radius:6px;padding:8px 10px;margin-top:10px;font-size:10.5px}
-.pdf-risk b{color:#c0342a;flex-shrink:0;display:flex;align-items:center;gap:4px;white-space:nowrap}
-.pdf-dyk{display:flex;flex-direction:column;gap:3px;background:#fbf6ea;border-left:3px solid #d4af37;border-radius:6px;padding:9px 11px;margin:10px 0;font-size:10.5px}
-.pdf-dyk-head{display:flex;align-items:center;gap:6px;font-weight:800;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:#8a5a2b}
-.pdf-dyk p{margin:0;font-size:10.5px;line-height:1.55;color:#3a3222;font-style:italic}
 
-.pdf-action{display:flex;gap:10px;border:1px solid #e7dcc6;border-radius:10px;padding:10px 12px;margin-bottom:8px;background:#fffdf8}
-.pdf-action-num{width:20px;height:20px;border-radius:50%;background:#f2e6d0;color:#b86f47;font-weight:700;font-size:10.5px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.pdf-action-title{font-weight:700;font-size:12px}
-.pdf-action-scope{font-size:10.5px;color:#8a7f66;margin:1px 0 3px}
-.pdf-action-detail{font-size:11.5px}
-.pdf-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:6px}
-.pdf-step-card{border:1px solid #e7dcc6;border-radius:10px;padding:14px 12px;background:#fffdf8;text-align:center}
-.pdf-step-num{width:28px;height:28px;border-radius:50%;background:linear-gradient(155deg,#d4af37,#b86f47);color:#fff;font-weight:800;font-size:12.5px;display:flex;align-items:center;justify-content:center;margin:0 auto 8px}
-.pdf-step-title{font-weight:700;font-size:11.5px;margin-bottom:3px}
-.pdf-step-text{font-size:10px;color:#6b6355;line-height:1.5}
 
-.pdf-checklist{display:flex;flex-direction:column;gap:7px;margin:12px 0}
-.pdf-checklist-item{display:flex;align-items:center;gap:9px;font-size:11.5px}
-.pdf-checkbox{width:14px;height:14px;border:1.5px solid #d8cba4;border-radius:3px;flex-shrink:0}
 
-.pdf-page.pdf-backcover{height:297mm;background:linear-gradient(160deg,#0b0b0b,#1e1712 55%,#4a3320);color:#fff;display:flex;flex-direction:column}
-.pdf-backcover-topchev{position:absolute;top:0;left:0;right:0;height:60px;opacity:.5;transform:rotate(180deg)}
-.pdf-backcover-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 25mm}
-.pdf-backcover-name{font-size:21px;font-weight:800;margin-bottom:4px}
-.pdf-backcover-tag{font-size:11.5px;color:#e7c465;letter-spacing:.06em;text-transform:uppercase;margin-bottom:30px}
-.pdf-backcover-divider{width:64px;height:2px;background:linear-gradient(90deg,transparent,#e7c465,transparent);margin-bottom:30px}
-.pdf-backcover-thanks{font-size:27px;font-weight:800;margin-bottom:12px}
-.pdf-backcover-sub{font-size:12.5px;color:#e9dfce;line-height:1.75;max-width:420px;margin-bottom:32px}
-.pdf-backcover-contact{font-size:12px;color:#f3ead9;line-height:2}
-.pdf-backcover-contact b{display:block;font-size:13.5px;color:#fff;margin-bottom:4px}
-.pdf-backcover-legal{font-size:9.5px;color:#c9bfa6;text-align:center;padding:0 20mm 14mm;line-height:1.6}
-.pdf-legal{font-size:9.5px;color:#c9bfa6;margin-top:14px;line-height:1.5}
 
 @media print{
   @page{size:A4;margin:0}
@@ -500,7 +411,6 @@ tr:last-child td{border-bottom:none}
   .pdf-doc{gap:0;padding:0}
   .pdf-page{box-shadow:none;page-break-after:always;width:210mm;min-height:297mm}
   .pdf-page:last-child{page-break-after:auto}
-  .pdf-point,.pdf-action,.pdf-stat-card,.pdf-diagram,.pdf-cover-info,.pdf-summary,.pdf-dyk{page-break-inside:avoid}
 }
 @media screen{
   .pdf-doc{background:#141311}
