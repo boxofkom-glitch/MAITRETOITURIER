@@ -752,45 +752,132 @@ function loadScriptOnce(src){
   });
 }
 
-async function generateAndDownloadPdf(d){
-  showToast("Génération du PDF…");
+async function buildReportPdf(d, onProgress){
+  await loadScriptOnce("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
+  await loadScriptOnce("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
+
+  // Le rapport est rendu dans une iframe isolée : html2canvas clone tout le document à chaque page,
+  // ce qui est très lent avec toute l'application autour.
+  const styles = Array.from(document.querySelectorAll("style, link[rel=stylesheet]")).map(el=>el.outerHTML).join("");
+  const iframe = document.createElement("iframe");
+  iframe.style.cssText = "position:fixed;left:-99999px;top:0;width:794px;height:1123px;border:0";
+  iframe.srcdoc = `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><base href="${location.href}">${styles}</head><body style="margin:0;background:#fff">${renderReportDoc(d)}</body></html>`;
+  const loaded = new Promise(res=>{ iframe.onload = res; });
+  document.body.appendChild(iframe);
   try{
-    await loadScriptOnce("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
-    await loadScriptOnce("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
-  } catch(e){
-    showToast("Connexion internet requise pour générer le PDF.");
-    return;
-  }
+    await loaded;
+    const doc = iframe.contentDocument;
+    if(doc.fonts && doc.fonts.ready) await doc.fonts.ready;
+    const imgs = Array.from(doc.querySelectorAll("img"));
+    await Promise.all(imgs.map(img=>img.complete ? Promise.resolve() : new Promise(res=>{ img.onload=res; img.onerror=res; })));
 
-  const host = document.createElement("div");
-  host.style.cssText = "position:fixed;left:-99999px;top:0;width:794px;background:#fff;z-index:-1";
-  host.innerHTML = renderReportDoc(d);
-  document.body.appendChild(host);
+    fitPointPages(doc);
+    numberPdfPages(doc);
+    // html2canvas rend mal les box-shadow (voile gris sur la page) : on les retire pour l'export.
+    doc.querySelectorAll(".pdf-page,.pp-card,.pp-pill").forEach(el=>{ el.style.boxShadow = "none"; });
 
-  const imgs = Array.from(host.querySelectorAll("img"));
-  await Promise.all(imgs.map(img=>img.complete ? Promise.resolve() : new Promise(res=>{ img.onload=res; img.onerror=res; })));
-
-  fitPointPages(host);
-  numberPdfPages(host);
-  // html2canvas rend mal les box-shadow (voile gris sur la page) : on les retire pour l'export.
-  host.querySelectorAll(".pdf-page,.pp-card,.pp-pill").forEach(el=>{ el.style.boxShadow = "none"; });
-
-  const pages = Array.from(host.querySelectorAll(".pdf-page"));
-  try{
+    const pages = Array.from(doc.querySelectorAll(".pdf-page"));
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ unit:"mm", format:"a4", orientation:"portrait" });
     for(let i=0;i<pages.length;i++){
-      const canvas = await window.html2canvas(pages[i], { scale:2, useCORS:true, backgroundColor:"#ffffff" });
-      const imgData = canvas.toDataURL("image/jpeg", 0.92);
+      if(onProgress) onProgress(i+1, pages.length);
+      const canvas = await window.html2canvas(pages[i], { scale:1.5, useCORS:true, backgroundColor:"#ffffff" });
+      const imgData = canvas.toDataURL("image/jpeg", 0.9);
       if(i>0) pdf.addPage();
       pdf.addImage(imgData, "JPEG", 0, 0, 210, 297, "", "FAST");
     }
-    pdf.save(`rapport-diagnostic-${d.id}.pdf`);
+    return pdf.output("blob");
+  } finally {
+    iframe.remove();
+  }
+}
+
+function downloadBlob(blob, filename){
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+}
+
+function reportFilename(d){ return `rapport-diagnostic-${d.id}.pdf`; }
+
+async function generateAndDownloadPdf(d){
+  showToast("Génération du PDF…");
+  try{
+    const blob = await buildReportPdf(d);
+    downloadBlob(blob, reportFilename(d));
     showToast("PDF téléchargé.");
   } catch(e){
-    showToast("La génération du PDF a échoué. Réessayez.");
-  } finally {
-    host.remove();
+    showToast("La génération du PDF a échoué (connexion internet requise). Réessayez.");
+  }
+}
+
+// Message d'accompagnement chaleureux et commercial, adapté au contenu réel du diagnostic.
+function reportMessage(d, channel){
+  const flagged = POINTS.filter(p=>["Défaut constaté","À surveiller","Urgent"].includes(d.diagnostic.points[p].etat));
+  const urgent = POINTS.filter(p=>d.diagnostic.points[p].etat==="Urgent").length;
+  const sign = d.commercial || "L’équipe Maître Toiturier";
+  const wa = channel==="whatsapp";
+  const summary = flagged.length===0
+    ? `Bonne nouvelle : l’ensemble des zones contrôlées est en bon état${wa?" 👍":"."}`
+    : `Nous avons relevé ${flagged.length} point${flagged.length>1?"s":""} qui mérite${flagged.length>1?"nt":""} votre attention${urgent?`, dont ${urgent} à traiter en priorité`:""}, avec pour chacun nos conseils.`;
+  const cta = flagged.length===0
+    ? "Pour préserver votre toiture dans la durée, je peux aussi vous proposer un contrôle périodique."
+    : `Si vous le souhaitez, je vous prépare avec plaisir un devis détaillé pour les travaux recommandés${wa?" : il suffit de me répondre ici. 📩":"."}`;
+  if(wa){
+    return `Bonjour ${d.client} 👋\n\nMerci encore pour votre confiance ! 🏠\nSuite à notre passage, je vous transmets votre rapport de diagnostic de toiture personnalisé (dossier ${d.id}), en pièce jointe.\n\n${summary}\n\nVous y trouverez, zone par zone, nos constats en photos et nos recommandations, expliqués simplement.\n\n${cta}\n\nJe reste à votre entière disposition pour en discuter. 😊\n\n${sign}\nMaître Toiturier — www.maitretoiturier.fr`;
+  }
+  return `Bonjour ${d.client},\n\nMerci encore pour la confiance que vous nous accordez.\n\nSuite à notre passage, je vous adresse avec plaisir, en pièce jointe, votre rapport de diagnostic de toiture personnalisé (dossier ${d.id}).\n\n${summary}\n\nVous y trouverez, zone par zone, nos constats en photos et nos recommandations, expliqués simplement.\n\n${cta}\n\nJe reste à votre entière disposition pour en discuter ou répondre à toutes vos questions.\n\nBien cordialement,\n\n${sign}\nMaître Toiturier\nwww.maitretoiturier.fr`;
+}
+
+async function prepareSend(d, channel){
+  state.modal = {type:"send", id:d.id, phase:"prep", channel};
+  render();
+  try{
+    const blob = await buildReportPdf(d, (i,n)=>{
+      const el = document.getElementById("sendProgress");
+      if(el) el.textContent = `Page ${i} / ${n}…`;
+    });
+    if(!state.modal || state.modal.phase!=="prep") return;
+    const file = new File([blob], reportFilename(d), {type:"application/pdf"});
+    state.modal = {type:"send", id:d.id, phase:"ready", channel, file, text:reportMessage(d, channel), subject:"Votre rapport de diagnostic de toiture — Maître Toiturier"};
+  } catch(e){
+    if(!state.modal || state.modal.phase!=="prep") return;
+    state.modal = {type:"send", id:d.id, phase:"error", channel};
+  }
+  render();
+}
+
+function finishSend(d, channel, how){
+  d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:"Rapport de diagnostic envoyé au client ("+(channel==="whatsapp"?"WhatsApp":"e-mail")+", "+how+")."});
+  state.modal = null;
+  showToast(how==="PDF joint" ? "Rapport envoyé avec le PDF joint." : "PDF téléchargé : joignez-le à la conversation (glisser-déposer) avant d’envoyer.");
+}
+
+// Envoi : sur téléphone, la feuille de partage joint directement le PDF et le message (WhatsApp, Mail…).
+// Ailleurs (ordinateur), le PDF est téléchargé et la conversation s'ouvre avec le message prêt.
+function sendNow(d){
+  const m = state.modal;
+  const file = m.file, channel = m.channel;
+  const fallback = ()=>{
+    downloadBlob(file, file.name);
+    if(channel==="whatsapp"){
+      const phone = (d.telephone||"").replace(/\D/g,"").replace(/^0/,"33");
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(m.text)}`, "_blank");
+    } else {
+      window.location.href = `mailto:${encodeURIComponent(d.email||"")}?subject=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(m.text)}`;
+    }
+    finishSend(d, channel, "PDF téléchargé");
+  };
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    navigator.share({files:[file], title:m.subject, text:m.text})
+      .then(()=>finishSend(d, channel, "PDF joint"))
+      .catch(err=>{ if(err && err.name!=="AbortError") fallback(); });
+  } else {
+    fallback();
   }
 }
 
@@ -1413,7 +1500,7 @@ function ppBackdropSvg(photoUrl, align){
 function fitPointPages(root){
   root = root || document;
   root.querySelectorAll(".pp-fit").forEach(el=>{
-    let fs = parseFloat(getComputedStyle(el).fontSize);
+    let fs = parseFloat(el.ownerDocument.defaultView.getComputedStyle(el).fontSize);
     let guard = 0;
     while(el.scrollHeight > el.clientHeight + 1 && fs > 7.5 && guard < 24){
       fs -= 0.4;
@@ -2512,13 +2599,29 @@ function modalChooseDossier(){
 }
 
 function modalSendClient(d){
-  return modalWrap("Envoyer le rapport au client", `
-    <p class="form-help" style="margin-bottom:14px">${esc(d.client)} — choisissez comment envoyer le rapport.</p>
-    <button class="modal-list-btn" data-action="send-whatsapp" data-id="${d.id}">WhatsApp — ${esc(d.telephone||"numéro non renseigné")}</button>
-    <button class="modal-list-btn" data-action="send-email" data-id="${d.id}">E-mail — ${esc(d.email||"adresse non renseignée")}</button>
-    <p class="form-help" style="margin-top:14px">La conversation ou l’e-mail s’ouvre avec un message prêt. Aucun site ne peut joindre un fichier automatiquement : générez le PDF (bouton “Télécharger le PDF”) puis joignez-le manuellement.</p>
-    <div class="modal-actions"><button class="btn-secondary" data-action="modal-close">Annuler</button></div>
-  `);
+  const m = state.modal || {};
+  const phase = m.phase || "choose";
+  const canShare = !!(m.file && navigator.canShare && navigator.canShare({files:[m.file]}));
+  let body;
+  if(phase==="prep"){
+    body = `<p class="form-help">Préparation du rapport PDF à joindre…</p><p id="sendProgress" style="font-weight:600;margin:10px 0">Page 1…</p><p class="form-help">Cela peut prendre une vingtaine de secondes.</p>`;
+  } else if(phase==="ready"){
+    body = `
+      <p style="margin:0 0 10px">Le rapport PDF est prêt et sera joint automatiquement au message.</p>
+      <div class="card" style="white-space:pre-wrap;font-size:12.5px;max-height:220px;overflow:auto;padding:12px">${esc(m.text)}</div>
+      <p class="form-help" style="margin-top:10px">${canShare ? "Le choix de l’application (WhatsApp, Mail…) se fait à l’étape suivante ; le PDF et le message sont déjà inclus." : "Sur ordinateur, le PDF est téléchargé et la conversation s’ouvre avec le message prêt : il ne reste qu’à glisser le PDF dedans."}</p>
+      <div class="modal-actions"><button class="btn-secondary" data-action="modal-close">Annuler</button><button class="btn-primary" data-action="send-now" data-id="${d.id}">${m.channel==="whatsapp" ? "Envoyer sur WhatsApp" : "Envoyer par e-mail"}</button></div>`;
+  } else if(phase==="error"){
+    body = `<p class="form-help">Le PDF n’a pas pu être généré (connexion internet requise). Réessayez.</p>
+      <div class="modal-actions"><button class="btn-secondary" data-action="modal-close">Fermer</button></div>`;
+  } else {
+    body = `
+      <p class="form-help" style="margin-bottom:14px">${esc(d.client)} — choisissez comment envoyer le rapport. Le PDF est joint automatiquement, avec un message personnalisé.</p>
+      <button class="modal-list-btn" data-action="send-whatsapp" data-id="${d.id}">WhatsApp — ${esc(d.telephone||"numéro non renseigné")}</button>
+      <button class="modal-list-btn" data-action="send-email" data-id="${d.id}">E-mail — ${esc(d.email||"adresse non renseignée")}</button>
+      <div class="modal-actions"><button class="btn-secondary" data-action="modal-close">Annuler</button></div>`;
+  }
+  return modalWrap("Envoyer le rapport au client", body);
 }
 
 function modalInfo(msg){
@@ -2575,27 +2678,10 @@ document.addEventListener("DOMContentLoaded", ()=>{
       generateAndDownloadPdf(d);
       return;
     }
-    if(action==="modal-send"){ state.modal={type:"send", id:t.dataset.id}; render(); return; }
-    if(action==="send-whatsapp"){
-      const d = byId(t.dataset.id);
-      const phone = (d.telephone||"").replace(/\D/g,"").replace(/^0/,"33");
-      const msg = `Bonjour ${d.client}, voici votre rapport de diagnostic de toiture (réf. ${d.id}). N’hésitez pas si vous avez des questions.`;
-      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
-      state.modal = null;
-      showToast("WhatsApp ouvert avec le message prêt. Pensez à joindre le PDF (bouton “Télécharger le PDF”) à la conversation.");
-      render();
-      return;
-    }
-    if(action==="send-email"){
-      const d = byId(t.dataset.id);
-      const subject = `Votre rapport de diagnostic — Maître Toiturier (${d.id})`;
-      const body = `Bonjour ${d.client},\n\nVeuillez trouver ci-joint votre rapport de diagnostic de toiture.\n\nCordialement,\nMaître Toiturier`;
-      window.location.href = `mailto:${encodeURIComponent(d.email||"")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-      state.modal = null;
-      showToast("E-mail ouvert avec le message prêt. Pensez à joindre le PDF (bouton “Télécharger le PDF”) avant de l’envoyer.");
-      render();
-      return;
-    }
+    if(action==="modal-send"){ state.modal={type:"send", id:t.dataset.id, phase:"choose"}; render(); return; }
+    if(action==="send-whatsapp"){ prepareSend(byId(t.dataset.id), "whatsapp"); return; }
+    if(action==="send-email"){ prepareSend(byId(t.dataset.id), "email"); return; }
+    if(action==="send-now"){ sendNow(byId(t.dataset.id)); return; }
     if(action==="share-report"){
       const d = byId(t.dataset.id); d.diagnostic.rapportPartage = true;
       showToast("Rapport partagé dans l’espace client de démonstration.");
