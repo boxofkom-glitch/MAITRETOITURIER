@@ -1587,7 +1587,7 @@ function ppSynthesePage(d){
     : "Aucun point signalé pour le moment.";
   return ppShell(d, {
     photo: ppCoverPhoto(),
-    num: String(controlled.length).padStart(2,"0"),
+    icon: "clipboard",
     zone: "Points contrôlés",
     title: "Synthèse du diagnostic",
     titleFs: 36,
@@ -1614,7 +1614,7 @@ function ppPlanPage(d){
     <div class="pp-step"><b>1</b>Devis détaillé</div><div class="pp-step"><b>2</b>Planification</div><div class="pp-step"><b>3</b>Suivi après travaux</div></div>`;
   return ppShell(d, {
     photo: ppCoverPhoto(),
-    num: String(actions.length).padStart(2,"0"),
+    icon: "wrench",
     zone: "Préconisations",
     title: "Plan d’action",
     titleFs: 40,
