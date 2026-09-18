@@ -686,6 +686,12 @@ function iconSvg(name, size){
     ruler:`<rect x="3" y="9" width="18" height="6" rx="1" transform="rotate(-25 12 12)" fill="none" stroke="currentColor" stroke-width="1.5"/>`,
     layers:`<path d="M12 3l9 5-9 5-9-5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 13l9 5 9-5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>`,
     clipboard:`<rect x="5" y="4.5" width="14" height="16" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="8.5" y="3" width="7" height="3" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="8" y1="10.5" x2="16" y2="10.5" stroke="currentColor" stroke-width="1.3"/><line x1="8" y1="14" x2="16" y2="14" stroke="currentColor" stroke-width="1.3"/><line x1="8" y1="17.5" x2="13" y2="17.5" stroke="currentColor" stroke-width="1.3"/>`,
+    doc:`<g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.8h8.2L19 7.6V21H6z"/><path d="M14 2.8v5h5"/><path d="M9 12h7M9 15h7M9 18h4.5"/></g>`,
+    wrench:`<g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></g>`,
+    helmet:`<g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 10V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5"/><path d="M14 6a6 6 0 0 1 6 6v3"/><path d="M4 15v-3a6 6 0 0 1 6-6"/><rect x="2" y="15" width="20" height="4" rx="1"/></g>`,
+    pin:`<g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></g>`,
+    globe:`<g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M12 2.5a14 14 0 0 0 0 19 14 14 0 0 0 0-19"/><path d="M2.5 12h19"/></g>`,
+    camera:`<g fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3.2"/></g>`,
     idea:`<path d="M9 18.5h6M9.7 21h4.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M12 2.8a6 6 0 0 0-3.4 10.9c.6.45 1 1.15 1 1.95v.35h4.8v-.35c0-.8.4-1.5 1-1.95A6 6 0 0 0 12 2.8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>`
   };
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24">${inner[name]||""}</svg>`;
@@ -775,7 +781,8 @@ function render(){
   const savedScrollTop = oldContent ? oldContent.scrollTop : 0;
   const savedScrollY = window.scrollY;
   app.innerHTML = buildApp();
-  repaginatePoints();
+  fitPointPages();
+  if(document.fonts && document.fonts.status!=="loaded") document.fonts.ready.then(()=>fitPointPages());
   numberPdfPages();
   applyPdfScale();
   const newContent = app.querySelector(".content");
@@ -825,8 +832,10 @@ async function generateAndDownloadPdf(d){
   const imgs = Array.from(host.querySelectorAll("img"));
   await Promise.all(imgs.map(img=>img.complete ? Promise.resolve() : new Promise(res=>{ img.onload=res; img.onerror=res; })));
 
-  repaginatePoints(host);
+  fitPointPages(host);
   numberPdfPages(host);
+  // html2canvas rend mal les box-shadow (voile gris sur la page) : on les retire pour l'export.
+  host.querySelectorAll(".pdf-page,.pp-card,.pp-pill").forEach(el=>{ el.style.boxShadow = "none"; });
 
   const pages = Array.from(host.querySelectorAll(".pdf-page"));
   try{
@@ -845,75 +854,6 @@ async function generateAndDownloadPdf(d){
   } finally {
     host.remove();
   }
-}
-
-function repaginatePoints(root){
-  root = root || document;
-  const flow = root.querySelector(".pdf-points-flow");
-  if(!flow) return;
-  const frame = flow.closest(".pdf-page-frame");
-  if(!frame || !frame.parentNode) return;
-  const points = Array.from(flow.querySelectorAll(".pdf-point"));
-  if(points.length < 2) return;
-
-  const MM = 96/25.4;
-  const usable = 297*MM - (15+12)*MM;
-  const padRect = flow.getBoundingClientRect();
-  const introHeight = points[0].getBoundingClientRect().top - padRect.top;
-  const HEAD_ONLY = 60;
-  const gap = 14;
-
-  const groups = [];
-  let cur = [];
-  let used = introHeight;
-  points.forEach(pt=>{
-    const h = pt.getBoundingClientRect().height + gap;
-    if(cur.length && used+h > usable){
-      groups.push(cur);
-      cur = [];
-      used = HEAD_ONLY;
-    }
-    cur.push(pt);
-    used += h;
-  });
-  if(cur.length) groups.push(cur);
-  if(groups.length<=1) return;
-
-  const headNode = flow.querySelector(".pdf-head");
-  const overlineNode = flow.querySelector(".pdf-overline");
-  const h1Node = flow.querySelector(".pdf-h1");
-  const subNode = flow.querySelector(".pdf-h1-sub");
-
-  const newFrames = groups.map((group,gi)=>{
-    const newFrame = document.createElement("div");
-    newFrame.className = "pdf-page-frame";
-    const page = document.createElement("div");
-    page.className = "pdf-page";
-    const pad = document.createElement("div");
-    pad.className = "pdf-page-pad";
-    if(gi===0){
-      const banner = document.createElement("div");
-      banner.className = "pdf-banner";
-      banner.appendChild(headNode);
-      if(overlineNode) banner.appendChild(overlineNode);
-      banner.appendChild(h1Node);
-      banner.appendChild(subNode);
-      pad.appendChild(banner);
-    } else {
-      const banner = document.createElement("div");
-      banner.className = "pdf-banner-cont";
-      banner.insertAdjacentHTML("beforeend", pdfHead());
-      if(overlineNode) banner.appendChild(overlineNode.cloneNode(true));
-      pad.appendChild(banner);
-    }
-    group.forEach(card=>pad.appendChild(card));
-    page.appendChild(pad);
-    newFrame.appendChild(page);
-    return newFrame;
-  });
-
-  newFrames.forEach(f=>frame.parentNode.insertBefore(f, frame));
-  frame.remove();
 }
 
 function applyPdfScale(){
@@ -1495,34 +1435,108 @@ function pdfHead(){
   return `<div class="pdf-head">${logoMark(24)}<div class="pdf-head-name">Maître Toiturier</div><div class="pdf-head-tag">Rapport de diagnostic</div><div class="pdf-page-num"></div></div>`;
 }
 
-function pdfPointCard(p, i, d){
+let ppUid = 0;
+function ppStatus(etat){
+  const map = {
+    "Bon état":{label:"Bon état", sub:"Aucune anomalie constatée", cls:"ok", mark:"check"},
+    "À surveiller":{label:"À surveiller", sub:"Point à suivre dans le temps", cls:"warn", mark:"!"},
+    "Défaut constaté":{label:"Défaut constaté", sub:"Anomalie relevée lors du contrôle", cls:"bad", mark:"!"},
+    "Urgent":{label:"Urgent", sub:"À traiter en priorité", cls:"urgent", mark:"!"},
+    "Pas vu":{label:"Pas vu", sub:"Zone non contrôlée", cls:"gray", mark:"!"},
+    "Non présent":{label:"Non présent", sub:"Élément absent de cette toiture", cls:"gray", mark:"check"},
+    "Non contrôlé":{label:"Non contrôlé", sub:"Contrôle à réaliser", cls:"gray", mark:"!"}
+  };
+  return map[etat] || map["Non contrôlé"];
+}
+
+// Fond de page "point de contrôle" : tout le graphisme (photo découpée en diagonale, panneau noir,
+// rubans dorés, pied de page) est dessiné dans UN svg inline — html2canvas ne gère pas clip-path CSS.
+function ppBackdropSvg(photoUrl){
+  const u = "pp"+(++ppUid);
+  return `<svg class="pp-bg" viewBox="0 0 1055 1491" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <clipPath id="${u}c"><polygon points="480,0 1055,0 1055,610 480,490 205,350"/></clipPath>
+      <linearGradient id="${u}g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f5e2a0"/><stop offset=".4" stop-color="#d4af37"/><stop offset=".72" stop-color="#9a6a2c"/><stop offset="1" stop-color="#e8cb72"/></linearGradient>
+      <linearGradient id="${u}d" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0a0a0a"/><stop offset="1" stop-color="#231b14"/></linearGradient>
+      <linearGradient id="${u}s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".5"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>
+      <linearGradient id="${u}p" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b9a679"/><stop offset="1" stop-color="#7d6a42"/></linearGradient>
+    </defs>
+    <g clip-path="url(#${u}c)">
+      ${photoUrl ? `<image href="${photoUrl}" x="205" y="0" width="850" height="610" preserveAspectRatio="xMidYMid slice"/>` : `<rect x="205" y="0" width="850" height="610" fill="url(#${u}p)"/>`}
+      <rect x="205" y="0" width="850" height="230" fill="url(#${u}s)"/>
+    </g>
+    <path d="M0,1165 L600,1335 L1055,1285 L1055,1491 L0,1491 Z" fill="url(#${u}d)"/>
+    <path d="M0,0 L480,0 L205,350 L330,414 L0,700 Z" fill="url(#${u}d)"/>
+    <path d="M452,0 L502,0 L222,362 L198,340 Z" fill="url(#${u}g)"/>
+    <path d="M200,330 L484,486 L478,506 L214,376 Z" fill="url(#${u}g)"/>
+    <path d="M0,1168 L0,1224 L170,1391 L122,1391 Z" fill="url(#${u}g)"/>
+    <path d="M90,1258 C260,1330 430,1374 592,1382 L642,1338 C480,1340 300,1300 90,1258 Z" fill="url(#${u}g)"/>
+    <path d="M925,1092 L1055,1030 L1055,1092 Z" fill="url(#${u}g)" opacity=".85"/>
+  </svg>`;
+}
+
+function pdfPointPage(p, i, d){
   const pt = d.diagnostic.points[p];
-  const photo = pt.photos.find(ph=>ph.dataUrl);
+  const photos = (pt.photos||[]).filter(ph=>ph.dataUrl);
+  const st = ppStatus(pt.etat);
   const dyk = pickDidYouKnow(pt);
+  const obs = pt.observation || (pt.etat==="Bon état" ? "Aucune anomalie n’a été observée sur cet élément lors du contrôle visuel des zones accessibles." : "Non renseignée.");
+  const showVig = !!pt.risque && pt.etat!=="Bon état" && pt.etat!=="Non présent";
+  const card = (icon,label,html)=>`<div class="pp-card"><div class="pp-card-ic">${iconSvg(icon,30)}</div><div class="pp-card-body"><div class="pp-card-label">${label}</div><div class="pp-card-txt pp-fit">${html}</div></div></div>`;
+  const cards = [
+    card("doc","Notre observation",esc(obs)),
+    dyk ? card("idea","Le saviez-vous ?",esc(dyk.text)) : "",
+    card("wrench","Décision",`<b>${esc(pt.decision)}</b>${pt.pourquoi?" — "+esc(pt.pourquoi):""}`),
+    pt.travaux ? card("helmet","Travaux proposés",esc(pt.travaux)) : ""
+  ].filter(Boolean);
+  const titleFs = p.length<=12 ? 46 : (p.length<=24 ? 40 : 34);
+  const thumbs = photos.slice(1,3);
   return `
-  <div class="pdf-point ${etatAccentCls(pt.etat)}">
-    <div class="pdf-point-photo">
-      ${photo?`<img src="${photo.dataUrl}" alt="">`:`<div class="pdf-point-photo-ph">${iconSvg("house",26)}<span>Photo à ajouter</span></div>`}
-      <div class="pdf-point-photo-tag"><span class="pdf-point-num">${i+1}</span></div>
+  <div class="pdf-page-frame"><div class="pdf-page pdf-pointpage">
+    ${ppBackdropSvg(photos[0] ? photos[0].dataUrl : "")}
+    ${photos[0] ? "" : `<div class="pp-photo-ph">${iconSvg("camera",44)}<span>Photo à ajouter</span></div>`}
+    ${thumbs.length ? `<div class="pp-thumbs">${thumbs.map(t=>`<img src="${t.dataUrl}" alt="">`).join("")}</div>` : ""}
+    <img class="pp-logo" src="assets/logo-lockup.png" alt="Maître Toiturier">
+    <div class="pp-services">Couverture<br>Zinguerie<br>Rénovation<br>Entretien</div>
+    <div class="pp-tagline">Votre toit,<br>notre expertise<br>durable.</div>
+    <div class="pp-topright"><div class="pp-topright-t">Rapport de diagnostic</div><div class="pp-topright-n">N° ${esc(d.id)}</div><div class="pp-topright-line"></div></div>
+    <div class="pp-num">${String(i+1).padStart(2,"0")}</div>
+    <div class="pp-titleblock">
+      <div class="pp-zone">Zone de contrôle</div>
+      <div class="pp-title" style="font-size:${titleFs}px">${esc(p)}</div>
+      <div class="pp-title-line"></div>
     </div>
-    <div class="pdf-point-content">
-      <div class="pdf-point-head">
-        <div class="pdf-point-title">${esc(p)}</div>
-        ${etatPill(pt.etat)}
-      </div>
-      <div class="pdf-point-block">
-        <span class="pdf-point-label">Notre observation</span>
-        <p>${pt.observation?esc(pt.observation):(pt.etat==="Bon état"?"Aucune anomalie n’a été observée sur cet élément lors du contrôle visuel des zones accessibles.":"Non renseignée.")}</p>
-      </div>
-      ${dyk?`<div class="pdf-dyk"><div class="pdf-dyk-head">${iconSvg("idea",14)}<span>Le saviez-vous ?</span></div><p>${esc(dyk.text)}</p></div>`:""}
-      <div class="pdf-point-block">
-        <span class="pdf-point-label">Décision</span>
-        <p><b>${esc(pt.decision)}</b>${pt.pourquoi?" — "+esc(pt.pourquoi):""}</p>
-      </div>
-      ${pt.travaux?`<div class="pdf-point-block"><span class="pdf-point-label">Travaux proposés</span><p>${esc(pt.travaux)}</p></div>`:""}
-      ${pt.risque && pt.etat!=="Bon état" && pt.etat!=="Non présent"?`<div class="pdf-risk"><b>${iconSvg("warning",13)} Vigilance</b><span>${esc(pt.risque)}</span></div>`:""}
+    <div class="pp-pill pp-pill-${st.cls}">
+      <div class="pp-pill-ic">${st.mark==="check" ? iconSvg("check",20) : "<span>!</span>"}</div>
+      <div class="pp-pill-tx"><div class="pp-pill-main">${esc(st.label)}</div><div class="pp-pill-sub">${esc(st.sub)}</div></div>
     </div>
-  </div>`;
+    <div class="pp-body">
+      <div class="pp-cards n${cards.length}">${cards.join("")}</div>
+      <div class="pp-vig ${showVig?"":"only-quote"}">
+        ${showVig ? `<div class="pp-vig-main"><div class="pp-vig-ic">${iconSvg("warning",40)}</div><div class="pp-vig-body"><div class="pp-vig-label">Vigilance</div><div class="pp-vig-txt pp-fit">${esc(pt.risque)}</div></div></div>` : ""}
+        <div class="pp-vig-quote"><div class="pp-vig-qm">”</div><div class="pp-vig-qt">Un toit bien entretenu aujourd’hui, c’est un patrimoine préservé demain.</div><div class="pp-vig-ql"></div></div>
+      </div>
+    </div>
+    <div class="pp-foot">
+      <div class="pp-foot-item">${iconSvg("pin",20)}<span>${esc(d.ville)}</span></div>
+      <div class="pp-foot-item">${iconSvg("globe",20)}<span>www.maitretoiturier.fr</span></div>
+      <div class="pdf-page-num pp-pagenum"></div>
+    </div>
+  </div></div>`;
+}
+
+// Réduit la taille du texte des blocs .pp-fit qui débordent de leur cadre (longues remarques).
+function fitPointPages(root){
+  root = root || document;
+  root.querySelectorAll(".pp-fit").forEach(el=>{
+    let fs = parseFloat(getComputedStyle(el).fontSize);
+    let guard = 0;
+    while(el.scrollHeight > el.clientHeight + 1 && fs > 7.5 && guard < 24){
+      fs -= 0.4;
+      el.style.fontSize = fs + "px";
+      guard++;
+    }
+  });
 }
 
 function buildClosingSummary(d){
@@ -1567,16 +1581,7 @@ function renderReportDoc(d){
   }).join("");
   const finalRowNum = flaggedPoints.length+1;
 
-  const pointsFlowPage = `
-    <div class="pdf-page-frame"><div class="pdf-page"><div class="pdf-page-pad pdf-points-flow">
-      <div class="pdf-banner">
-        ${pdfHead()}
-        <div class="pdf-overline">Rapport ${esc(d.id)} · ${esc(d.client)}</div>
-        <div class="pdf-h1">Points de contrôle</div>
-        <div class="pdf-h1-sub">Constat, photo et risques associés pour chaque zone inspectée.</div>
-      </div>
-      ${POINTS.map((p,i)=>pdfPointCard(p, i, d)).join("")}
-    </div></div></div>`;
+  const pointsFlowPage = POINTS.map((p,i)=>pdfPointPage(p, i, d)).join("");
 
   return `
   <div class="pdf-doc">
