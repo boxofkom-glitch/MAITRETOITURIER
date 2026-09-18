@@ -1385,7 +1385,7 @@ function ppStatus(etat){
 
 // Fond de page "point de contrôle" : tout le graphisme (photo découpée en diagonale, panneau noir,
 // rubans dorés, pied de page) est dessiné dans UN svg inline — html2canvas ne gère pas clip-path CSS.
-function ppBackdropSvg(photoUrl){
+function ppBackdropSvg(photoUrl, align){
   const u = "pp"+(++ppUid);
   return `<svg class="pp-bg" viewBox="0 0 1055 1491" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
     <defs>
@@ -1396,7 +1396,7 @@ function ppBackdropSvg(photoUrl){
       <linearGradient id="${u}p" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b9a679"/><stop offset="1" stop-color="#7d6a42"/></linearGradient>
     </defs>
     <g clip-path="url(#${u}c)">
-      ${photoUrl ? `<image href="${photoUrl}" x="205" y="0" width="850" height="610" preserveAspectRatio="xMidYMid slice"/>` : `<rect x="205" y="0" width="850" height="610" fill="url(#${u}p)"/>`}
+      ${photoUrl ? `<image href="${photoUrl}" x="205" y="0" width="850" height="610" preserveAspectRatio="${align||"xMidYMid"} slice"/>` : `<rect x="205" y="0" width="850" height="610" fill="url(#${u}p)"/>`}
       <rect x="205" y="0" width="850" height="230" fill="url(#${u}s)"/>
     </g>
     <path d="M0,1165 L600,1335 L1055,1285 L1055,1491 L0,1491 Z" fill="url(#${u}d)"/>
@@ -1440,21 +1440,26 @@ function buildClosingSummary(d){
   return [opening, s.observations, closing].filter(Boolean).join(" ");
 }
 
-// Photo de couverture en data-URL (les <image> d'un SVG rendu par html2canvas ne peuvent pas lire un fichier externe).
-let COVER_PHOTO = "";
-(function preloadCoverPhoto(){
-  const im = new Image();
-  im.onload = ()=>{
-    try{
-      const w = Math.min(1200, im.naturalWidth), h = Math.round(im.naturalHeight * w / im.naturalWidth);
-      const c = document.createElement("canvas"); c.width = w; c.height = h;
-      c.getContext("2d").drawImage(im, 0, 0, w, h);
-      COVER_PHOTO = c.toDataURL("image/jpeg", .85);
-      if(typeof render === "function" && state && state.appStage==="app") render();
-    }catch(e){}
-  };
-  im.src = "assets/cover-roof.jpg";
+// Photos des pages du rapport, converties en data-URL (les <image> d'un SVG rendu par html2canvas
+// ne peuvent pas lire un fichier externe).
+const PP_PHOTO_FILES = {cover:"assets/cover-team.jpg", synthese:"assets/photo-synthese.jpg", plan:"assets/photo-plan.jpg", dos:"assets/photo-dos.jpg"};
+const PP_PHOTOS = {};
+(function preloadPagePhotos(){
+  Object.keys(PP_PHOTO_FILES).forEach(key=>{
+    const im = new Image();
+    im.onload = ()=>{
+      try{
+        const w = Math.min(1200, im.naturalWidth), h = Math.round(im.naturalHeight * w / im.naturalWidth);
+        const c = document.createElement("canvas"); c.width = w; c.height = h;
+        c.getContext("2d").drawImage(im, 0, 0, w, h);
+        PP_PHOTOS[key] = c.toDataURL("image/jpeg", .85);
+        if(typeof render === "function" && state && state.appStage==="app") render();
+      }catch(e){}
+    };
+    im.src = PP_PHOTO_FILES[key];
+  });
 })();
+function ppPhoto(key){ return PP_PHOTOS[key] || PP_PHOTO_FILES[key]; }
 
 function ppConclusion(c){
   const sub = "Conclusion du diagnostic";
@@ -1486,7 +1491,7 @@ function ppShell(d, o){
   const pill = o.pill;
   return `
   <div class="pdf-page-frame"><div class="pdf-page pdf-pointpage">
-    ${ppBackdropSvg(o.photo||"")}
+    ${ppBackdropSvg(o.photo||"", o.photoAlign)}
     ${o.photo ? "" : `<div class="pp-photo-ph"><div class="pp-photo-x">❌</div><div class="pp-photo-t">Photo non disponible</div><div class="pp-photo-c">${esc(o.photoCause||"")}</div></div>`}
     ${o.thumbs && o.thumbs.length ? `<div class="pp-thumbs">${o.thumbs.map(t=>`<img src="${t}" alt="">`).join("")}</div>` : ""}
     <img class="pp-logo" src="assets/logo-lockup.png" alt="Maître Toiturier">
@@ -1606,13 +1611,12 @@ function ppBarsHtml(d){
   return `<svg viewBox="0 0 ${w} 66" xmlns="http://www.w3.org/2000/svg" style="display:block;height:52px;width:auto;max-width:100%">${rects}</svg><div class="pp-legs">${legend}</div>`;
 }
 
-function ppCoverPhoto(){ return COVER_PHOTO || "assets/cover-roof.jpg"; }
-
 function ppCoverPage(d){
   const s = d.diagnostic.synthese;
   return ppShell(d, {
-    photo: ppCoverPhoto(),
-    zone: "Étude personnalisée de votre toiture",
+    photo: ppPhoto("cover"),
+    photoAlign: "xMinYMid",
+    zone: "Étude personnalisée",
     icon: "house",
     title: "Rapport de diagnostic de toiture",
     titleFs: 33,
@@ -1637,7 +1641,7 @@ function ppSynthesePage(d){
     ? flagged.map(p=>`<b>${esc(p)}</b> — ${esc(d.diagnostic.points[p].etat)}`).join("<br>")
     : "Aucun point signalé pour le moment.";
   return ppShell(d, {
-    photo: ppCoverPhoto(),
+    photo: ppPhoto("synthese"),
     icon: "clipboard",
     zone: "Points contrôlés",
     title: "Synthèse du diagnostic",
@@ -1664,7 +1668,7 @@ function ppPlanPage(d){
   const steps = `<div class="pp-steps"><div class="pp-vig-label">Et maintenant ?</div>
     <div class="pp-step"><b>1</b>Devis détaillé</div><div class="pp-step"><b>2</b>Planification</div><div class="pp-step"><b>3</b>Suivi après travaux</div></div>`;
   return ppShell(d, {
-    photo: ppCoverPhoto(),
+    photo: ppPhoto("plan"),
     icon: "wrench",
     zone: "Préconisations",
     title: "Plan d’action",
@@ -1679,7 +1683,7 @@ function ppPlanPage(d){
 
 function ppBackPage(d){
   return ppShell(d, {
-    photo: ppCoverPhoto(),
+    photo: ppPhoto("dos"),
     icon: "check",
     zone: "Merci de votre confiance",
     title: "À votre disposition",
