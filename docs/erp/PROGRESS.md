@@ -60,3 +60,10 @@ voir DECISIONS.md D1) · `[!]` BLOCKED_EXTERNAL
 - Reste pour Chantier : planning multi-RDV, matériel/besoins, achats liés,
   finances/rentabilité du chantier, timeline dédiée, persona Poseur mobile
   (accès restreint à "Aujourd'hui / mon chantier").
+
+## Session du 2026-09-19 — CRM dossier client, devis/factures, CRUD
+- Devis : conditions de règlement (acompte oui/non et %, paiement en N fois, mode dont carte bancaire) reprises dans le PDF, les messages et les factures (échéancier avec statut par échéance).
+- Assistants en étapes pour créer un devis (client, prestations + suggestions du diagnostic, paiement, récapitulatif) et une facture (devis, règlement, récapitulatif), création simple ou avec envoi.
+- Dossier client façon CRM : Résumé (actions rapides, KPI, prochaine action, documents), Activité (tâches, notes modifiables/supprimables, historique), Documents (tous les PDF du dossier avec envoi et date d'envoi mémorisée).
+- CRUD : tâches, notes, contrats d'entretien, parrainages, devis/factures brouillons, paiements, visites, diagnostic (réinitialisation), incidents chantier, dossier — toujours avec confirmation.
+- Bug corrigé : les dossiers créés via « Nouvelle demande » n'avaient pas les champs devis/factures/chantier (plantage de l'onglet Devis) ; numérotation des dossiers robuste après suppression.

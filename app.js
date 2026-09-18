@@ -386,7 +386,8 @@ function seedDossiers(){
     diagnostic:freshDiagnostic(),
     devis:[],
     factures:[],
-    chantier:null
+    chantier:null,
+    taches:[]
   }, over);
 
   const list = [
@@ -1165,7 +1166,7 @@ function allDocs(){
   return {devis, factures};
 }
 
-function renderDocRow(kind, d, doc){
+function renderDocRow(kind, d, doc, hideOpen){
   const isDevis = kind==="devis";
   const num = isDevis ? doc.numero : doc.numero;
   const ttc = isDevis ? devisTotals(doc).ttcCt : doc.montantTtcCt;
@@ -1177,7 +1178,7 @@ function renderDocRow(kind, d, doc){
   <div class="row-item">
     <div class="row-left">
       <div class="row-avatar">${initials(d.client)}</div>
-      <div><div class="row-title">${esc(d.client)} · ${esc(num)}</div><div class="row-sub">${sub}</div></div>
+      <div><div class="row-title">${hideOpen ? esc(num) : esc(d.client)+" · "+esc(num)}</div><div class="row-sub">${sub}${docSentInfo(doc)}</div></div>
     </div>
     <div class="doc-row-right">
       <div class="doc-row-amount">${fmtEuros(ttc)}</div>
@@ -1185,7 +1186,7 @@ function renderDocRow(kind, d, doc){
       <div class="doc-row-actions">
         <button class="btn-ghost btn-sm" data-action="doc-pdf" data-id="${d.id}" data-kind="${kind}" data-doc="${doc.id}">PDF</button>
         ${canSend ? `<button class="btn-secondary btn-sm" data-action="modal-send-doc" data-id="${d.id}" data-kind="${kind}" data-doc="${doc.id}">Envoyer</button>` : ""}
-        <button class="btn-ghost btn-sm" data-action="open-dossier" data-id="${d.id}" data-tab="devis">Ouvrir</button>
+        ${hideOpen ? "" : `<button class="btn-ghost btn-sm" data-action="open-dossier" data-id="${d.id}" data-tab="devis">Ouvrir</button>`}
       </div>
     </div>
   </div>`;
@@ -1270,6 +1271,11 @@ function addSampleDocs(list){
     d.chantier = ch;
   }
 
+  // Tâches et notes d'exemple
+  const T = (id, tasks, notes)=>{ const dd = get(id); if(!dd) return; dd.taches = tasks; (notes||[]).forEach(n=>dd.notes.push(n)); };
+  T("TP-1042", [{id:"T1", titre:"Relancer le client pour la réponse au devis", echeance:"14 sept.", assigne:"Sarah Durand", done:false}, {id:"T2", titre:"Préparer la facture d’acompte dès l’acceptation", echeance:"16 sept.", assigne:"Sarah Durand", done:false}], [{date:"11 sept.", texte:"Cliente disponible en fin de journée ; préfère être contactée par WhatsApp."}]);
+  T("TP-1041", [{id:"T1", titre:"Planifier la visite d’entretien annuelle", echeance:"12 oct.", assigne:"Lucas Robert", done:false}, {id:"T2", titre:"Envoyer l’attestation de fin de travaux", echeance:"4 sept.", assigne:"Administration", done:true}], []);
+  T("TP-1045", [{id:"T1", titre:"Appeler le client pour confirmer l’accès avant la visite", echeance:"12 sept.", assigne:"Julien Bernard", done:false}], []);
   // Conditions de règlement et échéanciers des exemples
   const P = (id, over)=>{ const dd = get(id); if(dd) (dd.devis||[]).forEach(v=>{ v.objet = v.objet || dd.motif; v.validite = v.validite || 30; v.paiement = Object.assign(paiementDefaults(), over); }); };
   P("TP-1042", {acompte:true, acomptePct:30, fois:2, mode:"Chèque"});
@@ -1728,6 +1734,8 @@ async function prepareSend(d, channel){
 function finishSend(d, channel, how){
   const m = state.modal || {};
   d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:docHistoryLabel(m.kind||"report", m.docId)+" envoyé au client ("+(channel==="whatsapp"?"WhatsApp":"e-mail")+", "+how+")."});
+  const sentTarget = m.kind==="devis" ? findDevis(d, m.docId) : (m.kind==="facture" ? findFacture(d, m.docId) : d.diagnostic);
+  if(sentTarget){ sentTarget.sent = sentTarget.sent || []; sentTarget.sent.push({date:"12 sept.", canal: channel==="whatsapp" ? "WhatsApp" : "e-mail"}); }
   if(m.kind==="devis" && m.docId){
     const dv = findDevis(d, m.docId);
     if(dv && dv.statut==="Brouillon"){ dv.statut = "Envoyé"; dv.dateEnvoi = "12 sept."; }
@@ -1940,6 +1948,12 @@ function buildMaJournee(list){
   const upcoming = list.filter(d=>d.visiteDate && parseInt(d.visiteDate,10)>12)
     .sort((a,b)=>parseInt(a.visiteDate,10)-parseInt(b.visiteDate,10))
     .map(d=>({d, tag:d.visiteDate+" · Visite"}));
+  list.forEach(d=>(d.taches||[]).filter(t=>!t.done).forEach(t=>{
+    const dt = parseShortFrDate(t.echeance);
+    if(!dt) return;
+    if(dt<=TODAY_REF) urgent.push({d, tag:"Tâche : "+t.titre});
+    else upcoming.push({d, tag:t.echeance+" · "+t.titre});
+  }));
 
   if(urgent.length===0 && today.length===0 && upcoming.length===0) return "";
 
@@ -2088,14 +2102,11 @@ function renderDossiersList(){
 // ---------- Dossier detail ----------
 
 function tabsForRole(d){
-  if(state.role==="tech"){
-    const tabs = [["info","Dossier & historique"],["diagnostic","Diagnostic terrain"],["rapport","Rapport PDF"]];
-    if(d && d.chantier && canReadJob()) tabs.push(["chantier","Chantier"]);
-    return tabs;
-  }
-  const tabs = [["info","Dossier & historique"],["diagnostic","Diagnostic terrain"],["rapport","Rapport PDF"],["commercial","Suivi commercial"]];
+  const tabs = [["info","Résumé"],["activite","Activité"],["diagnostic","Diagnostic terrain"],["rapport","Rapport PDF"]];
+  if(state.role!=="tech") tabs.push(["commercial","Suivi commercial"]);
   if(hasPermission("quote.create")) tabs.push(["devis","Devis & factures"]);
   if(d && d.chantier && canReadJob()) tabs.push(["chantier","Chantier"]);
+  tabs.push(["documents","Documents"]);
   return tabs;
 }
 
@@ -2112,12 +2123,15 @@ function renderDossierDetail(id){
   else if(state.dossierTab==="commercial") body = renderDossierCommercial(d);
   else if(state.dossierTab==="devis") body = renderDossierDevis(d);
   else if(state.dossierTab==="chantier") body = renderDossierChantier(d);
+  else if(state.dossierTab==="activite") body = renderDossierActivite(d);
+  else if(state.dossierTab==="documents") body = renderDossierDocuments(d);
 
   if(state.dossierTab==="diagnostic" && diagEditable()){
     return `
     <div class="diag-focus-bar">
       <button class="breadcrumb" data-action="dossier-tab" data-tab="info">← Quitter le diagnostic</button>
       <div class="diag-focus-title">${esc(d.client)} · ${esc(d.id)}</div>
+      <button class="btn-ghost btn-sm" data-action="ask-delete" data-what="diagnostic" data-id="${d.id}">Réinitialiser</button>
     </div>
     ${body}
     `;
@@ -2142,8 +2156,80 @@ function renderDossierDetail(id){
   `;
 }
 
+// ---------- Dossier client façon CRM : Résumé, Activité, Documents ----------
+
+const TEAM_MEMBERS = ["Administration","Sarah Durand","Lucas Robert","Julien Bernard","Léa Petit"];
+function canEditActivity(){ return state.role!=="client"; }
+function nextTaskId(d){ return "T"+(((d.taches||[]).reduce((m,t)=>Math.max(m, parseInt(t.id.slice(1),10)||0),0))+1); }
+
+function dossierKpis(d){
+  const acc = wzAcceptedDevis(d);
+  const dv = acc || latestDevis(d);
+  const valeur = dv ? devisTotals(dv).ttcCt : 0;
+  const factures = (d.factures||[]).filter(f=>f.statut!=="Brouillon");
+  const facture = factures.reduce((s,f)=>s+f.montantTtcCt,0);
+  const encaisse = (d.factures||[]).reduce((s,f)=>s+facturePaidCt(f),0);
+  return {valeur, facture, encaisse, reste: Math.max(0, facture-encaisse), devisStatut: dv ? dv.statut : null};
+}
+
+function nextActionFor(d){
+  const open = (d.taches||[]).filter(t=>!t.done);
+  if(open.length){
+    const t = open[0];
+    return {label:t.titre, sub:"Échéance "+(t.echeance||"non définie")+(t.assigne?" · "+t.assigne:""), tid:t.id};
+  }
+  if(d.prochaineRelance) return {label:"Relance commerciale", sub:"Prévue le "+d.prochaineRelance+(d.commercial?" · "+d.commercial:"")};
+  return null;
+}
+
+function docSentInfo(doc){
+  if(!doc || !doc.sent || !doc.sent.length) return "";
+  const last = doc.sent[doc.sent.length-1];
+  return " · envoyé le "+esc(last.date)+" ("+esc(last.canal)+")";
+}
+
 function renderDossierInfo(d){
+  const k = dossierKpis(d);
+  const phone = (d.telephone||"").replace(/\D/g,"");
+  const wa = phone.replace(/^0/,"33");
+  const na = nextActionFor(d);
+  const canQuote = hasPermission("quote.create");
+  const sendReport = d.diagnostic.rapportPret && hasPermission("quote.send");
+  const docs = [];
+  if(d.diagnostic.rapportPret) docs.push({kind:"report"});
+  (d.devis||[]).slice(-1).forEach(dv=>docs.push({kind:"devis", doc:dv}));
+  (d.factures||[]).forEach(f=>docs.push({kind:"facture", doc:f}));
   return `
+  <div class="card crm-head">
+    <div class="crm-head-top">
+      <div class="row-avatar big">${initials(d.client)}</div>
+      <div style="flex:1;min-width:0">
+        <div class="crm-name">${esc(d.client)}</div>
+        <div class="row-sub">${esc(d.adresse)}, ${esc(d.ville)} · ${esc(d.typeBatiment)}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${badge(d.priorite, priorityBadgeClass(d.priorite))}${badge(d.statut, statutBadgeClass(d.statut))}${d.commercialStage?badge(d.commercialStage,"gray"):""}</div>
+      </div>
+    </div>
+    <div class="crm-actions">
+      ${phone?`<a class="btn-secondary btn-sm" href="tel:${phone}">Appeler</a><a class="btn-secondary btn-sm" href="https://wa.me/${wa}" target="_blank" rel="noopener">WhatsApp</a>`:""}
+      ${d.email?`<a class="btn-secondary btn-sm" href="mailto:${esc(d.email)}">E-mail</a>`:""}
+      ${canEditActivity()?`<button class="btn-secondary btn-sm" data-action="form-open" data-form="task" data-id="${d.id}">+ Tâche</button><button class="btn-secondary btn-sm" data-action="dossier-tab" data-tab="activite">+ Note</button>`:""}
+      ${canQuote?`<button class="btn-primary btn-sm" data-action="wizard-devis" data-id="${d.id}">+ Devis</button>`:""}
+      ${sendReport?`<button class="btn-primary btn-sm" data-action="modal-send" data-id="${d.id}">Envoyer le rapport</button>`:""}
+    </div>
+  </div>
+
+  <div class="stat-grid crm-kpis">
+    ${stat("Valeur de l’affaire", fmtEuros(k.valeur), k.devisStatut?("Devis "+k.devisStatut.toLowerCase()):"Pas encore de devis")}
+    ${stat("Facturé", fmtEuros(k.facture), "Factures envoyées")}
+    ${stat("Encaissé", fmtEuros(k.encaisse), "Paiements confirmés")}
+    ${stat("Reste à encaisser", fmtEuros(k.reste), k.reste>0?"À suivre":"Soldé")}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3>Prochaine action</h3>${canEditActivity()?`<button class="link-btn" data-action="dossier-tab" data-tab="activite">Toute l’activité</button>`:""}</div>
+    ${na ? `<div class="row-item"><div><div class="row-title">${esc(na.label)}</div><div class="row-sub">${esc(na.sub)}</div></div>${na.tid && canEditActivity()?`<button class="btn-ghost btn-sm" data-action="task-toggle" data-id="${d.id}" data-tid="${na.tid}">Fait ✓</button>`:""}</div>` : `<div class="empty-note">Aucune action planifiée.${canEditActivity()?` <button class="link-btn" data-action="form-open" data-form="task" data-id="${d.id}">Planifier une tâche</button>`:""}</div>`}
+  </div>
+
   <div class="card">
     <div class="card-header"><h3>Coordonnées et demande</h3>${canEditDossier()?`<button class="btn-secondary btn-sm" data-action="modal-edit" data-id="${d.id}">Modifier</button>`:""}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px">
@@ -2159,16 +2245,7 @@ function renderDossierInfo(d){
   </div>
 
   <div class="card">
-    <div class="card-header"><h3>Notes internes</h3><span class="badge gray">Équipe uniquement</span></div>
-    ${d.notes.map(n=>`<div class="row-item"><div><div class="row-sub">${esc(n.date)}</div><div>${esc(n.texte)}</div></div></div>`).join("")}
-    <div class="form-field" style="margin-top:${d.notes.length?"14px":"0"}">
-      <textarea id="noteInput" placeholder="Informations utiles pour la prochaine intervention…"></textarea>
-    </div>
-    <button class="btn-secondary btn-sm" data-action="add-note" data-id="${d.id}">Ajouter la note</button>
-  </div>
-
-  <div class="card">
-    <div class="card-header"><h3>Affectation &amp; rendez-vous</h3>${canAffecter()?`<button class="btn-secondary btn-sm" data-action="modal-affect" data-id="${d.id}">Affecter / planifier</button>`:""}</div>
+    <div class="card-header"><h3>Affectation &amp; rendez-vous</h3><div style="display:flex;gap:8px;flex-wrap:wrap">${canAffecter()?`<button class="btn-secondary btn-sm" data-action="modal-affect" data-id="${d.id}">Affecter / planifier</button>`:""}${canAffecter() && d.visiteDate?`<button class="btn-ghost btn-sm" data-action="ask-delete" data-what="visite" data-id="${d.id}">Retirer la visite</button>`:""}</div></div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;font-size:13px">
       <div><div class="row-sub">Technicien</div><div>${esc(d.technicien||"À affecter")}</div></div>
       <div><div class="row-sub">Commercial</div><div>${esc(d.commercial||"À affecter")}</div></div>
@@ -2177,8 +2254,8 @@ function renderDossierInfo(d){
   </div>
 
   <div class="card">
-    <div class="card-header"><h3>Historique du dossier</h3></div>
-    ${d.historique.map(h=>`<div class="row-item"><div><div class="row-sub">${esc(h.date)} · ${esc(h.auteur)}</div><div>${esc(h.texte)}</div></div></div>`).join("")}
+    <div class="card-header"><h3>Documents</h3><button class="link-btn" data-action="dossier-tab" data-tab="documents">Tous les documents</button></div>
+    ${docs.length ? docs.map(x=>x.kind==="report" ? renderReportRow(d) : renderDocRow(x.kind, d, x.doc, true)).join("") : `<div class="empty-note">Aucun document pour l’instant : le rapport apparaît après le diagnostic, les devis et factures après leur création.</div>`}
   </div>
 
   <div class="card">
@@ -2186,13 +2263,159 @@ function renderDossierInfo(d){
     ${d.diagnostic.rapportPret ? `
       <div class="row-item">
         <div><div class="row-title">Diagnostic du ${esc(d.visiteDate)}</div><div class="row-sub">Version 1 · ${esc(d.technicien)} · ${Object.values(d.diagnostic.points).reduce((s,p)=>s+p.photos.length,0)} photo(s)</div></div>
-        <div style="display:flex;align-items:center;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           ${badge(d.diagnostic.rapportPartage?"Partagé (démo)":"Interne", d.diagnostic.rapportPartage?"green":"gray")}
-          <button class="btn-ghost" data-action="dossier-tab" data-tab="rapport">Télécharger</button>
+          <button class="btn-ghost btn-sm" data-action="dossier-tab" data-tab="rapport">Aperçu</button>
+          ${diagEditable()?`<button class="btn-ghost btn-sm" data-action="ask-delete" data-what="diagnostic" data-id="${d.id}">Supprimer</button>`:""}
         </div>
       </div>` : `<div class="empty-note">0 rapport(s) conservé(s). Les rapports validés et leurs photos seront conservés ici au fil des visites.</div>`}
   </div>
+
+  ${canEditDossier()?`<div class="card crm-danger"><div class="card-header"><h3>Zone sensible</h3></div><p class="form-help" style="margin:0 0 12px">Supprimer le dossier efface définitivement le diagnostic, les devis, les factures et le chantier associés.</p><button class="btn-danger" data-action="ask-delete" data-what="dossier" data-id="${d.id}">Supprimer ce dossier</button></div>`:""}
   `;
+}
+
+function renderReportRow(d){
+  const canSend = hasPermission("quote.send");
+  return `
+  <div class="row-item">
+    <div class="row-left">
+      <div class="row-avatar">PDF</div>
+      <div><div class="row-title">Rapport de diagnostic</div><div class="row-sub">Visite du ${esc(d.visiteDate||"—")} · ${esc(d.technicien||"")}${docSentInfo(d.diagnostic)}</div></div>
+    </div>
+    <div class="doc-row-right">
+      ${badge(d.diagnostic.rapportPartage?"Partagé":"Interne", d.diagnostic.rapportPartage?"green":"gray")}
+      <div class="doc-row-actions">
+        <button class="btn-ghost btn-sm" data-action="dossier-tab" data-tab="rapport">Aperçu</button>
+        <button class="btn-ghost btn-sm" data-action="download-pdf" data-id="${d.id}">PDF</button>
+        ${canSend?`<button class="btn-secondary btn-sm" data-action="modal-send" data-id="${d.id}">Envoyer</button>`:""}
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderDossierActivite(d){
+  const taches = d.taches || [];
+  const editable = canEditActivity();
+  return `
+  <div class="card">
+    <div class="card-header"><h3>Tâches</h3>${editable?`<button class="btn-secondary btn-sm" data-action="form-open" data-form="task" data-id="${d.id}">+ Ajouter une tâche</button>`:""}</div>
+    ${taches.length ? taches.map(t=>`
+      <div class="row-item task-row ${t.done?"done":""}">
+        <label class="task-main">
+          <input type="checkbox" data-action="task-toggle" data-id="${d.id}" data-tid="${t.id}" ${t.done?"checked":""} ${editable?"":"disabled"}>
+          <span><span class="row-title">${esc(t.titre)}</span><span class="row-sub" style="display:block">${t.echeance?"Échéance "+esc(t.echeance):"Sans échéance"}${t.assigne?" · "+esc(t.assigne):""}</span></span>
+        </label>
+        ${editable?`<div class="doc-row-actions"><button class="btn-ghost btn-sm" data-action="form-open" data-form="task" data-id="${d.id}" data-tid="${t.id}">Modifier</button><button class="btn-ghost btn-sm" data-action="ask-delete" data-what="task" data-id="${d.id}" data-tid="${t.id}">✕</button></div>`:""}
+      </div>`).join("") : `<div class="empty-note">Aucune tâche. Planifiez la prochaine action pour ne rien oublier (rappel, devis à relancer, document à envoyer…).</div>`}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3>Notes internes</h3><span class="badge gray">Équipe uniquement</span></div>
+    ${d.notes.length ? d.notes.map((n,i)=>`<div class="row-item"><div style="min-width:0"><div class="row-sub">${esc(n.date)}</div><div>${esc(n.texte)}</div></div>${editable?`<div class="doc-row-actions"><button class="btn-ghost btn-sm" data-action="form-open" data-form="note" data-id="${d.id}" data-nid="${i}">Modifier</button><button class="btn-ghost btn-sm" data-action="ask-delete" data-what="note" data-id="${d.id}" data-nid="${i}">✕</button></div>`:""}</div>`).join("") : `<div class="empty-note">Aucune note.</div>`}
+    ${editable?`<div class="form-field" style="margin-top:14px"><textarea id="noteInput" placeholder="Informations utiles pour la prochaine intervention…"></textarea></div>
+    <button class="btn-secondary btn-sm" data-action="add-note" data-id="${d.id}">Ajouter la note</button>`:""}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3>Historique du dossier</h3></div>
+    ${d.historique.slice().reverse().map(h=>`<div class="row-item"><div><div class="row-sub">${esc(h.date)} · ${esc(h.auteur)}</div><div>${esc(h.texte)}</div></div></div>`).join("")}
+  </div>`;
+}
+
+function renderDossierDocuments(d){
+  const rows = [];
+  if(d.diagnostic.rapportPret) rows.push(renderReportRow(d));
+  (d.devis||[]).slice().reverse().forEach(dv=>rows.push(renderDocRow("devis", d, dv, true)));
+  (d.factures||[]).slice().reverse().forEach(f=>rows.push(renderDocRow("facture", d, f, true)));
+  return `
+  <div class="card">
+    <div class="card-header"><h3>Documents du dossier</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${hasPermission("quote.create")?`<button class="btn-secondary btn-sm" data-action="wizard-devis" data-id="${d.id}">+ Devis</button>`:""}
+        ${hasPermission("invoice.create") && wzAcceptedDevis(d)?`<button class="btn-secondary btn-sm" data-action="wizard-facture" data-id="${d.id}">+ Facture</button>`:""}
+      </div>
+    </div>
+    <p class="form-help" style="margin:0 0 6px">Tous les PDF du dossier (rapport, devis, factures) : téléchargez-les ou envoyez-les au client par WhatsApp ou e-mail, avec un message prêt.</p>
+    ${rows.length ? rows.join("") : `<div class="empty-note">Aucun document pour l’instant.</div>`}
+  </div>`;
+}
+
+// ---------- Formulaires génériques (tâche, note, contrat, parrainage) ----------
+
+function modalForm(m){
+  const d = m.id ? byId(m.id) : null;
+  if(m.form==="task"){
+    const t = m.tid ? d.taches.find(x=>x.id===m.tid) : {titre:"", echeance:"", assigne:d.commercial||TEAM_MEMBERS[0]};
+    return modalWrap(m.tid?"Modifier la tâche":"Nouvelle tâche", `
+      <div class="form-field"><label>Tâche</label><input type="text" id="ffTitre" value="${esc(t.titre)}" placeholder="Ex. Relancer le client pour le devis"></div>
+      <div class="form-field"><label>Échéance</label><input type="text" id="ffEcheance" value="${esc(t.echeance||"")}" placeholder="ex. 15 sept."></div>
+      <div class="form-field"><label>Responsable</label><select id="ffAssigne">${TEAM_MEMBERS.map(n=>`<option ${t.assigne===n?"selected":""}>${esc(n)}</option>`).join("")}</select></div>
+      <div class="modal-actions"><button class="btn-primary" data-action="form-save">Enregistrer</button><button class="btn-secondary" data-action="modal-close">Annuler</button></div>`);
+  }
+  if(m.form==="note"){
+    return modalWrap("Modifier la note", `
+      <div class="form-field"><label>Note</label><textarea id="ffTexte" style="min-height:120px">${esc(d.notes[m.nid].texte)}</textarea></div>
+      <div class="modal-actions"><button class="btn-primary" data-action="form-save">Enregistrer</button><button class="btn-secondary" data-action="modal-close">Annuler</button></div>`);
+  }
+  if(m.form==="contract"){
+    const c = m.idx!=null ? CONTRACTS[m.idx] : {dossierId:"", prestations:"Contrôle périodique", frequence:"Tous les 12 mois", prochaineVisite:"", statut:"Actif", montantAnnuel:0};
+    return modalWrap(m.idx!=null?"Modifier le contrat":"Nouveau contrat d’entretien", `
+      <div class="form-field"><label>Client / toiture</label><select id="ffDossier"><option value="">Choisir un dossier…</option>${DOSSIERS.map(x=>`<option value="${x.id}" ${c.dossierId===x.id?"selected":""}>${esc(x.client)} · ${esc(x.ville)}</option>`).join("")}</select></div>
+      <div class="form-field"><label>Prestations</label><input type="text" id="ffPrest" value="${esc(c.prestations)}"></div>
+      <div class="form-field"><label>Fréquence</label><select id="ffFreq">${["Tous les 6 mois","Tous les 12 mois","Tous les 24 mois"].map(f=>`<option ${c.frequence===f?"selected":""}>${f}</option>`).join("")}</select></div>
+      <div class="form-field"><label>Prochaine visite</label><input type="text" id="ffVisite" value="${esc(c.prochaineVisite)}" placeholder="ex. 12 oct."></div>
+      <div class="form-field"><label>Statut</label><select id="ffStatut">${["Actif","Proposé","Suspendu"].map(f=>`<option ${c.statut===f?"selected":""}>${f}</option>`).join("")}</select></div>
+      <div class="form-field"><label>Montant annuel (€)</label><input type="number" min="0" id="ffMontant" value="${c.montantAnnuel}"></div>
+      <div class="modal-actions"><button class="btn-primary" data-action="form-save">Enregistrer</button><button class="btn-secondary" data-action="modal-close">Annuler</button></div>`);
+  }
+  if(m.form==="parrainage"){
+    const p = m.idx!=null ? PARRAINAGES[m.idx] : {parrain:"", clientApporte:"", date:"12 sept.", affaire:"À contacter", recompense:80, suivi:"En attente"};
+    return modalWrap(m.idx!=null?"Modifier le parrainage":"Nouveau parrainage", `
+      <div class="form-field"><label>Parrain (client existant)</label><input type="text" id="ffParrain" value="${esc(p.parrain)}"></div>
+      <div class="form-field"><label>Client apporté</label><input type="text" id="ffApporte" value="${esc(p.clientApporte)}"></div>
+      <div class="form-field"><label>Date</label><input type="text" id="ffDate" value="${esc(p.date)}"></div>
+      <div class="form-field"><label>Affaire</label><select id="ffAffaire">${["À contacter","Devis à préparer","Devis envoyé","Gagné","Perdu"].map(f=>`<option ${p.affaire===f?"selected":""}>${f}</option>`).join("")}</select></div>
+      <div class="form-field"><label>Récompense prévue (€)</label><input type="number" min="0" id="ffRecomp" value="${p.recompense}"></div>
+      <div class="form-field"><label>Suivi</label><select id="ffSuivi">${["En attente","Contacté","Gagné","Récompense remise"].map(f=>`<option ${p.suivi===f?"selected":""}>${f}</option>`).join("")}</select></div>
+      <div class="modal-actions"><button class="btn-primary" data-action="form-save">Enregistrer</button><button class="btn-secondary" data-action="modal-close">Annuler</button></div>`);
+  }
+  return "";
+}
+
+function saveForm(){
+  const m = state.modal;
+  const val = id=>document.getElementById(id).value;
+  const d = m.id ? byId(m.id) : null;
+  if(m.form==="task"){
+    const titre = val("ffTitre").trim();
+    if(!titre){ showToast("Donnez un titre à la tâche."); return; }
+    d.taches = d.taches || [];
+    if(m.tid){ const t = d.taches.find(x=>x.id===m.tid); t.titre = titre; t.echeance = val("ffEcheance"); t.assigne = val("ffAssigne"); }
+    else d.taches.push({id:nextTaskId(d), titre, echeance:val("ffEcheance"), assigne:val("ffAssigne"), done:false});
+    state.modal = null; render(); showToast("Tâche enregistrée."); return;
+  }
+  if(m.form==="note"){
+    const texte = val("ffTexte").trim();
+    if(!texte){ showToast("La note ne peut pas être vide."); return; }
+    d.notes[m.nid].texte = texte;
+    state.modal = null; render(); showToast("Note modifiée."); return;
+  }
+  if(m.form==="contract"){
+    const dossierId = val("ffDossier");
+    const dd = dossierId ? byId(dossierId) : null;
+    if(!dd){ showToast("Choisissez un dossier."); return; }
+    const c = {client:dd.client, ville:dd.ville, prestations:val("ffPrest"), frequence:val("ffFreq"), prochaineVisite:val("ffVisite"), statut:val("ffStatut"), montantAnnuel:parseInt(val("ffMontant"),10)||0, technicien:dd.technicien, commercial:dd.commercial, dossierId};
+    if(m.idx!=null) CONTRACTS[m.idx] = c; else CONTRACTS.push(c);
+    state.modal = null; render(); showToast("Contrat enregistré."); return;
+  }
+  if(m.form==="parrainage"){
+    const parrain = val("ffParrain").trim(), apporte = val("ffApporte").trim();
+    if(!parrain || !apporte){ showToast("Indiquez le parrain et le client apporté."); return; }
+    const p = {parrain, clientApporte:apporte, date:val("ffDate"), affaire:val("ffAffaire"), recompense:parseInt(val("ffRecomp"),10)||0, suivi:val("ffSuivi"), commercial: m.idx!=null ? PARRAINAGES[m.idx].commercial : (state.role==="sales"?"Sarah Durand":"Lucas Robert"), dossierId: m.idx!=null ? PARRAINAGES[m.idx].dossierId : null};
+    if(m.idx!=null) PARRAINAGES[m.idx] = p; else PARRAINAGES.push(p);
+    state.modal = null; render(); showToast("Parrainage enregistré."); return;
+  }
 }
 
 function etatBtnCls(etatId){ return "etat-"+etatId.normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-zA-Z]/g,"").toLowerCase(); }
@@ -2900,7 +3123,7 @@ function renderDossierChantier(d){
   const incidentsBlock = `
     <div class="card">
       <div class="card-header"><h3>Incidents signalés</h3></div>
-      ${c.incidents.length?c.incidents.map(inc=>`<div class="row-item"><div><div class="row-title">${esc(incidentCatLabel(inc.categorie))}</div><div class="row-sub">${esc(inc.date)} · ${esc(inc.auteur)}</div><div>${esc(inc.description)}</div></div></div>`).join(""):`<div class="empty-note">Aucun incident signalé.</div>`}
+      ${c.incidents.length?c.incidents.map((inc,ix)=>`<div class="row-item"><div><div class="row-title">${esc(incidentCatLabel(inc.categorie))}</div><div class="row-sub">${esc(inc.date)} · ${esc(inc.auteur)}</div><div>${esc(inc.description)}</div></div>${canEdit?`<button class="btn-ghost btn-sm" data-action="ask-delete" data-what="incident" data-id="${d.id}" data-idx="${ix}">✕</button>`:""}</div>`).join(""):`<div class="empty-note">Aucun incident signalé.</div>`}
       <div class="form-field" style="margin-top:12px">
         <label>Signaler un problème</label>
         <select id="incCategorie">
@@ -3105,7 +3328,7 @@ function renderEntretiens(){
   return `
   <div class="page-header">
     <div><h1>Contrats d’entretien</h1><p>Conservez le programme prévu et les prochaines visites de chaque toiture.</p></div>
-    ${canNouveauContrat() ? `<button class="btn-primary" data-action="modal-info" data-msg="Nouveau contrat">+ Nouveau contrat</button>` : ""}
+    ${canNouveauContrat() ? `<button class="btn-primary" data-action="form-open" data-form="contract">+ Nouveau contrat</button>` : ""}
   </div>
   <div class="stat-grid">
     ${stat("Contrats suivis", contracts.length, "Proposés et en cours")}
@@ -3124,7 +3347,7 @@ function renderEntretiens(){
           <td>${esc(c.frequence)}</td>
           <td>${esc(c.prochaineVisite)}</td>
           <td>${badge(c.statut,"green")}</td>
-          <td style="display:flex;gap:8px"><button class="btn-ghost" data-action="open-dossier" data-id="${c.dossierId}">Dossier</button><button class="btn-ghost" disabled>Gérer</button></td>
+          <td style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn-ghost btn-sm" data-action="open-dossier" data-id="${c.dossierId}">Dossier</button>${canNouveauContrat()?`<button class="btn-ghost btn-sm" data-action="form-open" data-form="contract" data-idx="${CONTRACTS.indexOf(c)}">Modifier</button><button class="btn-ghost btn-sm" data-action="ask-delete" data-what="contract" data-idx="${CONTRACTS.indexOf(c)}">✕</button>`:""}</td>
         </tr>`).join("")}
       </tbody>
     </table>`}
@@ -3139,7 +3362,7 @@ function renderEntretiens(){
         </div>
         <div class="lc-motif">${esc(c.prestations)}<br>${esc(c.frequence)} · Prochaine visite : ${esc(c.prochaineVisite)}</div>
         <div class="lc-foot">
-          <button class="btn-secondary btn-sm" style="width:100%" data-action="open-dossier" data-id="${c.dossierId}">Voir le dossier</button>
+          <button class="btn-secondary btn-sm" style="flex:1" data-action="open-dossier" data-id="${c.dossierId}">Voir le dossier</button>${canNouveauContrat()?`<button class="btn-ghost btn-sm" data-action="form-open" data-form="contract" data-idx="${CONTRACTS.indexOf(c)}">Modifier</button><button class="btn-ghost btn-sm" data-action="ask-delete" data-what="contract" data-idx="${CONTRACTS.indexOf(c)}">✕</button>`:""}
         </div>
       </div>`).join("")}
   </div>
@@ -3257,18 +3480,18 @@ function renderCommercialKanban(){
 
 function renderParrainages(){
   const list = visibleParrainages();
-  const gagnees = 0;
+  const gagnees = list.filter(p=>p.affaire==="Gagné").length;
   const prevues = list.reduce((s,p)=>s+p.recompense,0);
   return `
   <div class="page-header">
     <div><h1>Parrainages clients</h1><p>Suivez les recommandations et les récompenses, du contact à la remise.</p></div>
-    ${canAjouterParrainage() ? `<button class="btn-primary" data-action="modal-info" data-msg="Ajouter un parrainage">+ Ajouter un parrainage</button>` : ""}
+    ${canAjouterParrainage() ? `<button class="btn-primary" data-action="form-open" data-form="parrainage">+ Ajouter un parrainage</button>` : ""}
   </div>
   <div class="stat-grid">
     ${stat("Recommandations", list.length, "Clients apportés")}
     ${stat("Affaires gagnées", gagnees, "Issues du parrainage")}
     ${stat("Récompenses prévues", prevues.toLocaleString("fr-FR")+" €", "Suivi indicatif, aucun versement")}
-    ${stat("Récompenses remises", 0, "Déclarées par l’administration")}
+    ${stat("Récompenses remises", list.filter(p=>p.suivi==="Récompense remise").length, "Déclarées par l’administration")}
   </div>
   <div class="card table-wrap">
     ${list.length===0 ? `<div class="empty-note">Aucun parrainage enregistré.</div>` : `
@@ -3281,7 +3504,7 @@ function renderParrainages(){
           <td>${esc(p.affaire)}</td>
           <td>${p.recompense} €</td>
           <td>${badge(p.suivi,"blue")}</td>
-          <td><button class="btn-ghost" data-action="mark-remise" data-idx="${i}">Marquer remise</button></td>
+          <td style="display:flex;gap:8px;flex-wrap:wrap">${p.suivi!=="Récompense remise"?`<button class="btn-ghost btn-sm" data-action="mark-remise" data-idx="${PARRAINAGES.indexOf(p)}">Marquer remise</button>`:""}${canAjouterParrainage()?`<button class="btn-ghost btn-sm" data-action="form-open" data-form="parrainage" data-idx="${PARRAINAGES.indexOf(p)}">Modifier</button><button class="btn-ghost btn-sm" data-action="ask-delete" data-what="parrainage" data-idx="${PARRAINAGES.indexOf(p)}">✕</button>`:""}</td>
         </tr>`).join("")}
       </tbody>
     </table>`}
@@ -3296,7 +3519,7 @@ function renderParrainages(){
         </div>
         <div class="lc-motif">A parrainé ${esc(p.clientApporte)} · ${esc(p.affaire)}<br>Récompense prévue : ${p.recompense} €</div>
         <div class="lc-foot">
-          <button class="btn-secondary btn-sm" style="width:100%" data-action="mark-remise" data-idx="${i}">Marquer remise</button>
+          ${p.suivi!=="Récompense remise"?`<button class="btn-secondary btn-sm" style="flex:1" data-action="mark-remise" data-idx="${PARRAINAGES.indexOf(p)}">Marquer remise</button>`:""}${canAjouterParrainage()?`<button class="btn-ghost btn-sm" data-action="form-open" data-form="parrainage" data-idx="${PARRAINAGES.indexOf(p)}">Modifier</button><button class="btn-ghost btn-sm" data-action="ask-delete" data-what="parrainage" data-idx="${PARRAINAGES.indexOf(p)}">✕</button>`:""}
         </div>
       </div>`).join("")}
   </div>`;
@@ -3427,6 +3650,7 @@ function buildModal(){
   if(m.type==="info") return modalInfo(m.msg);
   if(m.type==="send") return modalSendClient(byId(m.id));
   if(m.type==="wizard") return renderWizard();
+  if(m.type==="form") return modalForm(m);
   if(m.type==="confirm") return modalConfirm(m);
   return "";
 }
@@ -3563,7 +3787,11 @@ document.addEventListener("DOMContentLoaded", ()=>{
       return;
     }
     if(action==="copy-ref"){ showToast("Référence copiée : "+t.dataset.ref); return; }
-    if(action==="mark-remise"){ showToast("Récompense marquée comme remise (démo)."); return; }
+    if(action==="mark-remise"){
+      const pr = PARRAINAGES[parseInt(t.dataset.idx,10)];
+      if(pr){ pr.suivi = "Récompense remise"; render(); showToast("Récompense marquée comme remise."); }
+      return;
+    }
     if(action==="download-pdf"){
       const d = byId(t.dataset.id);
       generateAndDownloadPdf(d);
@@ -3588,7 +3816,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
     }
     if(action==="submit-new"){
       const name = document.getElementById("fName").value.trim() || "Nouveau client";
-      const nid = "TP-"+(1049+DOSSIERS.filter(d=>d.id.startsWith("TP-1")).length);
+      const nid = "TP-"+(Math.max(1048, ...DOSSIERS.map(x=>parseInt(x.id.slice(3),10)||0))+1);
       const newD = {
         id: nid, client:name, ville: document.getElementById("fVille").value.trim()||"—",
         motif: document.getElementById("fMotif").value.trim()||"Nouvelle demande",
@@ -3601,7 +3829,8 @@ document.addEventListener("DOMContentLoaded", ()=>{
         infosGenerales: document.getElementById("fInfos").value,
         notes:[], historique:[{date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:"Demande créée dans la démonstration."}],
         commercialStage:"À contacter", montant:0, prochaineRelance:null, compteRendu:"",
-        visiteDate:null, visiteHeure:null, diagnostic:freshDiagnostic()
+        visiteDate:null, visiteHeure:null, diagnostic:freshDiagnostic(),
+        devis:[], factures:[], chantier:null, taches:[]
       };
       DOSSIERS.unshift(newD);
       const toDiagnostic = state.modal && state.modal.toDiagnostic;
@@ -3825,6 +4054,18 @@ document.addEventListener("DOMContentLoaded", ()=>{
       return;
     }
     if(action==="ask-delete"){ askDelete(t.dataset); return; }
+    if(action==="task-toggle"){
+      const d = byId(t.dataset.id);
+      const tk = d.taches.find(x=>x.id===t.dataset.tid);
+      tk.done = !tk.done;
+      if(tk.done) stampHist(d, "Tâche terminée : "+tk.titre);
+      render(); return;
+    }
+    if(action==="form-open"){
+      state.modal = {type:"form", form:t.dataset.form, id:t.dataset.id||null, tid:t.dataset.tid||null, nid:t.dataset.nid!=null?parseInt(t.dataset.nid,10):null, idx:t.dataset.idx!=null?parseInt(t.dataset.idx,10):null};
+      render(); return;
+    }
+    if(action==="form-save"){ saveForm(); return; }
     if(action==="wizard-devis"){ wzNew("devis", t.dataset.id||null); return; }
     if(action==="wizard-facture"){ wzNew("facture", t.dataset.id||null); return; }
     if(action==="wz-next"){ wzNext(); return; }
