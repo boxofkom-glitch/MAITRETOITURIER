@@ -390,6 +390,23 @@ tr:last-child td{border-bottom:none}
 .pp-legs{display:flex;flex-wrap:wrap;gap:2px 10px;margin-top:4px;font-size:9px}
 .pp-leg{display:flex;align-items:center;gap:4px}
 .pp-leg i{width:7px;height:7px;border-radius:2px;display:inline-block}
+.pp-docrow{flex:0 0 104px;grid-template-rows:minmax(0,1fr)!important}
+.pp-tablecard{flex:1;min-height:0;position:relative;padding:0!important;display:block!important}
+.pp-tblwrap{position:absolute;left:14px;right:14px;top:10px;bottom:10px;overflow:hidden;font-size:11px;color:#3b3122}
+.pp-tbl{width:100%;min-width:0;border-collapse:collapse;font-size:1em}
+.pp-tbl th{font-size:.85em;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#201a10;text-align:left;padding:.3em .5em .5em;border-bottom:1.5px solid #b08d3b}
+.pp-tbl td{padding:.5em .5em;border-bottom:1px solid rgba(60,45,20,.15);vertical-align:top}
+.pp-tbl .r{text-align:right;white-space:nowrap}
+.pp-tbl-sub{font-size:.85em;color:#7a6a4a}
+.pp-totals{flex:.9;display:flex;flex-direction:column;justify-content:center;gap:5px;min-width:0}
+.pp-tot{display:flex;justify-content:space-between;gap:14px;font-size:11.5px;color:#eee4cf}
+.pp-tot b{font-weight:600;color:#fff}
+.pp-tot.big{margin-top:3px;padding-top:6px;border-top:1px solid rgba(212,175,55,.5);font-size:13px;color:#d4af37}
+.pp-tot.big b{font-family:"Playfair Display",Georgia,serif;font-size:20px;color:#d4af37}
+.doc-row-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end}
+.doc-row-amount{font-weight:700;font-variant-numeric:tabular-nums;min-width:96px;text-align:right}
+.doc-row-actions{display:flex;gap:6px;flex-wrap:wrap}
+@media (max-width:900px){.doc-row-right{justify-content:flex-start}.doc-row-amount{text-align:left}}
 .pp-foot{position:absolute;left:43px;right:43px;top:1048px;height:50px;border-top:1px solid rgba(212,175,55,.75);display:flex;align-items:center;justify-content:space-between;color:#e9dfc8;font-size:10.5px;z-index:3;padding-top:2px}
 .pp-foot-item{display:flex;align-items:center;gap:9px}
 .pp-foot-item svg{color:#d4af37}

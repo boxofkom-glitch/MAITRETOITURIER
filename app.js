@@ -389,7 +389,7 @@ function seedDossiers(){
     chantier:null
   }, over);
 
-  return [
+  const list = [
     base({ id:"TP-1048", client:"Marie Laurent", ville:"Bordeaux", motif:"Infiltration dans les combles", priorite:"Urgente", statut:"Nouvelle", technicien:null, commercial:"Sarah Durand", email:"client1048@example.com", adresse:"12 rue des Tilleuls" }),
     base({ id:"TP-1047", client:"Pierre Dubois", ville:"Mérignac", motif:"Contrôle de couverture", priorite:"Normale", statut:"Nouvelle", technicien:null, commercial:"Lucas Robert", email:"client1047@example.com", adresse:"12 rue des Tilleuls" }),
     base({ id:"TP-1046", client:"Sophie Martin", ville:"Pessac", motif:"Gouttières à vérifier", priorite:"Infiltration signalée", statut:"Nouvelle", technicien:null, commercial:"Sarah Durand", email:"client1046@example.com", adresse:"12 rue des Tilleuls" }),
@@ -399,6 +399,8 @@ function seedDossiers(){
     base({ id:"TP-1042", client:"Claire Fontaine", ville:"Bordeaux", motif:"Traces d’humidité sous rampant", priorite:"Normale", statut:"Rapport prêt", technicien:"Julien Bernard", commercial:"Sarah Durand", email:"client1042@example.com", adresse:"12 rue des Tilleuls", visiteDate:"10 sept.", visiteHeure:"09:00", commercialStage:"Devis envoyé", montant:12400, prochaineRelance:"11 sept.", diagnostic:claireDiagnostic() }),
     base({ id:"TP-1041", client:"Marc Lefèvre", ville:"Arcachon", motif:"Réfection de la couverture", priorite:"Normale", statut:"Rapport prêt", technicien:"Léa Petit", commercial:"Lucas Robert", email:"client1041@example.com", adresse:"12 rue des Tilleuls", visiteDate:"9 sept.", visiteHeure:"14:00", commercialStage:"Gagné", montant:18600, diagnostic:marcDiagnostic() }),
   ];
+  addSampleDocs(list);
+  return list;
 }
 
 const CONTRACTS = [
@@ -536,9 +538,9 @@ function hasPermission(perm){
 function canReadJob(){ return hasPermission("job.read.all") || hasPermission("job.read.team") || hasPermission("job.read.own"); }
 
 const NAV = {
-  admin:[["overview","Vue d’ensemble"],["dossiers","Dossiers clients"],["agenda","Agenda d’équipe"],["entretiens","Entretiens"],["diagnostics","Diagnostics"],["commercial","Suivi commercial"],["parrainages","Parrainages"],["equipe","Équipe & accès"],["connexions","Connexions"],["client-preview","Aperçu espace client"]],
+  admin:[["overview","Vue d’ensemble"],["dossiers","Dossiers clients"],["agenda","Agenda d’équipe"],["entretiens","Entretiens"],["diagnostics","Diagnostics"],["commercial","Suivi commercial"],["documents","Devis & factures"],["parrainages","Parrainages"],["equipe","Équipe & accès"],["connexions","Connexions"],["client-preview","Aperçu espace client"]],
   tech:[["overview","Vue d’ensemble"],["dossiers","Dossiers clients"],["agenda","Agenda d’équipe"],["entretiens","Entretiens"],["diagnostics","Diagnostics"]],
-  sales:[["overview","Vue d’ensemble"],["dossiers","Dossiers clients"],["agenda","Agenda d’équipe"],["entretiens","Entretiens"],["commercial","Suivi commercial"],["parrainages","Parrainages"]],
+  sales:[["overview","Vue d’ensemble"],["dossiers","Dossiers clients"],["agenda","Agenda d’équipe"],["entretiens","Entretiens"],["commercial","Suivi commercial"],["documents","Devis & factures"],["parrainages","Parrainages"]],
   client:[["client","Mon espace client"]]
 };
 
@@ -752,7 +754,7 @@ function loadScriptOnce(src){
   });
 }
 
-async function buildReportPdf(d, onProgress){
+async function buildPdfFromHtml(docHtmlString, onProgress){
   await loadScriptOnce("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
   await loadScriptOnce("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
 
@@ -761,7 +763,7 @@ async function buildReportPdf(d, onProgress){
   const styles = Array.from(document.querySelectorAll("style, link[rel=stylesheet]")).map(el=>el.outerHTML).join("");
   const iframe = document.createElement("iframe");
   iframe.style.cssText = "position:fixed;left:-99999px;top:0;width:794px;height:1123px;border:0";
-  iframe.srcdoc = `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><base href="${location.href}">${styles}</head><body style="margin:0;background:#fff">${renderReportDoc(d)}</body></html>`;
+  iframe.srcdoc = `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><base href="${location.href}">${styles}</head><body style="margin:0;background:#fff">${docHtmlString}</body></html>`;
   const loaded = new Promise(res=>{ iframe.onload = res; });
   document.body.appendChild(iframe);
   try{
@@ -791,6 +793,8 @@ async function buildReportPdf(d, onProgress){
     iframe.remove();
   }
 }
+
+function buildReportPdf(d, onProgress){ return buildPdfFromHtml(renderReportDoc(d), onProgress); }
 
 function downloadBlob(blob, filename){
   const a = document.createElement("a");
@@ -833,28 +837,334 @@ function reportMessage(d, channel){
   return `Bonjour ${d.client},\n\nMerci encore pour la confiance que vous nous accordez.\n\nSuite à notre passage, je vous adresse avec plaisir, en pièce jointe, votre rapport de diagnostic de toiture personnalisé (dossier ${d.id}).\n\n${summary}\n\nVous y trouverez, zone par zone, nos constats en photos et nos recommandations, expliqués simplement.\n\n${cta}\n\nJe reste à votre entière disposition pour en discuter ou répondre à toutes vos questions.\n\nBien cordialement,\n\n${sign}\nMaître Toiturier\nwww.maitretoiturier.fr`;
 }
 
+// ---------- Devis & factures en PDF (même trame que la couverture du rapport) ----------
+
+function findDevis(d, id){ return d.devis.find(x=>x.id===id); }
+function findFacture(d, id){ return d.factures.find(x=>x.id===id); }
+
+// Répartition HT / TVA d'une facture, au prorata du devis auquel elle se rattache.
+function factureTotals(d, f){
+  const dv = findDevis(d, f.devisId);
+  const dt = dv ? devisTotals(dv) : null;
+  const ratio = dt && dt.ttcCt ? dt.tvaCt / dt.ttcCt : 0;
+  const tvaCt = Math.round(f.montantTtcCt * ratio);
+  return { htCt: f.montantTtcCt - tvaCt, tvaCt, ttcCt: f.montantTtcCt };
+}
+
+function docPill(kind, doc){
+  if(kind==="devis"){
+    const m = {
+      "Brouillon":{cls:"gray", sub:"Non envoyé", mark:"!"},
+      "Envoyé":{cls:"warn", sub:"En attente de réponse", mark:"!"},
+      "Accepté":{cls:"ok", sub:"Bon pour accord reçu", mark:"check"},
+      "Refusé":{cls:"bad", sub:"Refusé par le client", mark:"!"}
+    };
+    const x = m[doc.statut] || m["Brouillon"];
+    return {cls:x.cls, label:doc.statut, sub:x.sub, mark:x.mark};
+  }
+  const st = factureStatutFromPayments(doc);
+  const reste = Math.max(0, doc.montantTtcCt - facturePaidCt(doc));
+  if(st==="Payée") return {cls:"ok", label:"Payée", sub:"Facture acquittée", mark:"check"};
+  if(st==="Partiellement payée") return {cls:"warn", label:"Partiellement payée", sub:"Reste dû "+fmtEuros(reste), mark:"!"};
+  if(st==="Envoyée") return {cls:"warn", label:"À régler", sub:"Reste dû "+fmtEuros(reste), mark:"!"};
+  return {cls:"gray", label:"Brouillon", sub:"Non envoyée", mark:"!"};
+}
+
+function docTable(rows){
+  return `<table class="pp-tbl"><thead><tr><th>Désignation</th><th class="r">Qté</th><th class="r">PU HT</th><th class="r">TVA</th><th class="r">Total HT</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function docTotalsHtml(lines){
+  return `<div class="pp-totals">${lines.map(([label, val, big])=>`<div class="pp-tot${big?" big":""}"><span>${esc(label)}</span><b>${esc(val)}</b></div>`).join("")}</div>`;
+}
+
+function docShell(d, o){
+  const infoCards = `<div class="pp-cards c2 pp-docrow">
+      ${ppCard("house","Client",`<b>${esc(d.client)}</b><br>${esc(d.adresse)}, ${esc(d.ville)}<br>${esc(d.email||"")}${d.telephone?" · "+esc(d.telephone):""}`)}
+      ${ppCard("clipboard","Détails",o.details)}
+    </div>`;
+  const body = `${infoCards}
+    <div class="pp-card pp-tablecard"><div class="pp-fit pp-tblwrap">${o.table}</div></div>
+    <div class="pp-vig">
+      <div class="pp-vig-main"><div class="pp-vig-ic">${iconSvg(o.bannerIcon||"shield",40)}</div><div class="pp-vig-body"><div class="pp-vig-label">${esc(o.bannerLabel)}</div><div class="pp-vig-txt pp-fit">${o.bannerText}</div></div></div>
+      ${o.totals}
+    </div>`;
+  return ppShell(d, {
+    photo: ppPhoto("cover"),
+    photoAlign: "xMinYMid",
+    topTitle: o.topTitle,
+    topNum: o.topNum,
+    icon: "doc",
+    zone: o.zone,
+    title: o.title,
+    titleFs: 46,
+    pill: o.pill,
+    body,
+    pagenum: false
+  });
+}
+
+function renderDevisDoc(d, dv){
+  const t = devisTotals(dv);
+  const rows = dv.lignes.map(l=>`<tr><td>${esc(l.designation||"—")}</td><td class="r">${l.qte}</td><td class="r">${fmtEuros(l.prixUnitaireCt)}</td><td class="r">${l.tvaPct} %</td><td class="r">${fmtEuros(lineTotalHTct(l))}</td></tr>`).join("");
+  const page = docShell(d, {
+    topTitle: "Devis",
+    topNum: "N° "+dv.numero+(dv.version>1?" · v"+dv.version:""),
+    zone: "Proposition commerciale",
+    title: "Devis",
+    pill: docPill("devis", dv),
+    details: `Date : ${esc(dv.dateEnvoi||dv.dateCreation||"12 sept.")}<br>Validité : 30 jours<br>Dossier ${esc(d.id)} — ${esc(d.motif)}`,
+    table: docTable(rows),
+    bannerLabel: "Conditions",
+    bannerText: "Devis valable 30 jours à compter de sa date d’émission. Acompte de 30 % à l’acceptation. Pour accepter : réponse écrite ou signature précédée de la mention « Bon pour accord ». Document de démonstration : conditions à adapter.",
+    totals: docTotalsHtml([["Total HT", fmtEuros(t.htCt)], ["TVA", fmtEuros(t.tvaCt)], ["Total TTC", fmtEuros(t.ttcCt), true]])
+  });
+  return `<div class="pdf-doc">${page}</div>`;
+}
+
+function renderFactureDoc(d, f){
+  const t = factureTotals(d, f);
+  const dv = findDevis(d, f.devisId);
+  const paid = facturePaidCt(f);
+  const reste = Math.max(0, f.montantTtcCt - paid);
+  const rows = `<tr><td>${esc(f.libelle||f.type)}${dv?`<br><span class="pp-tbl-sub">Rappel : devis ${esc(dv.numero)} — ${fmtEuros(devisTotals(dv).ttcCt)} TTC</span>`:""}</td><td class="r">1</td><td class="r">${fmtEuros(t.htCt)}</td><td class="r">${t.htCt?Math.round(t.tvaCt/t.htCt*100):0} %</td><td class="r">${fmtEuros(t.htCt)}</td></tr>`;
+  const pays = (f.paiements||[]).map(p=>`${esc(p.date)} · ${esc(p.mode)}${p.mode==="Virement"?" ("+esc(p.virementStatut)+")":""} : ${fmtEuros(p.montantCt)}`).join("<br>");
+  const totals = [["Total HT", fmtEuros(t.htCt)], ["TVA", fmtEuros(t.tvaCt)], ["Total TTC", fmtEuros(t.ttcCt), true]];
+  if(paid>0){ totals.push(["Déjà réglé", fmtEuros(paid)]); totals.push(["Reste à payer", fmtEuros(reste)]); }
+  const page = docShell(d, {
+    topTitle: "Facture",
+    topNum: "N° "+f.numero,
+    zone: f.type==="Acompte" ? "Facture d’acompte" : "Facture de solde",
+    title: "Facture",
+    pill: docPill("facture", f),
+    details: `Date : ${esc(f.date||"12 sept.")}<br>Échéance : ${esc(f.echeance||"à réception")}<br>Dossier ${esc(d.id)} — ${esc(d.motif)}`,
+    table: docTable(rows),
+    bannerIcon: "check",
+    bannerLabel: paid>0 ? "Règlements reçus" : "Règlement",
+    bannerText: (paid>0 ? pays+"<br>" : "") + "Règlement par virement, chèque ou espèces. Facture de démonstration : mentions légales et coordonnées bancaires à renseigner.",
+    totals: docTotalsHtml(totals)
+  });
+  return `<div class="pdf-doc">${page}</div>`;
+}
+
+function docHtml(d, kind, docId){
+  if(kind==="devis") return renderDevisDoc(d, findDevis(d, docId));
+  if(kind==="facture") return renderFactureDoc(d, findFacture(d, docId));
+  return renderReportDoc(d);
+}
+
+function docFilename(d, kind, docId){
+  if(kind==="devis") return `devis-${findDevis(d, docId).numero}.pdf`;
+  if(kind==="facture") return `facture-${findFacture(d, docId).numero}.pdf`;
+  return reportFilename(d);
+}
+
+function docModalTitle(kind){
+  return kind==="devis" ? "Envoyer le devis au client" : kind==="facture" ? "Envoyer la facture au client" : "Envoyer le rapport au client";
+}
+
+function docHistoryLabel(kind, docId){
+  return kind==="devis" ? "Devis "+docId : kind==="facture" ? "Facture "+docId : "Rapport de diagnostic";
+}
+
+// Messages d'accompagnement chaleureux et commerciaux pour devis et factures.
+function devisMessage(d, dv, channel){
+  const wa = channel==="whatsapp";
+  const sign = d.commercial || "L’équipe Maître Toiturier";
+  const ttc = fmtEuros(devisTotals(dv).ttcCt);
+  if(wa){
+    return `Bonjour ${d.client} 👋\n\nMerci de nous faire confiance pour votre toiture ! 🏠\nSuite à notre visite, voici votre devis n° ${dv.numero} (${ttc} TTC), en pièce jointe.\n\nIl détaille, poste par poste, les travaux recommandés à l’issue du diagnostic.\n\nIl est valable 30 jours. Pour l’accepter, il vous suffit de me répondre « OK » ici ou de m’appeler : je m’occupe ensuite de tout (planification, matériel, chantier). ✅\n\nSi vous souhaitez ajuster quoi que ce soit, on le fait ensemble avec plaisir. 😊\n\n${sign}\nMaître Toiturier — www.maitretoiturier.fr`;
+  }
+  return `Bonjour ${d.client},\n\nMerci de la confiance que vous nous accordez pour votre toiture.\n\nSuite à notre visite, je vous adresse avec plaisir, en pièce jointe, votre devis n° ${dv.numero} d’un montant de ${ttc} TTC. Il détaille, poste par poste, les travaux recommandés à l’issue du diagnostic.\n\nCe devis est valable 30 jours. Pour l’accepter, il suffit de me répondre par retour de message ou de m’appeler : je m’occupe ensuite de la planification, du matériel et du chantier.\n\nSi vous souhaitez ajuster quoi que ce soit, nous le ferons ensemble avec plaisir.\n\nBien cordialement,\n\n${sign}\nMaître Toiturier\nwww.maitretoiturier.fr`;
+}
+
+function factureMessage(d, f, channel){
+  const wa = channel==="whatsapp";
+  const sign = d.commercial || "L’équipe Maître Toiturier";
+  const ttc = fmtEuros(f.montantTtcCt);
+  const paid = factureStatutFromPayments(f)==="Payée";
+  const kind = f.type==="Acompte" ? "d’acompte" : "de solde";
+  const middle = paid
+    ? `Elle est déjà réglée : un grand merci pour votre règlement et votre confiance !`
+    : (f.type==="Acompte"
+        ? `Vous pouvez la régler par virement, chèque ou espèces. Dès réception de l’acompte, nous planifions votre chantier.`
+        : `Vous pouvez la régler par virement, chèque ou espèces.`);
+  if(wa){
+    return `Bonjour ${d.client} 👋\n\nVoici votre facture ${kind} n° ${f.numero} (${ttc} TTC), en pièce jointe. 🧾\n\n${middle}${paid?" 🙏":""}\n\nN’hésitez pas à me contacter pour la moindre question. 😊\n\n${sign}\nMaître Toiturier — www.maitretoiturier.fr`;
+  }
+  return `Bonjour ${d.client},\n\nVeuillez trouver ci-joint votre facture ${kind} n° ${f.numero} d’un montant de ${ttc} TTC.\n\n${middle}\n\nN’hésitez pas à me contacter pour toute question.\n\nBien cordialement,\n\n${sign}\nMaître Toiturier\nwww.maitretoiturier.fr`;
+}
+
+function docMessage(d, kind, docId, channel){
+  if(kind==="devis") return devisMessage(d, findDevis(d, docId), channel);
+  if(kind==="facture") return factureMessage(d, findFacture(d, docId), channel);
+  return reportMessage(d, channel);
+}
+
+function docSubject(d, kind, docId){
+  if(kind==="devis") return `Votre devis Maître Toiturier — N° ${findDevis(d, docId).numero}`;
+  if(kind==="facture") return `Votre facture Maître Toiturier — N° ${findFacture(d, docId).numero}`;
+  return "Votre rapport de diagnostic de toiture — Maître Toiturier";
+}
+
+async function downloadDocPdf(d, kind, docId){
+  showToast("Génération du PDF…");
+  try{
+    const blob = await buildPdfFromHtml(docHtml(d, kind, docId));
+    downloadBlob(blob, docFilename(d, kind, docId));
+    showToast("PDF téléchargé.");
+  } catch(e){
+    showToast("La génération du PDF a échoué (connexion internet requise). Réessayez.");
+  }
+}
+
+// ---------- Onglet global "Devis & factures" ----------
+
+function allDocs(){
+  const devis = [], factures = [];
+  visibleDossiers().forEach(d=>{
+    const last = (d.devis||[])[(d.devis||[]).length-1];
+    if(last) devis.push({d, dv:last});
+    (d.factures||[]).forEach(f=>factures.push({d, f}));
+  });
+  return {devis, factures};
+}
+
+function renderDocRow(kind, d, doc){
+  const isDevis = kind==="devis";
+  const num = isDevis ? doc.numero : doc.numero;
+  const ttc = isDevis ? devisTotals(doc).ttcCt : doc.montantTtcCt;
+  const pill = docPill(kind, doc);
+  const cls = pill.cls==="ok"?"green":pill.cls==="warn"?"gold":pill.cls==="bad"?"red":"gray";
+  const canSend = isDevis ? hasPermission("quote.send") : hasPermission("invoice.create");
+  const sub = isDevis ? `${esc(d.motif)}${doc.version>1?" · v"+doc.version:""}` : `${esc(doc.type)} · ${esc(d.motif)}`;
+  return `
+  <div class="row-item">
+    <div class="row-left">
+      <div class="row-avatar">${initials(d.client)}</div>
+      <div><div class="row-title">${esc(d.client)} · ${esc(num)}</div><div class="row-sub">${sub}</div></div>
+    </div>
+    <div class="doc-row-right">
+      <div class="doc-row-amount">${fmtEuros(ttc)}</div>
+      ${badge(pill.label, cls)}
+      <div class="doc-row-actions">
+        <button class="btn-ghost btn-sm" data-action="doc-pdf" data-id="${d.id}" data-kind="${kind}" data-doc="${doc.id}">PDF</button>
+        ${canSend ? `<button class="btn-secondary btn-sm" data-action="modal-send-doc" data-id="${d.id}" data-kind="${kind}" data-doc="${doc.id}">Envoyer</button>` : ""}
+        <button class="btn-ghost btn-sm" data-action="open-dossier" data-id="${d.id}" data-tab="devis">Ouvrir</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderDocuments(){
+  const {devis, factures} = allDocs();
+  const attente = devis.filter(x=>x.dv.statut==="Envoyé").reduce((s,x)=>s+devisTotals(x.dv).ttcCt,0);
+  const signe = devis.filter(x=>x.dv.statut==="Accepté").reduce((s,x)=>s+devisTotals(x.dv).ttcCt,0);
+  const encaisse = factures.reduce((s,x)=>s+facturePaidCt(x.f),0);
+  const aRegler = factures.filter(x=>x.f.statut!=="Brouillon").reduce((s,x)=>s+Math.max(0,x.f.montantTtcCt-facturePaidCt(x.f)),0);
+  return `
+  <div class="page-header">
+    <div><h1>Devis & factures</h1><p>Tous les documents commerciaux, en PDF, prêts à être envoyés.</p></div>
+  </div>
+  <div class="stat-grid">
+    ${stat("Devis en attente", fmtEuros(attente), devis.filter(x=>x.dv.statut==="Envoyé").length+" devis envoyé(s)")}
+    ${stat("Devis acceptés", fmtEuros(signe), "Montant TTC signé")}
+    ${stat("Encaissé", fmtEuros(encaisse), "Paiements confirmés")}
+    ${stat("Reste à encaisser", fmtEuros(aRegler), "Factures envoyées")}
+  </div>
+  <div class="card">
+    <div class="card-header"><h3>Devis</h3><span class="badge gray">${devis.length}</span></div>
+    ${devis.length ? devis.map(x=>renderDocRow("devis", x.d, x.dv)).join("") : `<div class="empty-note">Aucun devis pour l’instant. Créez-en un depuis un dossier (onglet « Devis & factures »).</div>`}
+  </div>
+  <div class="card">
+    <div class="card-header"><h3>Factures</h3><span class="badge gray">${factures.length}</span></div>
+    ${factures.length ? factures.map(x=>renderDocRow("facture", x.d, x.f)).join("") : `<div class="empty-note">Aucune facture pour l’instant.</div>`}
+  </div>`;
+}
+
+// ---------- Exemples de devis / factures pour la démonstration ----------
+
+function addSampleDocs(list){
+  const get = id=>list.find(d=>d.id===id);
+  const L = (designation, qte, prix, tva)=>freshDevisLine({designation, qte, prixUnitaireCt:Math.round(prix*100), tvaPct:tva});
+
+  // Claire Fontaine : devis V1 remplacé par une V2 (anti-mousse retiré à sa demande), en attente de réponse.
+  let d = get("TP-1042");
+  if(d){
+    const base = [L("Remplacement d’éléments de couverture fissurés",3,45,10), L("Reprise d’étanchéité (solin / noue)",1,320,10), L("Nettoyage et remise en état des gouttières",1,180,10)];
+    d.devis = [
+      {id:"TP-1042-D1", numero:"TP-1042-D1", version:1, statut:"Envoyé", dateCreation:"10 sept.", dateEnvoi:"10 sept.", lignes:[...base, L("Traitement anti-mousse de la couverture",1,220,10), L("Visite de contrôle après intervention",1,90,20)]},
+      {id:"TP-1042-D2", numero:"TP-1042-D2", version:2, statut:"Envoyé", dateCreation:"11 sept.", dateEnvoi:"11 sept.", lignes:[...base, L("Visite de contrôle après intervention",1,90,20)]}
+    ];
+    d.montant = Math.round(devisTotals(d.devis[1]).ttcCt/100);
+    d.historique.push({date:"10 sept., 17:05", auteur:"Commerciale · Sarah", texte:"Devis TP-1042-D1 envoyé au client."});
+    d.historique.push({date:"11 sept., 09:40", auteur:"Commerciale · Sarah", texte:"Nouvelle version TP-1042-D2 envoyée (anti-mousse retiré à la demande du client)."});
+  }
+
+  // Marc Lefèvre : réfection terminée, devis accepté, acompte et solde payés.
+  d = get("TP-1041");
+  if(d){
+    const dv = {id:"TP-1041-D1", numero:"TP-1041-D1", version:1, statut:"Accepté", dateCreation:"18 juil.", dateEnvoi:"18 juil.", lignes:[L("Réfection complète de la couverture",1,14200,10), L("Dépose et évacuation de l’ancienne couverture",1,1900,10), L("Zinguerie neuve (gouttières et descentes)",1,800,10)]};
+    const ttc = devisTotals(dv).ttcCt;
+    const acompte = Math.round(ttc*0.3);
+    d.devis = [dv];
+    d.montant = Math.round(ttc/100);
+    d.factures = [
+      {id:"TP-1041-F1", numero:"TP-1041-F1", type:"Acompte", devisId:dv.id, libelle:"Acompte 30 % — "+dv.numero, montantTtcCt:acompte, statut:"Payée", date:"24 juil.", echeance:"3 août", paiements:[{id:"TP-1041-F1-P1", montantCt:acompte, mode:"Virement", date:"26 juil.", virementStatut:"Confirmé"}]},
+      {id:"TP-1041-F2", numero:"TP-1041-F2", type:"Solde", devisId:dv.id, libelle:"Solde — "+dv.numero, montantTtcCt:ttc-acompte, statut:"Payée", date:"29 août", echeance:"12 sept.", paiements:[{id:"TP-1041-F2-P1", montantCt:ttc-acompte, mode:"Chèque", date:"2 sept.", virementStatut:null}]}
+    ];
+    const ch = freshChantier();
+    ch.statut = "Clôturé"; ch.equipe = ["Marc Petit","Nadia Cools"]; ch.dateDebut = "4 août"; ch.dateFin = "28 août";
+    Object.keys(ch.checklist).forEach(k=>ch.checklist[k].forEach(i=>{ i.done = true; }));
+    d.chantier = ch;
+  }
+
+  // Antoine Garnier : contrôle annuel, devis accepté, facture envoyée en attente de règlement.
+  d = get("TP-1043");
+  if(d){
+    const dv = {id:"TP-1043-D1", numero:"TP-1043-D1", version:1, statut:"Accepté", dateCreation:"5 sept.", dateEnvoi:"5 sept.", lignes:[L("Visite de contrôle périodique",1,90,20)]};
+    d.devis = [dv];
+    d.montant = Math.round(devisTotals(dv).ttcCt/100);
+    d.commercialStage = "Gagné";
+    d.factures = [{id:"TP-1043-F1", numero:"TP-1043-F1", type:"Solde", devisId:dv.id, libelle:"Contrôle annuel de toiture — "+dv.numero, montantTtcCt:devisTotals(dv).ttcCt, statut:"Envoyée", date:"10 sept.", echeance:"26 sept.", paiements:[]}];
+    const ch = freshChantier(); ch.statut = "Planifié"; ch.dateDebut = "14 sept."; ch.equipe = ["Yanis Costa"];
+    d.chantier = ch;
+  }
+}
+
 async function prepareSend(d, channel){
-  state.modal = {type:"send", id:d.id, phase:"prep", channel};
+  const cur = state.modal || {};
+  const kind = cur.kind || "report", docId = cur.docId || null;
+  state.modal = {type:"send", id:d.id, kind, docId, phase:"prep", channel};
   render();
   try{
-    const blob = await buildReportPdf(d, (i,n)=>{
+    const blob = await buildPdfFromHtml(docHtml(d, kind, docId), (i,n)=>{
       const el = document.getElementById("sendProgress");
-      if(el) el.textContent = `Page ${i} / ${n}…`;
+      if(el) el.textContent = n>1 ? `Page ${i} / ${n}…` : "Mise en page…";
     });
     if(!state.modal || state.modal.phase!=="prep") return;
-    const file = new File([blob], reportFilename(d), {type:"application/pdf"});
-    state.modal = {type:"send", id:d.id, phase:"ready", channel, file, text:reportMessage(d, channel), subject:"Votre rapport de diagnostic de toiture — Maître Toiturier"};
+    const file = new File([blob], docFilename(d, kind, docId), {type:"application/pdf"});
+    state.modal = {type:"send", id:d.id, kind, docId, phase:"ready", channel, file, text:docMessage(d, kind, docId, channel), subject:docSubject(d, kind, docId)};
   } catch(e){
     if(!state.modal || state.modal.phase!=="prep") return;
-    state.modal = {type:"send", id:d.id, phase:"error", channel};
+    state.modal = {type:"send", id:d.id, kind, docId, phase:"error", channel};
   }
   render();
 }
 
 function finishSend(d, channel, how){
-  d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:"Rapport de diagnostic envoyé au client ("+(channel==="whatsapp"?"WhatsApp":"e-mail")+", "+how+")."});
+  const m = state.modal || {};
+  d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:docHistoryLabel(m.kind||"report", m.docId)+" envoyé au client ("+(channel==="whatsapp"?"WhatsApp":"e-mail")+", "+how+")."});
+  if(m.kind==="devis" && m.docId){
+    const dv = findDevis(d, m.docId);
+    if(dv && dv.statut==="Brouillon"){ dv.statut = "Envoyé"; dv.dateEnvoi = "12 sept."; }
+  }
+  if(m.kind==="facture" && m.docId){
+    const f = findFacture(d, m.docId);
+    if(f && f.statut==="Brouillon") f.statut = "Envoyée";
+  }
   state.modal = null;
-  showToast(how==="PDF joint" ? "Rapport envoyé avec le PDF joint." : "PDF téléchargé : joignez-le à la conversation (glisser-déposer) avant d’envoyer.");
+  showToast(how==="PDF joint" ? "Envoyé avec le PDF joint." : "PDF téléchargé : joignez-le à la conversation (glisser-déposer) avant d’envoyer.");
 }
 
 // Envoi : sur téléphone, la feuille de partage joint directement le PDF et le message (WhatsApp, Mail…).
@@ -1014,6 +1324,7 @@ function buildSection(){
     case "entretiens": return renderEntretiens();
     case "diagnostics": return renderDiagnosticsList();
     case "commercial": return renderCommercialKanban();
+    case "documents": return renderDocuments();
     case "parrainages": return renderParrainages();
     case "equipe": return renderEquipe();
     case "connexions": return renderConnexions();
@@ -1584,7 +1895,7 @@ function ppShell(d, o){
     <img class="pp-logo" src="assets/logo-lockup.png" alt="Maître Toiturier">
     <div class="pp-services">Couverture<br>Zinguerie<br>Rénovation<br>Entretien</div>
     <div class="pp-tagline">Votre toit,<br>notre expertise<br>durable.</div>
-    <div class="pp-topright"><div class="pp-topright-t">Rapport de diagnostic</div><div class="pp-topright-n">N° ${esc(d.id)}</div><div class="pp-topright-line"></div></div>
+    <div class="pp-topright"><div class="pp-topright-t">${o.topTitle||"Rapport de diagnostic"}</div><div class="pp-topright-n">${o.topNum||("N° "+esc(d.id))}</div><div class="pp-topright-line"></div></div>
     ${o.num ? `<div class="pp-num">${o.num}</div>` : (o.icon ? `<div class="pp-num pp-num-ic">${iconSvg(o.icon,124)}</div>` : "")}
     <div class="pp-titleblock">
       <div class="pp-zone">${o.zone}</div>
@@ -1596,8 +1907,8 @@ function ppShell(d, o){
       <div class="pp-pill-tx"><div class="pp-pill-main">${esc(pill.label)}</div><div class="pp-pill-sub">${esc(pill.sub)}</div></div>
     </div>` : ""}
     <div class="pp-body">
-      <div class="pp-cards ${o.cardsCls||""} ${cols===2?"c2":"c1"}" style="grid-template-rows:repeat(${rows},minmax(0,1fr))">${cards.join("")}</div>
-      ${o.banner}
+      ${o.body ? o.body : `<div class="pp-cards ${o.cardsCls||""} ${cols===2?"c2":"c1"}" style="grid-template-rows:repeat(${rows},minmax(0,1fr))">${cards.join("")}</div>
+      ${o.banner}`}
     </div>
     <div class="pp-foot">
       <div class="pp-foot-item">${iconSvg("pin",20)}<span>${esc(d.ville)}</span></div>
@@ -1853,7 +2164,7 @@ function renderFactureCard(d, f){
   const resteCt = Math.max(0, f.montantTtcCt - paidCt);
   return `
     <div class="card devis-sub-card">
-      <div class="card-header"><h3 style="font-size:13.5px">${esc(f.numero)} · ${esc(f.type)}</h3>${badge(f.statut, factureStatutCls(f.statut))}</div>
+      <div class="card-header"><h3 style="font-size:13.5px">${esc(f.numero)} · ${esc(f.type)}</h3><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${badge(f.statut, factureStatutCls(f.statut))}<button class="btn-ghost btn-sm" data-action="doc-pdf" data-id="${d.id}" data-kind="facture" data-doc="${f.id}">PDF</button>${hasPermission("invoice.create")?`<button class="btn-secondary btn-sm" data-action="modal-send-doc" data-id="${d.id}" data-kind="facture" data-doc="${f.id}">Envoyer</button>`:""}</div></div>
       <div class="form-field"><label>Libellé</label><input type="text" id="factureLibelle-${f.id}" value="${esc(f.libelle||"")}" ${editable?"":"disabled"}></div>
       <div class="form-field"><label>Montant TTC (€)</label><input type="number" min="0" step="0.01" id="factureMontant-${f.id}" value="${(f.montantTtcCt/100).toFixed(2)}" ${editable?"":"disabled"}></div>
       <div class="form-field"><label>Échéance</label><input type="text" id="factureEcheance-${f.id}" placeholder="ex. 30 sept." value="${esc(f.echeance||"")}" ${editable?"":"disabled"}></div>
@@ -1938,6 +2249,8 @@ function renderDossierDevis(d){
           ${dv.statut==="Brouillon"?`<button class="btn-secondary btn-sm" data-action="devis-send" data-id="${d.id}">Marquer comme envoyé</button>`:""}
           ${dv.statut==="Envoyé"?`<button class="btn-secondary btn-sm" data-action="devis-accept" data-id="${d.id}">Marquer accepté</button><button class="btn-ghost btn-sm" data-action="devis-reject" data-id="${d.id}">Marquer refusé</button>`:""}
           ${dv.statut!=="Brouillon"?`<button class="btn-ghost btn-sm" data-action="devis-new-version" data-id="${d.id}">+ Nouvelle version</button>`:""}
+          <button class="btn-ghost btn-sm" data-action="doc-pdf" data-id="${d.id}" data-kind="devis" data-doc="${dv.id}">Télécharger le PDF</button>
+          ${hasPermission("quote.send")?`<button class="btn-secondary btn-sm" data-action="modal-send-doc" data-id="${d.id}" data-kind="devis" data-doc="${dv.id}">Envoyer au client</button>`:""}
         </div>
         ${dv.dateEnvoi?`<p class="form-help" style="margin-top:8px">Envoyé le ${esc(dv.dateEnvoi)}</p>`:""}
       </div>
@@ -2607,7 +2920,7 @@ function modalSendClient(d){
     body = `<p class="form-help">Préparation du rapport PDF à joindre…</p><p id="sendProgress" style="font-weight:600;margin:10px 0">Page 1…</p><p class="form-help">Cela peut prendre une vingtaine de secondes.</p>`;
   } else if(phase==="ready"){
     body = `
-      <p style="margin:0 0 10px">Le rapport PDF est prêt et sera joint automatiquement au message.</p>
+      <p style="margin:0 0 10px">Le PDF est prêt et sera joint automatiquement au message.</p>
       <div class="card" style="white-space:pre-wrap;font-size:12.5px;max-height:220px;overflow:auto;padding:12px">${esc(m.text)}</div>
       <p class="form-help" style="margin-top:10px">${canShare ? "Le choix de l’application (WhatsApp, Mail…) se fait à l’étape suivante ; le PDF et le message sont déjà inclus." : "Sur ordinateur, le PDF est téléchargé et la conversation s’ouvre avec le message prêt : il ne reste qu’à glisser le PDF dedans."}</p>
       <div class="modal-actions"><button class="btn-secondary" data-action="modal-close">Annuler</button><button class="btn-primary" data-action="send-now" data-id="${d.id}">${m.channel==="whatsapp" ? "Envoyer sur WhatsApp" : "Envoyer par e-mail"}</button></div>`;
@@ -2616,12 +2929,12 @@ function modalSendClient(d){
       <div class="modal-actions"><button class="btn-secondary" data-action="modal-close">Fermer</button></div>`;
   } else {
     body = `
-      <p class="form-help" style="margin-bottom:14px">${esc(d.client)} — choisissez comment envoyer le rapport. Le PDF est joint automatiquement, avec un message personnalisé.</p>
+      <p class="form-help" style="margin-bottom:14px">${esc(d.client)} — choisissez comment envoyer le document. Le PDF est joint automatiquement, avec un message personnalisé.</p>
       <button class="modal-list-btn" data-action="send-whatsapp" data-id="${d.id}">WhatsApp — ${esc(d.telephone||"numéro non renseigné")}</button>
       <button class="modal-list-btn" data-action="send-email" data-id="${d.id}">E-mail — ${esc(d.email||"adresse non renseignée")}</button>
       <div class="modal-actions"><button class="btn-secondary" data-action="modal-close">Annuler</button></div>`;
   }
-  return modalWrap("Envoyer le rapport au client", body);
+  return modalWrap(docModalTitle(m.kind||"report"), body);
 }
 
 function modalInfo(msg){
@@ -2678,7 +2991,9 @@ document.addEventListener("DOMContentLoaded", ()=>{
       generateAndDownloadPdf(d);
       return;
     }
-    if(action==="modal-send"){ state.modal={type:"send", id:t.dataset.id, phase:"choose"}; render(); return; }
+    if(action==="modal-send"){ state.modal={type:"send", id:t.dataset.id, kind:"report", phase:"choose"}; render(); return; }
+    if(action==="modal-send-doc"){ state.modal={type:"send", id:t.dataset.id, kind:t.dataset.kind, docId:t.dataset.doc, phase:"choose"}; render(); return; }
+    if(action==="doc-pdf"){ downloadDocPdf(byId(t.dataset.id), t.dataset.kind, t.dataset.doc); return; }
     if(action==="send-whatsapp"){ prepareSend(byId(t.dataset.id), "whatsapp"); return; }
     if(action==="send-email"){ prepareSend(byId(t.dataset.id), "email"); return; }
     if(action==="send-now"){ sendNow(byId(t.dataset.id)); return; }
@@ -2939,7 +3254,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const numero = nextFactureId(d);
       const totals = devisTotals(dv);
       const montantTtcCt = type==="Acompte" ? Math.round(totals.ttcCt*0.3) : totals.ttcCt;
-      d.factures.push({ id:numero, numero, type, devisId:dv.id, libelle:type+" — "+dv.numero, montantTtcCt, statut:"Brouillon", echeance:null, paiements:[] });
+      d.factures.push({ id:numero, numero, type, devisId:dv.id, libelle:type+" — "+dv.numero, montantTtcCt, statut:"Brouillon", date:"12 sept.", echeance:null, paiements:[] });
       render();
       return;
     }
