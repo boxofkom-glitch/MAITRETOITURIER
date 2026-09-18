@@ -1487,7 +1487,7 @@ function ppShell(d, o){
   return `
   <div class="pdf-page-frame"><div class="pdf-page pdf-pointpage">
     ${ppBackdropSvg(o.photo||"")}
-    ${o.photo ? "" : `<div class="pp-photo-ph">${iconSvg("camera",44)}<span>Photo à ajouter</span></div>`}
+    ${o.photo ? "" : `<div class="pp-photo-ph"><div class="pp-photo-x">❌</div><div class="pp-photo-t">Photo non disponible</div><div class="pp-photo-c">${esc(o.photoCause||"")}</div></div>`}
     ${o.thumbs && o.thumbs.length ? `<div class="pp-thumbs">${o.thumbs.map(t=>`<img src="${t}" alt="">`).join("")}</div>` : ""}
     <img class="pp-logo" src="assets/logo-lockup.png" alt="Maître Toiturier">
     <div class="pp-services">Couverture<br>Zinguerie<br>Rénovation<br>Entretien</div>
@@ -1515,15 +1515,66 @@ function ppShell(d, o){
   </div></div>`;
 }
 
+// Astuces neutres "tout va bien" par zone (affichées quand le contrôle est en bon état).
+const POINT_GOOD_TIP = {
+  "Couverture et état des tuiles":"Un contrôle visuel régulier de la couverture permet de repérer tôt les petits désordres et de préserver son étanchéité dans le temps.",
+  "Éléments de finition et zinguerie":"La zinguerie assure l’étanchéité et l’évacuation de l’eau aux points singuliers de la toiture : un bon état de ces éléments protège l’ensemble.",
+  "Étanchéité":"Une étanchéité en bon état empêche l’eau de pénétrer sous la couverture, notamment autour des raccords et des pénétrations.",
+  "Charpente":"La charpente porte toute la toiture : un contrôle périodique permet de s’assurer qu’elle reste saine et à l’abri de l’humidité.",
+  "Isolation et ventilation":"Une bonne ventilation des combles limite l’humidité et contribue à la durabilité de la charpente comme de l’isolation.",
+  "Humidité et infiltrations":"L’absence de traces d’humidité est le meilleur indicateur d’une toiture qui remplit bien son rôle de protection.",
+  "État général et sécurité":"Des accès et équipements de sécurité en bon état facilitent les interventions futures en toute sécurité.",
+  "Entretien, mousses et lichens":"Un entretien régulier limite le développement de mousses et lichens et contribue à la longévité des matériaux."
+};
+
+// Contenu prédéfini quand un bloc n'a rien à afficher, selon l'état renseigné dans le diagnostic.
+function ppDefaults(p, pt){
+  const e = pt.etat;
+  if(e==="Bon état") return {
+    tip: POINT_GOOD_TIP[p] || "Un contrôle régulier permet de préserver l’état de cette zone.",
+    travaux: "Aucun travaux nécessaire à ce stade. Un entretien courant suffit à préserver cette zone.",
+    vig: "Aucun point de vigilance particulier n’a été relevé sur cette zone lors du contrôle."
+  };
+  if(e==="Pas vu") return {
+    tip: "Une zone non contrôlée ne permet pas de conclure sur son état : un accès adapté permet de la vérifier.",
+    travaux: "Contrôle complémentaire à prévoir avec un accès adapté.",
+    vig: "Zone non contrôlée : aucune conclusion ne peut être donnée sur son état."
+  };
+  if(e==="Non présent") return {
+    tip: "Certains éléments ne sont pas présents sur toutes les toitures : ce point ne nécessite alors aucune action.",
+    travaux: "Sans objet : cet élément n’est pas présent sur cette toiture.",
+    vig: "Sans objet : aucun point de vigilance sur un élément absent."
+  };
+  if(e==="Non contrôlé") return {
+    tip: "Ce point n’a pas encore été contrôlé.",
+    travaux: "À définir après contrôle de cette zone.",
+    vig: "Contrôle à réaliser."
+  };
+  return {
+    tip: "Un suivi régulier de ce point permet d’observer son évolution et d’intervenir au bon moment.",
+    travaux: "À définir avec le technicien après contrôle complémentaire.",
+    vig: "Aucun risque spécifique n’a été renseigné pour ce point."
+  };
+}
+
+function ppPhotoCause(pt){
+  if(pt.etat==="Pas vu") return "Cause : Pas vu (zone non visible ou accès non sécurisé)";
+  if(pt.etat==="Non présent") return "Cause : élément non présent sur cette toiture";
+  if(pt.etat==="Non contrôlé") return "Cause : point non contrôlé";
+  return "Cause : aucune photo jointe à ce contrôle";
+}
+
 function pdfPointPage(p, i, d){
   const pt = d.diagnostic.points[p];
   const photos = (pt.photos||[]).filter(ph=>ph.dataUrl);
   const st = ppStatus(pt.etat);
+  const def = ppDefaults(p, pt);
   const dyk = pickDidYouKnow(pt);
   const obs = pt.observation || (pt.etat==="Bon état" ? "Aucune anomalie n’a été observée sur cet élément lors du contrôle visuel des zones accessibles." : "Non renseignée.");
-  const showVig = !!pt.risque && pt.etat!=="Bon état" && pt.etat!=="Non présent";
+  const hasVig = !!pt.risque && pt.etat!=="Bon état" && pt.etat!=="Non présent";
   return ppShell(d, {
     photo: photos[0] ? photos[0].dataUrl : "",
+    photoCause: ppPhotoCause(pt),
     thumbs: photos.slice(1,3).map(t=>t.dataUrl),
     num: String(i+1).padStart(2,"0"),
     zone: "Zone de contrôle",
@@ -1532,11 +1583,11 @@ function pdfPointPage(p, i, d){
     pill: st,
     cards: [
       ppCard("doc","Notre observation",esc(obs)),
-      dyk ? ppCard("idea","Le saviez-vous ?",esc(dyk.text)) : "",
+      ppCard("idea","Le saviez-vous ?",esc(dyk ? dyk.text : def.tip)),
       ppCard("wrench","Décision",`<b>${esc(pt.decision)}</b>${pt.pourquoi?" — "+esc(pt.pourquoi):""}`),
-      pt.travaux ? ppCard("helmet","Travaux proposés",esc(pt.travaux)) : ""
+      ppCard("helmet","Travaux proposés",esc(pt.travaux || def.travaux))
     ],
-    banner: ppBanner("warning","Vigilance", showVig ? esc(pt.risque) : "", PP_QUOTE, showVig ? "" : "only-quote")
+    banner: ppBanner("warning","Vigilance", esc(hasVig ? pt.risque : def.vig), PP_QUOTE)
   });
 }
 
