@@ -1956,6 +1956,7 @@ function wzDevisStep(w, d){
     const catalogOptions = SERVICE_CATALOG.map(s=>`<option value="${s.code}">${esc(s.label)} — ${fmtEuros(s.prixUnitaireCt)}</option>`).join("");
     return `<p class="wz-intro">Ajoutez les prestations : chaque ligne apparaîtra à l’identique sur le devis et sur les factures.</p>
       ${sugg.length ? `<div class="wz-sugg"><div class="wz-sugg-t">Suggéré d’après le diagnostic</div>${sugg.map(s=>{ const svc = SERVICE_CATALOG.find(c=>c.code===s.code); return `<button class="wz-chip" data-action="wz-add-sugg" data-code="${s.code}">+ ${esc(svc.label)} <small>${esc(s.reason)}</small></button>`; }).join("")}</div>` : ""}
+      <div class="wz-sugg"><div class="wz-sugg-t">Catalogue — touchez pour ajouter</div>${SERVICE_CATALOG.filter(c=>!x.lignes.some(l=>l.code===c.code)).map(c=>`<button class="wz-chip" data-action="wz-add-sugg" data-code="${c.code}">+ ${esc(c.label)} <small>${fmtEuros(c.prixUnitaireCt)}</small></button>`).join("")}</div>
       <div class="wz-lines">
         <div class="wz-line-head"><span>Désignation</span><span>Qté</span><span>PU HT €</span><span>TVA</span><span>Total HT</span><span></span></div>
         ${x.lignes.map((l,i)=>`<div class="wz-line-row">
