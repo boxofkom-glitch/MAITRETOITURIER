@@ -401,6 +401,7 @@ function seedDossiers(){
     base({ id:"TP-1041", client:"Marc Lefèvre", ville:"Arcachon", motif:"Réfection de la couverture", priorite:"Normale", statut:"Rapport prêt", technicien:"Léa Petit", commercial:"Lucas Robert", email:"client1041@example.com", adresse:"12 rue des Tilleuls", visiteDate:"9 sept.", visiteHeure:"14:00", commercialStage:"Gagné", montant:18600, diagnostic:marcDiagnostic() }),
   ];
   addSampleDocs(list);
+  list.forEach(dd=>syncProcess(dd, true));
   return list;
 }
 
@@ -875,6 +876,7 @@ function showToast(msg){
 // ---------- render root ----------
 
 function render(){
+  DOSSIERS.forEach(dd=>syncProcess(dd));
   const app = document.getElementById("app");
   const oldContent = app.querySelector(".content");
   const savedScrollTop = oldContent ? oldContent.scrollTop : 0;
@@ -1076,6 +1078,193 @@ function createFacture(d, dv, type, o){
   d.factures.push(f);
   d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:factureLabel(d, f)+" créée ("+fmtEuros(montant)+")."});
   return f;
+}
+
+// ---------- Processus commercial : devis → gagné → facture(s) → impayé → payé ----------
+// L'étape commerciale d'un dossier avec devis accepté est PILOTÉE par les données (factures, paiements) :
+// elle se met à jour toute seule à chaque paiement enregistré, supprimé ou confirmé.
+const PROCESS_STAGES = ["À contacter","Devis à préparer","Devis envoyé","Gagné","Impayé","Payé","Perdu"];
+const MANUAL_STAGES = ["À contacter","Devis à préparer","Devis envoyé","Perdu"];
+
+function acceptedDevis(d){
+  const a = (d.devis||[]).filter(v=>v.statut==="Accepté");
+  return a.length ? a[a.length-1] : null;
+}
+function billingOf(d){
+  const dv = acceptedDevis(d);
+  if(!dv) return null;
+  const ttc = devisTotals(dv).ttcCt;
+  const fs = (d.factures||[]).filter(f=>f.devisId===dv.id);
+  const invoiced = fs.reduce((s,f)=>s+f.montantTtcCt,0);
+  const paid = fs.reduce((s,f)=>s+facturePaidCt(f),0);
+  const due = fs.reduce((s,f)=>s+Math.max(0, f.montantTtcCt-facturePaidCt(f)),0);
+  const annonce = fs.reduce((s,f)=>s+(f.paiements||[]).filter(p=>p.mode==="Virement" && p.virementStatut!=="Confirmé").reduce((a,p)=>a+p.montantCt,0),0);
+  const remaining = Math.max(0, ttc-invoiced);
+  return {dv, ttc, fs, invoiced, paid, due, remaining, annonce, count:fs.length};
+}
+function processStageOf(b){
+  if(!b.count) return "Gagné";
+  if(b.due>1) return "Impayé";
+  if(b.remaining>1) return "Gagné";
+  return "Payé";
+}
+// Recalcule l'étape commerciale et referme les tâches de relance devenues inutiles.
+function syncProcess(d, quiet){
+  const b = billingOf(d);
+  if(!b) return;
+  (b.fs||[]).forEach(f=>{
+    if(facturePaidCt(f)>=f.montantTtcCt-1) (d.taches||[]).forEach(t=>{ if(t.autoFacture===f.id && !t.done) t.done = true; });
+  });
+  const stage = processStageOf(b);
+  if(d.commercialStage!==stage){
+    if(!quiet && d.historique) d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:"Suivi automatique", texte:"Étape commerciale : "+d.commercialStage+" → "+stage+"."});
+    d.commercialStage = stage;
+  }
+}
+function processSummary(d){
+  const b = billingOf(d);
+  if(!b) return null;
+  if(!b.count) return "Facture à créer";
+  if(b.due>1) return "Reste à encaisser "+fmtEuros(b.due);
+  if(b.remaining>1) return "Solde de "+fmtEuros(b.remaining)+" à facturer";
+  return "Soldé";
+}
+
+// Crée la ou les factures prévues par les conditions de règlement du devis (une seule fois).
+function ensureInvoices(d, dv){
+  if((d.factures||[]).some(f=>f.devisId===dv.id)) return null;
+  const p = devisPaiement(dv);
+  const f = createFacture(d, dv, p.acompte ? "Acompte" : "Solde");
+  addFactureTask(d, f);
+  return f;
+}
+function addFactureTask(d, f){
+  d.taches = d.taches || [];
+  d.taches.push({id:nextTaskId(d), titre:"Encaisser "+factureLabel(d,f).toLowerCase()+" "+f.numero+" ("+fmtEuros(f.montantTtcCt)+")", echeance:f.echeance||"", assigne:d.commercial||"", done:false, autoFacture:f.id});
+}
+
+function winPreview(d){
+  const dv = (d.devis||[]).filter(v=>v.statut!=="Refusé").slice(-1)[0];
+  if(!dv) return null;
+  const p = devisPaiement(dv), ttc = devisTotals(dv).ttcCt;
+  const ac = acompteTtcCt(dv);
+  return {dv, ttc, p, ac, text: p.acompte
+    ? "Le devis "+dv.numero+" ("+fmtEuros(ttc)+") sera accepté. Automatiquement : le chantier est préparé, la facture d’acompte de "+fmtEuros(ac)+" est créée (le solde de "+fmtEuros(ttc-ac)+" sera facturé en fin de chantier) et le client passe en « Impayé » jusqu’au paiement."
+    : "Le devis "+dv.numero+" ("+fmtEuros(ttc)+") sera accepté. Automatiquement : le chantier est préparé, la facture de "+fmtEuros(ttc)+" est créée"+(p.fois>1?" ("+p.fois+" échéances)":"")+" et le client passe en « Impayé » jusqu’au paiement."};
+}
+function askWin(d){
+  const w = winPreview(d);
+  if(!w) return;
+  askConfirm("Marquer le devis comme gagné ?", w.text, ()=>winDevis(d), "Gagné ✓", "btn-primary");
+}
+function winDevis(d){
+  const dv = (d.devis||[]).filter(v=>v.statut!=="Refusé").slice(-1)[0];
+  if(!dv) return;
+  if(dv.statut==="Brouillon"){ dv.statut = "Envoyé"; dv.dateEnvoi = dv.dateEnvoi || "12 sept."; }
+  dv.statut = "Accepté";
+  dv.dateAcceptation = "12 sept.";
+  d.montant = Math.round(devisTotals(dv).ttcCt/100);
+  stampHist(d, "Devis "+dv.numero+" gagné (accepté par le client).");
+  if(!d.chantier){ d.chantier = freshChantier(); stampHist(d, "Chantier préparé automatiquement."); }
+  let f = null;
+  if(hasPermission("invoice.create")) f = ensureInvoices(d, dv);
+  d.commercialStage = "Gagné";
+  syncProcess(d);
+  showToast(f ? "Gagné ! "+factureLabel(d,f)+" créée ("+fmtEuros(f.montantTtcCt)+") — client à encaisser." : "Devis gagné. Chantier préparé.");
+  if(f) state.lastFacture = {id:d.id, fid:f.id};
+}
+function recordPayment(d, f, montantCt, mode, date, virementRecu){
+  const pid = f.id+"-P"+((f.paiements||[]).length+1);
+  f.paiements = f.paiements || [];
+  f.paiements.push({id:pid, montantCt, mode, date:date||"12 sept.", virementStatut: mode==="Virement" ? (virementRecu ? "Confirmé" : "Annoncé") : null});
+  f.statut = factureStatutFromPayments(f);
+  stampHist(d, "Paiement de "+fmtEuros(montantCt)+" ("+mode+") enregistré sur "+f.numero+".");
+  syncProcess(d);
+  return f.paiements[f.paiements.length-1];
+}
+function nextEcheanceCt(f){
+  const reste = Math.max(0, f.montantTtcCt - facturePaidCt(f));
+  const list = echeancesStatus(f);
+  const idx = list.findIndex(x=>!x.reglee);
+  if(idx<0) return reste;
+  const cum = list.slice(0, idx+1).reduce((s,x)=>s+x.montantCt, 0);
+  return Math.max(0, Math.min(reste, cum - facturePaidCt(f)));
+}
+
+// Bandeau de processus : 4 étapes + prochaine action claire.
+function processButtons(d){
+  const dv = latestDevis(d), b = billingOf(d);
+  const A = (label, attrs, cls)=>`<button class="${cls||"btn-secondary"} btn-sm" ${attrs}>${label}</button>`;
+  const out = [];
+  if(!dv){
+    if(hasPermission("quote.create")) out.push(A("+ Créer le devis", `data-action="wizard-devis" data-id="${d.id}"`, "btn-primary"));
+    return out;
+  }
+  if(!b){
+    if(dv.statut==="Refusé") return hasPermission("quote.create") ? [A("+ Nouvelle version du devis", `data-action="wizard-devis" data-id="${d.id}"`, "btn-secondary")] : [];
+    if(dv.statut==="Brouillon" && hasPermission("quote.send")) out.push(A("Envoyer le devis", `data-action="modal-send-doc" data-id="${d.id}" data-kind="devis" data-doc="${dv.id}"`, "btn-secondary"));
+    if(hasPermission("quote.accept")){
+      out.push(A("✓ Gagné", `data-action="win-devis" data-id="${d.id}"`, "btn-primary"));
+      if(dv.statut==="Envoyé") out.push(A("Perdu", `data-action="devis-reject" data-id="${d.id}"`, "btn-ghost"));
+    }
+    return out;
+  }
+  if(b.count===0){
+    if(hasPermission("invoice.create")) out.push(A("Créer la facture", `data-action="win-invoice" data-id="${d.id}"`, "btn-primary"));
+    return out;
+  }
+  const open = b.fs.find(f=>f.montantTtcCt-facturePaidCt(f)>1);
+  if(open){
+    if(open.statut==="Brouillon" && hasPermission("invoice.create")) out.push(A("Envoyer la facture", `data-action="modal-send-doc" data-id="${d.id}" data-kind="facture" data-doc="${open.id}"`, "btn-secondary"));
+    if(hasPermission("payment.register")) out.push(A("Enregistrer un paiement", `data-action="pay-open" data-id="${d.id}" data-fid="${open.id}"`, "btn-primary"));
+  } else if(b.remaining>1 && hasPermission("invoice.create")){
+    out.push(A("Créer la facture de solde", `data-action="create-solde" data-id="${d.id}"`, "btn-primary"));
+  }
+  return out;
+}
+function renderProcessCard(d){
+  const dv = latestDevis(d), b = billingOf(d);
+  const lost = dv && dv.statut==="Refusé" && !b;
+  const s1 = !!dv && dv.statut!=="Brouillon";
+  const s2 = !!b;
+  const s3 = !!b && b.count>0 && b.remaining<=1;
+  const s4 = !!b && b.count>0 && b.remaining<=1 && b.due<=1;
+  const steps = [
+    {l:"Devis envoyé", done:s1, sub: dv ? (dv.statut==="Brouillon" ? "Brouillon" : fmtEuros(devisTotals(dv).ttcCt)) : "À créer"},
+    {l:"Gagné", done:s2, sub: b ? "Accepté" : (lost ? "Refusé" : "En attente")},
+    {l:"Facturé", done:s3, part: !!b && b.count>0 && !s3, sub: b ? (b.count ? fmtEuros(b.invoiced)+" / "+fmtEuros(b.ttc) : "À créer") : "—"},
+    {l:"Payé", done:s4, part: !!b && b.paid>0 && !s4, sub: b ? fmtEuros(b.paid)+" / "+fmtEuros(b.ttc) : "—"}
+  ];
+  let curSet = false;
+  const html = steps.map((s,i)=>{
+    let cls = s.done ? "done" : (s.part ? "part" : "");
+    if(!s.done && !curSet && !lost){ cls += " current"; curSet = true; }
+    return `<div class="proc-step ${cls}"><div class="proc-dot">${s.done?"✓":i+1}</div><div class="proc-l">${esc(s.l)}</div><div class="proc-s">${esc(s.sub)}</div></div>`;
+  }).join("");
+  const btns = processButtons(d);
+  const note = lost ? "Le client a refusé le devis." : (b ? (processSummary(d)||"") + (b.annonce>0 ? " · virement annoncé de "+fmtEuros(b.annonce)+" à confirmer" : "") : (dv ? (dv.statut==="Brouillon" ? "Envoyez le devis, puis marquez-le « Gagné » dès l’accord du client." : "Dès que le client accepte : « Gagné » crée la facture et le suivi de paiement.") : "Créez un devis pour lancer le processus."));
+  return `
+  <div class="card proc-card">
+    <div class="card-header"><h3>Processus de l’affaire</h3>${d.commercialStage?badge(d.commercialStage, d.commercialStage==="Payé"||d.commercialStage==="Gagné"?"green":d.commercialStage==="Impayé"?"gold":d.commercialStage==="Perdu"?"red":"blue"):""}</div>
+    <div class="proc-steps">${html}</div>
+    <div class="proc-foot"><div class="proc-note">${esc(note)}</div><div class="proc-btns">${btns.join("")}</div></div>
+  </div>`;
+}
+
+function modalPay(m){
+  const d = byId(m.id), f = findFacture(d, m.fid);
+  if(!f) return modalWrap("Paiement", "<p>Facture introuvable.</p>");
+  const reste = Math.max(0, f.montantTtcCt - facturePaidCt(f));
+  const sug = nextEcheanceCt(f) || reste;
+  const ech = echeancesStatus(f);
+  return modalWrap("Enregistrer un paiement", `
+    <p class="form-help" style="margin:0 0 12px">${esc(d.client)} · ${esc(factureLabel(d,f))} ${esc(f.numero)} — reste dû <b>${fmtEuros(reste)}</b> sur ${fmtEuros(f.montantTtcCt)}.</p>
+    ${ech.length>1 ? `<div style="margin-bottom:12px">${ech.map((e,i)=>`<div class="row-item"><div class="row-sub">Échéance ${i+1}/${ech.length} · ${esc(e.date||"")}</div><div>${fmtEuros(e.montantCt)} ${e.reglee?badge("Réglée","green"):badge("À venir","gray")}</div></div>`).join("")}</div>` : ""}
+    <div class="form-field"><label>Montant reçu (€)</label><input type="number" min="0" step="0.01" id="payMontant" value="${(sug/100).toFixed(2)}"></div>
+    <div class="form-field"><label>Mode de paiement</label><select id="payMode">${PAY_MODES.map(x=>`<option ${(f.mode||"")===x?"selected":""}>${esc(x)}</option>`).join("")}</select></div>
+    <div class="form-field"><label>Date de réception</label><input type="text" id="payDate" value="12 sept."></div>
+    <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-bottom:14px"><input type="checkbox" id="payRecu" checked> Paiement bien reçu (pour un virement : reçu sur le compte)</label>
+    <div class="modal-actions"><button class="btn-primary" data-action="pay-save" data-id="${d.id}" data-fid="${f.id}">Enregistrer</button><button class="btn-secondary" data-action="modal-close">Annuler</button></div>`);
 }
 
 function docPill(kind, doc){
@@ -1342,6 +1531,8 @@ function renderDocRow(kind, d, doc, hideOpen){
       <div class="doc-row-amount">${fmtEuros(ttc)}</div>
       ${badge(pill.label, cls)}
       <div class="doc-row-actions">
+        ${isDevis && (doc.statut==="Envoyé"||doc.statut==="Brouillon") && !acceptedDevis(d) && hasPermission("quote.accept") ? `<button class="btn-primary btn-sm" data-action="win-devis" data-id="${d.id}">✓ Gagné</button>` : ""}
+        ${!isDevis && doc.montantTtcCt-facturePaidCt(doc)>1 && hasPermission("payment.register") ? `<button class="btn-primary btn-sm" data-action="pay-open" data-id="${d.id}" data-fid="${doc.id}">Paiement</button>` : ""}
         <button class="btn-ghost btn-sm" data-action="doc-pdf" data-id="${d.id}" data-kind="${kind}" data-doc="${doc.id}">PDF</button>
         ${canSend ? `<button class="btn-secondary btn-sm" data-action="modal-send-doc" data-id="${d.id}" data-kind="${kind}" data-doc="${doc.id}">Envoyer</button>` : ""}
         ${hideOpen || !canView("dossiers") ? "" : `<button class="btn-ghost btn-sm" data-action="open-dossier" data-id="${d.id}" data-tab="devis">Ouvrir</button>`}
@@ -1471,6 +1662,7 @@ function askDelete(ds){
   } else if(what==="facture"){
     askConfirm("Supprimer cette facture ?", "Le brouillon "+ds.doc+" sera définitivement supprimé.", ()=>{
       d.factures = d.factures.filter(x=>x.id!==ds.doc);
+      syncProcess(d);
       stampHist(d, "Brouillon de facture "+ds.doc+" supprimé.");
       showToast("Facture supprimée.");
     });
@@ -1480,6 +1672,7 @@ function askDelete(ds){
       f.paiements = f.paiements.filter(x=>x.id!==ds.pid);
       f.statut = factureStatutFromPayments(f);
       if(f.statut==="Brouillon") f.statut = "Envoyée";
+      syncProcess(d);
       stampHist(d, "Paiement supprimé sur "+f.numero+".");
       showToast("Paiement supprimé.");
     });
@@ -1540,14 +1733,14 @@ function askDelete(ds){
 
 // ---------- Confirmation de suppression ----------
 let CONFIRM_RUN = null;
-function askConfirm(title, text, run, yesLabel){
+function askConfirm(title, text, run, yesLabel, yesCls){
   CONFIRM_RUN = run;
-  state.modal = {type:"confirm", title, text, yesLabel:yesLabel||"Supprimer"};
+  state.modal = {type:"confirm", title, text, yesLabel:yesLabel||"Supprimer", yesCls:yesCls||"btn-danger"};
   render();
 }
 function modalConfirm(m){
   return modalWrap(m.title, `<p style="margin:0 0 18px;line-height:1.5">${esc(m.text)}</p>
-    <div class="modal-actions"><button class="btn-danger" data-action="confirm-yes">${esc(m.yesLabel)}</button><button class="btn-secondary" data-action="modal-close">Annuler</button></div>`);
+    <div class="modal-actions"><button class="${m.yesCls||"btn-danger"}" data-action="confirm-yes">${esc(m.yesLabel)}</button><button class="btn-secondary" data-action="modal-close">Annuler</button></div>`);
 }
 
 // ---------- Assistant de création : devis et facture ----------
@@ -2539,6 +2732,8 @@ function renderDossierInfo(d){
     </div>
   </div>
 
+  ${renderProcessCard(d)}
+
   <div class="stat-grid crm-kpis">
     ${stat("Valeur de l’affaire", fmtEuros(k.valeur), k.devisStatut?("Devis "+k.devisStatut.toLowerCase()):"Pas encore de devis")}
     ${stat("Facturé", fmtEuros(k.facture), "Factures envoyées")}
@@ -2696,7 +2891,7 @@ function modalForm(m){
       <div class="form-field"><label>Parrain (client existant)</label><input type="text" id="ffParrain" value="${esc(p.parrain)}"></div>
       <div class="form-field"><label>Client apporté</label><input type="text" id="ffApporte" value="${esc(p.clientApporte)}"></div>
       <div class="form-field"><label>Date</label><input type="text" id="ffDate" value="${esc(p.date)}"></div>
-      <div class="form-field"><label>Affaire</label><select id="ffAffaire">${["À contacter","Devis à préparer","Devis envoyé","Gagné","Perdu"].map(f=>`<option ${p.affaire===f?"selected":""}>${f}</option>`).join("")}</select></div>
+      <div class="form-field"><label>Affaire</label><select id="ffAffaire">${PROCESS_STAGES.map(f=>`<option ${p.affaire===f?"selected":""}>${f}</option>`).join("")}</select></div>
       <div class="form-field"><label>Récompense prévue (€)</label><input type="number" min="0" id="ffRecomp" value="${p.recompense}"></div>
       <div class="form-field"><label>Suivi</label><select id="ffSuivi">${["En attente","Contacté","Gagné","Récompense remise"].map(f=>`<option ${p.suivi===f?"selected":""}>${f}</option>`).join("")}</select></div>
       <div class="modal-actions"><button class="btn-primary" data-action="form-save">Enregistrer</button><button class="btn-secondary" data-action="modal-close">Annuler</button></div>`);
@@ -3247,11 +3442,12 @@ function renderDossierRapport(d){
 
 function renderDossierCommercial(d){
   return `
+  ${renderProcessCard(d)}
   <div class="card">
     <div class="card-header"><h3>Suivi de l’opportunité</h3>${badge(d.commercialStage, d.commercialStage==="Gagné"?"green":d.commercialStage==="Perdu"?"red":"blue")}</div>
-    <div class="form-field"><label>Étape commerciale</label>
-      <select id="comStage" ${!hasPermission("opportunity.update")?"disabled":""}>
-        ${["À contacter","Devis à préparer","Devis envoyé","Gagné","Perdu"].map(o=>`<option ${d.commercialStage===o?"selected":""}>${o}</option>`).join("")}
+    <div class="form-field"><label>Étape commerciale${acceptedDevis(d)?" (pilotée automatiquement par les factures et paiements)":""}</label>
+      <select id="comStage" ${!hasPermission("opportunity.update")||acceptedDevis(d)?"disabled":""}>
+        ${(acceptedDevis(d)?PROCESS_STAGES:MANUAL_STAGES).map(o=>`<option ${d.commercialStage===o?"selected":""}>${o}</option>`).join("")}
       </select>
     </div>
     <div class="form-field"><label>Montant estimé du devis (€)</label><input type="number" id="comMontant" value="${d.montant}" ${!hasPermission("opportunity.update")?"disabled":""}></div>
@@ -3368,7 +3564,7 @@ function renderDossierDevis(d){
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
           ${canEditDv?`<button class="btn-primary btn-sm" data-action="devis-save" data-id="${d.id}">Enregistrer</button>`:""}
           ${dv.statut==="Brouillon" && hasPermission("quote.update")?`<button class="btn-secondary btn-sm" data-action="devis-send" data-id="${d.id}">Marquer comme envoyé</button>`:""}
-          ${dv.statut==="Envoyé" && hasPermission("quote.update")?`<button class="btn-secondary btn-sm" data-action="devis-accept" data-id="${d.id}">Marquer accepté</button><button class="btn-ghost btn-sm" data-action="devis-reject" data-id="${d.id}">Marquer refusé</button>`:""}
+          ${(dv.statut==="Envoyé"||dv.statut==="Brouillon") && hasPermission("quote.accept")?`<button class="btn-primary btn-sm" data-action="win-devis" data-id="${d.id}">✓ Gagné</button>`:""}${dv.statut==="Envoyé" && hasPermission("quote.update")?`<button class="btn-ghost btn-sm" data-action="devis-reject" data-id="${d.id}">Marquer refusé</button>`:""}
           ${dv.statut!=="Brouillon"?`<button class="btn-ghost btn-sm" data-action="wizard-devis" data-id="${d.id}">+ Nouvelle version</button>`:""}
           <button class="btn-ghost btn-sm" data-action="doc-pdf" data-id="${d.id}" data-kind="devis" data-doc="${dv.id}">Télécharger le PDF</button>
           ${hasPermission("quote.send")?`<button class="btn-secondary btn-sm" data-action="modal-send-doc" data-id="${d.id}" data-kind="devis" data-doc="${dv.id}">Envoyer au client</button>`:""}
@@ -3392,7 +3588,7 @@ function renderDossierDevis(d){
       ${!d.factures.length ? `<div class="empty-note">${dv && dv.statut==="Accepté" ? "Aucune facture pour l’instant." : "Le devis doit être accepté avant de pouvoir facturer."}</div>` : d.factures.map(f=>renderFactureCard(d,f)).join("")}
     </div>`;
 
-  return (canView("devis") ? devisBlock : "") + (canView("factures") ? facturesBlock : "");
+  return (canView("devis")||canView("factures") ? renderProcessCard(d) : "") + (canView("devis") ? devisBlock : "") + (canView("factures") ? facturesBlock : "");
 }
 
 function renderDossierChantier(d){
@@ -3738,12 +3934,23 @@ function renderDiagnosticsList(){
 
 // ---------- Suivi commercial (kanban) ----------
 
+function kanbanQuick(d){
+  const dv = latestDevis(d), b = billingOf(d);
+  if(!b && dv && (dv.statut==="Envoyé"||dv.statut==="Brouillon") && hasPermission("quote.accept")) return `<button class="btn-primary btn-sm" style="width:100%;margin-top:6px" data-action="win-devis" data-id="${d.id}">✓ Gagné</button>`;
+  if(b && b.count>0 && b.due>1 && hasPermission("payment.register")){
+    const open = b.fs.find(f=>f.montantTtcCt-facturePaidCt(f)>1);
+    return `<button class="btn-primary btn-sm" style="width:100%;margin-top:6px" data-action="pay-open" data-id="${d.id}" data-fid="${open.id}">Enregistrer un paiement</button>`;
+  }
+  return "";
+}
+
 function renderCommercialKanban(){
   const list = visibleDossiers();
-  const stages = ["À contacter","Devis à préparer","Devis envoyé","Gagné","Perdu"];
-  const actives = list.filter(d=>d.commercialStage!=="Perdu" && d.commercialStage!=="Gagné");
+  const stages = PROCESS_STAGES;
+  const actives = list.filter(d=>!["Perdu","Gagné","Impayé","Payé"].includes(d.commercialStage));
   const devisEnvoyes = list.filter(d=>d.commercialStage==="Devis envoyé").length;
-  const montantGagne = list.filter(d=>d.commercialStage==="Gagné").reduce((s,d)=>s+d.montant,0);
+  const montantGagne = list.filter(d=>["Gagné","Impayé","Payé"].includes(d.commercialStage)).reduce((s,d)=>s+d.montant,0);
+  const aEncaisser = list.reduce((s,d)=>{ const b = billingOf(d); return s + (b ? b.due : 0); }, 0);
   const relancesRetard = list.filter(d=>d.prochaineRelance).length;
 
   return `
@@ -3752,7 +3959,7 @@ function renderCommercialKanban(){
     ${stat("Affaires actives", actives.length, "Prospects et devis en cours")}
     ${stat("Devis envoyés", devisEnvoyes, "En attente d’une réponse")}
     ${stat("Montant gagné", montantGagne.toLocaleString("fr-FR")+" €", "Affaires marquées gagnées")}
-    ${stat("Relances en retard", relancesRetard, "À reprendre en priorité")}
+    ${stat("À encaisser", fmtEuros(aEncaisser), list.filter(d=>d.commercialStage==="Impayé").length+" client(s) impayé(s)")}
   </div>
   <div class="kanban">
     ${stages.map(stg=>{
@@ -3767,6 +3974,8 @@ function renderCommercialKanban(){
             ${d.priorite!=="Normale" ? badge(d.priorite, priorityBadgeClass(d.priorite)) : ""}
             ${d.montant ? `<div class="kc-amount">${d.montant.toLocaleString("fr-FR")} €</div>` : ""}
             ${d.prochaineRelance ? `<div style="margin:4px 0">${badge("En retard","red")}</div>` : ""}
+            ${processSummary(d) ? `<div class="kc-sub" style="color:var(--gold)">${esc(processSummary(d))}</div>` : ""}
+            ${kanbanQuick(d)}
             <button class="btn-ghost btn-sm" style="width:100%;margin-top:6px" data-action="open-dossier" data-id="${d.id}" data-tab="commercial">Ouvrir le suivi</button>
           </div>`).join("")}
       </div>`;
@@ -3789,9 +3998,9 @@ function renderCommercialKanban(){
             <div><div class="lc-name">${esc(d.client)}</div><div class="lc-sub">${esc(d.id)} · ${esc(d.ville)} · ${esc(d.commercial)}</div></div>
             ${d.priorite!=="Normale" ? badge(d.priorite, priorityBadgeClass(d.priorite)) : ""}
           </div>
-          ${d.montant ? `<div class="lc-motif" style="color:var(--gold);font-weight:700">${d.montant.toLocaleString("fr-FR")} €</div>` : ""}
+          ${d.montant ? `<div class="lc-motif" style="color:var(--gold);font-weight:700">${d.montant.toLocaleString("fr-FR")} €${processSummary(d)?" · "+esc(processSummary(d)):""}</div>` : ""}
           ${d.prochaineRelance ? `<div style="margin:8px 0">${badge("En retard","red")}</div>` : ""}
-          <div class="lc-foot"><button class="btn-secondary btn-sm" style="width:100%" data-action="open-dossier" data-id="${d.id}" data-tab="commercial">Ouvrir le suivi</button></div>
+          <div class="lc-foot">${kanbanQuick(d)}<button class="btn-secondary btn-sm" style="width:100%;margin-top:6px" data-action="open-dossier" data-id="${d.id}" data-tab="commercial">Ouvrir le suivi</button></div>
         </div>`).join("");
     })()}
   </div>`;
@@ -3933,6 +4142,7 @@ function buildModal(){
   if(m.type==="wizard") return renderWizard();
   if(m.type==="form") return modalForm(m);
   if(m.type==="confirm") return modalConfirm(m);
+  if(m.type==="pay") return modalPay(m);
   return "";
 }
 
@@ -4349,19 +4559,28 @@ document.addEventListener("DOMContentLoaded", ()=>{
       render();
       return;
     }
-    if(action==="devis-accept"){
-      const d = byId(t.dataset.id);
-      const dv = latestDevis(d);
-      dv.statut = "Accepté";
-      d.commercialStage = "Gagné";
-      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Devis "+dv.numero+" accepté par le client."});
-      if(!d.chantier){
-        d.chantier = freshChantier();
-        d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Chantier préparé automatiquement suite à l'acceptation du devis."});
-      }
-      showToast("Devis accepté. Chantier préparé.");
-      render();
-      return;
+    if(action==="devis-accept" || action==="win-devis"){ askWin(byId(t.dataset.id)); return; }
+    if(action==="win-invoice"){
+      const d = byId(t.dataset.id); const dv = acceptedDevis(d);
+      if(dv){ const f = ensureInvoices(d, dv); syncProcess(d); showToast(f ? factureLabel(d,f)+" créée." : "La facture existe déjà."); }
+      render(); return;
+    }
+    if(action==="create-solde"){
+      const d = byId(t.dataset.id); const dv = acceptedDevis(d);
+      if(dv){ const f = createFacture(d, dv, "Solde"); addFactureTask(d, f); syncProcess(d); showToast("Facture de solde créée ("+fmtEuros(f.montantTtcCt)+")."); }
+      render(); return;
+    }
+    if(action==="pay-open"){ state.modal = {type:"pay", id:t.dataset.id, fid:t.dataset.fid}; render(); return; }
+    if(action==="pay-save"){
+      const d = byId(t.dataset.id); const f = findFacture(d, t.dataset.fid);
+      const montant = parseFloat(document.getElementById("payMontant").value);
+      if(!montant || montant<=0){ showToast("Indiquez un montant valide."); return; }
+      const mode = document.getElementById("payMode").value;
+      recordPayment(d, f, Math.round(montant*100), mode, document.getElementById("payDate").value, document.getElementById("payRecu").checked);
+      state.modal = null;
+      const st = d.commercialStage;
+      showToast(st==="Payé" ? "Paiement enregistré : dossier soldé ✓" : (f.statut==="Payée" ? "Facture soldée." : "Paiement enregistré — reste dû "+fmtEuros(Math.max(0,f.montantTtcCt-facturePaidCt(f)))+"."));
+      render(); return;
     }
     if(action==="devis-reject"){
       const d = byId(t.dataset.id);
@@ -4428,10 +4647,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
       if(!montant || montant<=0){ showToast("Indiquez un montant valide."); return; }
       const mode = document.getElementById("paiementMode-"+f.id).value;
       const date = document.getElementById("paiementDate-"+f.id).value || "12 sept.";
-      const pid = f.id+"-P"+(f.paiements.length+1);
-      f.paiements.push({ id:pid, montantCt:Math.round(montant*100), mode, date, virementStatut: mode==="Virement" ? "Annoncé" : null });
-      f.statut = factureStatutFromPayments(f);
-      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Paiement de "+fmtEuros(Math.round(montant*100))+" enregistré sur "+f.numero+"."});
+      recordPayment(d, f, Math.round(montant*100), mode, date, false);
       showToast(mode==="Virement" ? "Virement enregistré (annoncé, non encaissé)." : "Paiement enregistré.");
       render();
       return;
@@ -4442,6 +4658,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const p = f.paiements.find(x=>x.id===t.dataset.pid);
       p.virementStatut = "Confirmé";
       f.statut = factureStatutFromPayments(f);
+      syncProcess(d);
       showToast("Virement confirmé comme encaissé.");
       render();
       return;
@@ -4456,7 +4673,13 @@ document.addEventListener("DOMContentLoaded", ()=>{
       c.acces = document.getElementById("chAcces").value;
       c.equipement = document.getElementById("chEquipement").value;
       c.consignes = document.getElementById("chConsignes").value;
-      showToast("Chantier mis à jour.");
+      let msg = "Chantier mis à jour.";
+      const bb = billingOf(d);
+      if(["Terminé","À réceptionner","Clôturé"].includes(c.statut) && bb && bb.count>0 && bb.remaining>1 && hasPermission("invoice.create")){
+        const fs = createFacture(d, bb.dv, "Solde"); addFactureTask(d, fs); syncProcess(d);
+        msg = "Chantier terminé : facture de solde de "+fmtEuros(fs.montantTtcCt)+" créée automatiquement.";
+      }
+      showToast(msg);
       render();
       return;
     }
