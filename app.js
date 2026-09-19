@@ -538,12 +538,22 @@ function seedEmployees(){
   list[0].email = "direction@maitretoiturier.fr";
   return list;
 }
+const DEFAULT_MATERIEL_LIB = [
+  {id:"charpente", label:"Charpente à changer", items:["Échafaudage ou nacelle","Bois de charpente (chevrons, pannes, liteaux)","Tronçonneuse + lames de rechange","Scie circulaire","Visserie, pointes et boulons","Équerres et sabots de fixation","Niveau, mètre et cordeau","Bâches de protection","Casque, harnais et gants","Éclairage de chantier + rallonges"]},
+  {id:"couverture", label:"Réfection de couverture", items:["Échafaudage ou nacelle","Tuiles / ardoises de remplacement","Liteaux et contre-liteaux","Écran sous-toiture","Faîtières et closoirs","Clous et crochets","Marteau, ardoisier, coupe-tuiles","Monte-matériaux","Bâches de protection","Harnais et EPI"]},
+  {id:"fuite", label:"Réparation de fuite / solin", items:["Échelle homologuée","Bande d’étanchéité et solin","Mastic / résine d’étanchéité","Chalumeau ou pistolet à air chaud","Tuiles de remplacement","Lampe frontale","Bâche de protection provisoire","Harnais et EPI"]},
+  {id:"zinguerie", label:"Zinguerie et gouttières", items:["Échelle ou nacelle","Gouttières et descentes","Crochets et colliers","Silicone / colle d’étanchéité","Scie à métaux, cisaille","Rivets et visseuse","Niveau","Harnais et EPI"]},
+  {id:"demoussage", label:"Nettoyage et démoussage", items:["Nettoyeur haute pression","Produit anti-mousse / hydrofuge","Pulvérisateur","Brosses et racloirs","Bâches et protections","Tuyau et raccords","Harnais et EPI"]},
+  {id:"velux", label:"Pose de fenêtre de toit", items:["Fenêtre de toit + kit d’habillage","Raccord d’étanchéité (solin)","Chevrons et liteaux","Scie sabre","Visseuse et vis","Isolant et pare-vapeur","Échelle ou nacelle","Harnais et EPI"]},
+  {id:"controle", label:"Visite de contrôle / diagnostic", items:["Échelle homologuée","Harnais et casque","Smartphone ou tablette (rapport + photos)","Drone (si besoin)","Lampe frontale","Mètre laser","Jumelles"]}
+];
 function defaultSettings(){
   return {
     access: JSON.parse(JSON.stringify(DEFAULT_ACCESS)),
     company: {nom:"Maître Toiturier", telephone:"", email:"", site:"www.maitretoiturier.fr", adresse:"", siret:"", iban:"", devisValidite:30, acomptePct:30},
     employees: seedEmployees(),
-    requests: []
+    requests: [],
+    materielLib: JSON.parse(JSON.stringify(DEFAULT_MATERIEL_LIB))
   };
 }
 let SETTINGS = defaultSettings();
@@ -1618,6 +1628,8 @@ function addSampleDocs(list){
     d.chantier = ch;
   }
 
+  const tp = get("TP-1045");
+  if(tp){ const lb = DEFAULT_MATERIEL_LIB.find(x=>x.id==="couverture"); tp.materiel = [{id:"M1", libId:"couverture", label:lb.label, date:"2026-09-14", note:"Accès par l’arrière, prévoir 2 personnes.", items:lb.items.map((x,i)=>({label:x, done:i<3})), par:"Julien Bernard"}]; }
   // Tâches et notes d'exemple
   const T = (id, tasks, notes)=>{ const dd = get(id); if(!dd) return; dd.taches = tasks; (notes||[]).forEach(n=>dd.notes.push(n)); };
   T("TP-1042", [{id:"T1", titre:"Relancer le client pour la réponse au devis", echeance:"14 sept.", assigne:"Sarah Durand", done:false}, {id:"T2", titre:"Préparer la facture d’acompte dès l’acceptation", echeance:"16 sept.", assigne:"Sarah Durand", done:false}], [{date:"11 sept.", texte:"Cliente disponible en fin de journée ; préfère être contactée par WhatsApp."}]);
@@ -1663,6 +1675,11 @@ function askDelete(ds){
       syncProcess(d);
       stampHist(d, "Brouillon de facture "+ds.doc+" supprimé.");
       showToast("Facture supprimée.");
+    });
+  } else if(what==="materiel"){
+    askConfirm("Supprimer cette liste ?", "La liste de matériel sera retirée du dossier et de l’agenda.", ()=>{
+      d.materiel = (d.materiel||[]).filter(x=>x.id!==ds.doc);
+      showToast("Liste supprimée.");
     });
   } else if(what==="paiement"){
     askConfirm("Supprimer ce paiement ?", "Le paiement sera retiré de la facture, dont le reste dû sera recalculé.", ()=>{
@@ -2650,6 +2667,7 @@ function tabsForRole(d){
   if(canView("commercial")) tabs.push(["commercial","Suivi commercial"]);
   if(canView("devis") || canView("factures")) tabs.push(["devis","Devis & factures"]);
   if(d && d.chantier && canReadJob()) tabs.push(["chantier","Chantier"]);
+  if(state.role!=="client" && (canView("agenda")||canView("diagnostics"))) tabs.push(["materiel","Matériel"]);
   tabs.push(["documents","Documents"]);
   return tabs;
 }
@@ -2667,6 +2685,7 @@ function renderDossierDetail(id){
   else if(state.dossierTab==="commercial") body = renderDossierCommercial(d);
   else if(state.dossierTab==="devis") body = renderDossierDevis(d);
   else if(state.dossierTab==="chantier") body = renderDossierChantier(d);
+  else if(state.dossierTab==="materiel") body = renderDossierMateriel(d);
   else if(state.dossierTab==="activite") body = renderDossierActivite(d);
   else if(state.dossierTab==="documents") body = renderDossierDocuments(d);
 
@@ -3620,6 +3639,90 @@ function renderDossierDevis(d){
   return (canView("devis")||canView("factures") ? renderProcessCard(d) : "") + (canView("devis") ? devisBlock : "") + (canView("factures") ? facturesBlock : "");
 }
 
+// ---------- Préparation du matériel (techniciens) : bibliothèque de listes + agenda ----------
+function isoToDate(iso){ return iso ? new Date(iso+"T00:00:00") : null; }
+function fmtIsoFr(iso){ const dt = isoToDate(iso); return dt ? fmtDayMonth(dt) : "sans date"; }
+function matProgress(p){
+  const n = p.items.length, done = p.items.filter(i=>i.done).length;
+  return {n, done, complete: n>0 && done===n};
+}
+function canEditMateriel(){ return canEditMod("agenda") || canEditMod("diagnostics"); }
+
+function renderDossierMateriel(d){
+  d.materiel = d.materiel || [];
+  const edit = canEditMateriel();
+  const preps = d.materiel.slice().sort((a,b)=>(a.date||"9999").localeCompare(b.date||"9999"));
+  return `
+  <div class="card">
+    <div class="card-header"><h3>Matériel à prévoir</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${edit?`<button class="btn-primary btn-sm" data-action="mat-new" data-id="${d.id}">+ Préparer un chantier</button>`:""}
+        ${edit?`<button class="btn-secondary btn-sm" data-action="matlib-open">Ma bibliothèque</button>`:""}
+      </div>
+    </div>
+    <p class="form-help" style="margin:0">Choisissez un type de chantier dans la bibliothèque (ex. « Charpente à changer ») et une date : la liste de matériel apparaît ici et dans l’agenda ce jour-là, pour ne rien oublier.</p>
+  </div>
+  ${preps.length===0 ? `<div class="empty-note">Aucune préparation pour ce dossier.</div>` : preps.map(p=>{
+    const pr = matProgress(p);
+    return `
+  <div class="card">
+    <div class="card-header">
+      <div><h3 style="margin:0">${esc(p.label)}</h3><div class="row-sub">${esc(d.adresse)}, ${esc(d.ville)} · ${p.date?"le "+esc(fmtIsoFr(p.date)):"sans date"}${p.par?" · "+esc(p.par):""}</div></div>
+      ${badge(pr.complete?"Tout est prêt":pr.done+" / "+pr.n, pr.complete?"green":"gold")}
+    </div>
+    <div class="mat-bar"><span style="width:${pr.n?Math.round(pr.done/pr.n*100):0}%"></span></div>
+    ${p.note?`<p class="form-help">${esc(p.note)}</p>`:""}
+    ${p.items.map((it,i)=>`
+      <div class="row-item">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;flex:1">
+          <input type="checkbox" data-action="mat-toggle" data-id="${d.id}" data-mid="${p.id}" data-idx="${i}" ${it.done?"checked":""} ${edit?"":"disabled"}>
+          <span style="${it.done?"text-decoration:line-through;color:var(--muted)":""}">${esc(it.label)}</span>
+        </label>
+        ${edit?`<button class="btn-ghost btn-sm" data-action="mat-del-item" data-id="${d.id}" data-mid="${p.id}" data-idx="${i}">✕</button>`:""}
+      </div>`).join("")}
+    ${edit?`
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <input type="text" id="matNew-${p.id}" placeholder="Ajouter un outil ou une fourniture…" style="flex:1;min-width:180px">
+      <button class="btn-secondary btn-sm" data-action="mat-add-item" data-id="${d.id}" data-mid="${p.id}">Ajouter</button>
+      <button class="btn-ghost btn-sm" data-action="ask-delete" data-what="materiel" data-id="${d.id}" data-doc="${p.id}">Supprimer la liste</button>
+    </div>`:""}
+  </div>`;
+  }).join("")}`;
+}
+
+function modalMatNew(m){
+  const d = byId(m.id);
+  const lib = SETTINGS.materielLib || [];
+  return modalWrap("Préparer un chantier", `
+    <p class="form-help" style="margin-bottom:12px">${esc(d.client)} · ${esc(d.adresse)}, ${esc(d.ville)}</p>
+    <div class="form-field"><label>Type de chantier (bibliothèque)</label>
+      <select id="mpLib">${lib.map(l=>`<option value="${l.id}">${esc(l.label)} — ${l.items.length} éléments</option>`).join("")}<option value="">Liste vide (à remplir moi-même)</option></select></div>
+    <div class="form-field"><label>Date du chantier</label><input type="date" id="mpDate"></div>
+    <div class="form-field"><label>Remarque (facultatif)</label><input type="text" id="mpNote" placeholder="ex. accès difficile, prévoir 2 personnes"></div>
+    <div class="modal-actions"><button class="btn-primary" data-action="mat-create" data-id="${d.id}">Créer la liste</button><button class="btn-secondary" data-action="modal-close">Annuler</button></div>`);
+}
+
+function modalMatLib(){
+  const lib = state.matDraft || [];
+  return modalWrap("Ma bibliothèque de chantiers", `
+    <p class="form-help" style="margin-bottom:12px">Chaque type de chantier a sa liste de matériel (un élément par ligne). Modifiez, ajoutez ou supprimez : c’est partagé par toute l’équipe.</p>
+    ${lib.map((l,i)=>`
+      <div class="card" style="padding:12px">
+        <div style="display:flex;gap:8px"><input type="text" id="ml-label-${i}" value="${esc(l.label)}" style="flex:1"><button class="btn-ghost btn-sm" data-action="matlib-del" data-idx="${i}">Supprimer</button></div>
+        <textarea id="ml-items-${i}" rows="5" style="margin-top:8px">${esc(l.items.join("\n"))}</textarea>
+      </div>`).join("")}
+    <div class="modal-actions"><button class="btn-secondary" data-action="matlib-add">+ Nouveau type de chantier</button><button class="btn-primary" data-action="matlib-save">Enregistrer</button></div>`);
+}
+function matLibFlush(){
+  const lib = state.matDraft || [];
+  lib.forEach((l,i)=>{
+    const a = document.getElementById("ml-label-"+i), b = document.getElementById("ml-items-"+i);
+    if(!a || !b) return;
+    l.label = a.value.trim() || l.label;
+    l.items = b.value.split("\n").map(x=>x.trim()).filter(Boolean);
+  });
+}
+
 function renderDossierChantier(d){
   const c = d.chantier;
   if(!c) return `<div class="card" style="text-align:center;padding:32px 20px"><h3 style="margin-bottom:6px">Pas encore de chantier</h3><p style="color:var(--muted)">Le chantier est préparé automatiquement à l'acceptation du devis.</p></div>`;
@@ -3704,6 +3807,10 @@ function agendaEventsForDate(date){
     if(visiteD && sameDay(visiteD, date)){
       events.push({time:d.visiteHeure, label:"Visite", client:d.client, membre:d.technicien, ville:d.ville, id:d.id});
     }
+    (d.materiel||[]).forEach(p=>{
+      const pd = isoToDate(p.date);
+      if(pd && sameDay(pd, date)){ const pr = matProgress(p); events.push({time:null, label:"Matériel · "+p.label+" ("+pr.done+"/"+pr.n+")", client:d.client, membre:d.technicien, ville:d.ville, id:d.id, tab:"materiel"}); }
+    });
     const relanceD = parseShortFrDate(d.prochaineRelance);
     if(relanceD && sameDay(relanceD, date)){
       events.push({time:null, label:"Relance commerciale", client:d.client, membre:d.commercial, ville:d.ville, id:d.id});
@@ -3724,7 +3831,7 @@ function agendaEventsForMonth(date){
 }
 
 function renderEventCard(e, cls){
-  return `<div class="${cls}" data-action="open-dossier" data-id="${e.id}">
+  return `<div class="${cls}" data-action="open-dossier" data-id="${e.id}" ${e.tab?`data-tab="${e.tab}"`:""}>
     ${e.time?`<div class="ev-time">${esc(e.time)} · ${esc(e.label)}</div>`:`<div class="ev-time">${esc(e.label)}</div>`}
     <div>${esc(e.client)}</div>
     <div class="row-sub">${esc(e.membre||"—")} · ${esc(e.ville)}</div>
@@ -4172,6 +4279,8 @@ function buildModal(){
   if(m.type==="form") return modalForm(m);
   if(m.type==="confirm") return modalConfirm(m);
   if(m.type==="pay") return modalPay(m);
+  if(m.type==="matnew") return modalMatNew(m);
+  if(m.type==="matlib") return modalMatLib();
   return "";
 }
 
@@ -4206,11 +4315,11 @@ function modalNewDemande(){
     : `<div class="form-field"><label>Technicien</label><select id="fTech"><option value="">À affecter</option>${techOpts}</select></div>
        <div class="form-field"><label>Commercial</label><select id="fCommercial"><option value="">À affecter</option>${comOpts}</select></div>`;
   return modalWrap(m.toDiagnostic ? "Créer un diagnostic" : "Créer un client", `
-    <div class="form-field"><label>Client déjà enregistré ? Recherchez-le</label>
+    ${m.toDiagnostic ? `<div class="form-field"><label>Client déjà enregistré ? Recherchez-le</label>
       <input type="search" id="fExisting" list="knownClients" placeholder="Tapez un nom ou une ville…" autocomplete="off">
       <datalist id="knownClients">${knownClients().map(d=>`<option value="${esc(d.client)} · ${esc(d.ville)}"></option>`).join("")}</datalist>
       <div class="form-help" id="fExistingNote">Choisissez un client existant pour préremplir sa fiche, ou saisissez un nouveau client ci-dessous.</div>
-    </div>
+    </div>` : ""}
     <div class="form-field"><label>Nom du client</label><input type="text" id="fName"></div>
     <div class="form-field"><label>Téléphone</label><input type="tel" id="fPhone" value="06 00 00 00 00"></div>
     <div class="form-field"><label>E-mail</label><input type="email" id="fEmail"></div>
@@ -4413,6 +4522,12 @@ document.addEventListener("DOMContentLoaded", ()=>{
       let tech = val("fTech") || null, com = val("fCommercial") || null;
       if(state.role==="tech"){ tech = currentName(); if(!com){ showToast("Affectez un commercial à ce client."); return; } }
       if(state.role==="sales"){ com = currentName(); if(!tech){ showToast("Affectez un technicien à ce client."); return; } }
+      const existingPick = document.getElementById("fExisting");
+      if(!(existingPick && existingPick.value)){
+        const ph = (document.getElementById("fPhone").value||"").replace(/\D/g,""), em = (document.getElementById("fEmail").value||"").trim().toLowerCase();
+        const dup = DOSSIERS.find(x=>x.client.toLowerCase()===name.toLowerCase() && ((x.telephone||"").replace(/\D/g,"")===ph || (em && (x.email||"").toLowerCase()===em)));
+        if(dup){ showToast("Ce client existe déjà (dossier "+dup.id+"). Ouvrez-le pour ajouter un devis, une facture ou un diagnostic."); return; }
+      }
       const nid = "TP-"+(Math.max(1048, ...DOSSIERS.map(x=>parseInt(x.id.slice(3),10)||0))+1);
       const newD = {
         id: nid, client:name, ville: document.getElementById("fVille").value.trim()||"—",
@@ -4660,6 +4775,29 @@ document.addEventListener("DOMContentLoaded", ()=>{
       return;
     }
     if(action==="ask-delete"){ askDelete(t.dataset); return; }
+    if(action==="mat-new"){ state.modal = {type:"matnew", id:t.dataset.id}; render(); return; }
+    if(action==="mat-create"){
+      const d = byId(t.dataset.id); d.materiel = d.materiel || [];
+      const libId = document.getElementById("mpLib").value;
+      const l = (SETTINGS.materielLib||[]).find(x=>x.id===libId);
+      const date = document.getElementById("mpDate").value || null;
+      const id = "M"+(Math.max(0, ...d.materiel.map(x=>parseInt(String(x.id).slice(1),10)||0))+1);
+      d.materiel.push({id, libId:libId||null, label:l?l.label:"Liste personnalisée", date, note:document.getElementById("mpNote").value.trim(), items:(l?l.items:[]).map(x=>({label:x, done:false})), par:authorLabel()});
+      stampHist(d, "Liste de matériel « "+(l?l.label:"personnalisée")+" » préparée pour le "+fmtIsoFr(date)+".");
+      state.modal = null; state.dossierTab = "materiel"; render(); showToast(date ? "Liste créée — elle apparaît dans l’agenda le "+fmtIsoFr(date)+"." : "Liste créée."); return;
+    }
+    if(action==="mat-toggle"){ const p = byId(t.dataset.id).materiel.find(x=>x.id===t.dataset.mid); const it = p.items[parseInt(t.dataset.idx,10)]; it.done = !it.done; render(); return; }
+    if(action==="mat-del-item"){ const p = byId(t.dataset.id).materiel.find(x=>x.id===t.dataset.mid); p.items.splice(parseInt(t.dataset.idx,10),1); render(); return; }
+    if(action==="mat-add-item"){
+      const p = byId(t.dataset.id).materiel.find(x=>x.id===t.dataset.mid);
+      const inp = document.getElementById("matNew-"+p.id); const v = inp ? inp.value.trim() : "";
+      if(!v){ showToast("Tapez le nom de l’outil ou de la fourniture."); return; }
+      p.items.push({label:v, done:false}); render(); return;
+    }
+    if(action==="matlib-open"){ state.matDraft = JSON.parse(JSON.stringify(SETTINGS.materielLib||[])); state.modal = {type:"matlib"}; render(); return; }
+    if(action==="matlib-add"){ matLibFlush(); state.matDraft.push({id:"L"+Date.now(), label:"Nouveau type de chantier", items:[]}); render(); return; }
+    if(action==="matlib-del"){ matLibFlush(); state.matDraft.splice(parseInt(t.dataset.idx,10),1); render(); return; }
+    if(action==="matlib-save"){ matLibFlush(); SETTINGS.materielLib = state.matDraft; state.matDraft = null; saveSettings(); state.modal = null; render(); showToast("Bibliothèque enregistrée."); return; }
     if(action==="dl-page"){ const f = dossierListState(); f.page = Math.max(1, f.page+parseInt(t.dataset.dir,10)); render(); return; }
     if(action==="task-toggle"){
       const d = byId(t.dataset.id);
