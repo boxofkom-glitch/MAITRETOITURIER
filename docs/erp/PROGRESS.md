@@ -67,3 +67,12 @@ voir DECISIONS.md D1) · `[!]` BLOCKED_EXTERNAL
 - Dossier client façon CRM : Résumé (actions rapides, KPI, prochaine action, documents), Activité (tâches, notes modifiables/supprimables, historique), Documents (tous les PDF du dossier avec envoi et date d'envoi mémorisée).
 - CRUD : tâches, notes, contrats d'entretien, parrainages, devis/factures brouillons, paiements, visites, diagnostic (réinitialisation), incidents chantier, dossier — toujours avec confirmation.
 - Bug corrigé : les dossiers créés via « Nouvelle demande » n'avaient pas les champs devis/factures/chantier (plantage de l'onglet Devis) ; numérotation des dossiers robuste après suppression.
+
+## Session du 2026-09-19 (suite) — processus, équipe, personnalisation
+- Processus commercial calculé : bouton « Gagné » (chantier + facture(s) selon conditions de règlement), Impayé/Payé selon paiements, échéances.
+- Données communes à l'équipe ; création par rôle avec affectation obligatoire de l'autre rôle ; recherche/filtres/pagination des dossiers ; garde-fou doublons.
+- Matériel par chantier (bibliothèque, checklist, agenda). E-mails de marque (10 modèles), invitations, mot de passe oublié/réinitialisation.
+- Mobile : barre de navigation basse, zéro défilement horizontal ; palette neutre + or unique.
+- Personnalisation (catalogue, moyens de paiement, points de contrôle et réponses du diagnostic), persistance IndexedDB, sauvegarde/restauration JSON, import CSV, base vierge.
+- Blueprint produit complet dans docs/blueprint/ (7 parties, index 00_INDEX.md).
+- RBAC : voir Paramètres › Accès par rôle (matrice par niveau) — RBAC_MATRIX.md est obsolète.
