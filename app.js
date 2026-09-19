@@ -771,23 +771,21 @@ function esc(s){
 }
 function byId(id){ return DOSSIERS.find(d=>d.id===id); }
 
+// Les données sont COMMUNES à toute l'équipe : chacun voit tous les dossiers ; « Mes dossiers » filtre ceux qui vous sont attribués.
 function visibleDossiers(){
-  const n = currentName();
-  if(state.role==="tech") return DOSSIERS.filter(d=>d.technicien===n);
-  if(state.role==="sales") return DOSSIERS.filter(d=>d.commercial===n);
   if(state.role==="client") return DOSSIERS.filter(d=>d.client==="Marie Laurent");
   return DOSSIERS;
 }
-function visibleContracts(){
+function isMine(d){
   const n = currentName();
-  if(state.role==="tech") return CONTRACTS.filter(c=>c.technicien===n);
-  if(state.role==="sales") return CONTRACTS.filter(c=>c.commercial===n);
-  return CONTRACTS;
+  return d.technicien===n || d.commercial===n || (d.creePar && d.creePar.id===state.userId);
 }
-function visibleParrainages(){
-  if(state.role==="sales") return PARRAINAGES.filter(p=>p.commercial===currentName());
-  return PARRAINAGES;
+function myDossiers(){
+  if(state.role==="tech" || state.role==="sales") return visibleDossiers().filter(isMine);
+  return visibleDossiers();
 }
+function visibleContracts(){ return CONTRACTS; }
+function visibleParrainages(){ return PARRAINAGES; }
 
 function canCreateDemande(){ return hasPermission("client.create"); }
 function canPlanifierVisite(){ return hasPermission("appointment.create"); }
@@ -2483,7 +2481,7 @@ function buildMaJournee(list){
 }
 
 function renderOverview(){
-  const list = visibleDossiers();
+  const list = myDossiers();
   const nouvelles = list.filter(d=>d.statut==="Nouvelle");
   const planifiees = list.filter(d=>d.statut==="Planifié");
   const rapports = list.filter(d=>d.statut==="Rapport prêt");
@@ -2568,18 +2566,48 @@ function renderOverview(){
 
 // ---------- Dossiers clients (list) ----------
 
+const DL_PAGE = 25;
+function dossierListState(){
+  state.dl = state.dl || {q:"", stat:"", team:"", scope:"", page:1};
+  return state.dl;
+}
+function filteredDossiers(){
+  const f = dossierListState();
+  const q = (f.q||"").trim().toLowerCase();
+  const scope = f.scope || "all";
+  return visibleDossiers().filter(d=>{
+    if(scope==="mine" && !isMine(d)) return false;
+    if(f.stat && d.statut!==f.stat) return false;
+    if(f.team && d.technicien!==f.team && d.commercial!==f.team) return false;
+    if(q && !(d.client+" "+d.ville+" "+d.id+" "+d.motif+" "+(d.telephone||"")+" "+(d.email||"")).toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+function renderPager(total, page){
+  const pages = Math.max(1, Math.ceil(total/DL_PAGE));
+  if(pages<=1) return "";
+  return `<div class="pager"><button class="btn-secondary btn-sm" data-action="dl-page" data-dir="-1" ${page<=1?"disabled":""}>← Précédent</button><span>Page ${page} / ${pages} · ${total} dossiers</span><button class="btn-secondary btn-sm" data-action="dl-page" data-dir="1" ${page>=pages?"disabled":""}>Suivant →</button></div>`;
+}
 function renderDossiersList(){
-  const list = visibleDossiers();
+  const f = dossierListState();
+  const all = filteredDossiers();
+  const pages = Math.max(1, Math.ceil(all.length/DL_PAGE));
+  if(f.page>pages) f.page = pages;
+  const list = all.slice((f.page-1)*DL_PAGE, f.page*DL_PAGE);
+  const scope = f.scope || "all";
+  const staff = teamNames();
   return `
   <div class="page-header">
-    <div><h1>Dossiers clients</h1><p>Un dossier unique pour les demandes, les visites et les échanges.</p></div>
+    <div><h1>Dossiers clients</h1><p>Un dossier unique pour les demandes, les visites et les échanges. ${visibleDossiers().length} dossier(s) dans la base commune.</p></div>
     ${canCreateDemande() ? `<button class="btn-primary" data-action="modal-new">+ Créer un client</button>` : ""}
   </div>
   <div class="filters-row">
-    <input type="text" placeholder="Rechercher un client, une ville, un dossier…" disabled>
-    <select disabled><option>Tous les statuts</option><option>Nouvelle</option><option>Planifié</option><option>En cours</option><option>Rapport prêt</option></select>
-    <select disabled><option>Toute l’équipe</option><option>Julien Bernard</option><option>Léa Petit</option><option>Sarah Durand</option><option>Lucas Robert</option></select>
+    <input type="search" data-dl="q" placeholder="Rechercher un client, une ville, un n° de dossier… (Entrée)" value="${esc(f.q)}">
+    <select data-dl="scope"><option value="all" ${scope==="all"?"selected":""}>Tous les dossiers</option><option value="mine" ${scope==="mine"?"selected":""}>Mes dossiers</option></select>
+    <select data-dl="stat"><option value="">Tous les statuts</option>${["Nouvelle","Planifié","En cours","Rapport prêt"].map(o=>`<option ${f.stat===o?"selected":""}>${o}</option>`).join("")}</select>
+    <select data-dl="team"><option value="">Toute l’équipe</option>${staff.map(o=>`<option ${f.team===o?"selected":""}>${esc(o)}</option>`).join("")}</select>
   </div>
+  ${all.length===0 ? `<div class="empty-note">Aucun dossier ne correspond à cette recherche.</div>` : ""}
   <div class="card table-wrap">
     <table>
       <thead><tr><th>Client / dossier</th><th>Demande</th><th>Priorité</th><th>Statut</th><th>Équipe</th><th></th></tr></thead>
@@ -2590,7 +2618,7 @@ function renderDossiersList(){
           <td>${esc(d.motif)}</td>
           <td>${badge(d.priorite, priorityBadgeClass(d.priorite))}</td>
           <td>${badge(d.statut, statutBadgeClass(d.statut))}</td>
-          <td><div class="row-sub">${esc(d.technicien||"Technicien à affecter")}</div><div class="row-sub">${esc(d.commercial)}</div></td>
+          <td><div class="row-sub">${esc(d.technicien||"Technicien à affecter")}</div><div class="row-sub">${esc(d.commercial||"Commercial à affecter")}</div></td>
           <td><button class="btn-ghost" data-action="open-dossier" data-id="${d.id}">Ouvrir</button></td>
         </tr>`).join("")}
       </tbody>
@@ -2606,11 +2634,12 @@ function renderDossiersList(){
         </div>
         <div class="lc-motif">${esc(d.motif)}</div>
         <div class="lc-foot">
-          <div><div class="row-sub">${esc(d.technicien||"Technicien à affecter")}</div><div class="row-sub">${esc(d.commercial)}</div></div>
+          <div><div class="row-sub">${esc(d.technicien||"Technicien à affecter")}</div><div class="row-sub">${esc(d.commercial||"Commercial à affecter")}</div></div>
           ${badge(d.statut, statutBadgeClass(d.statut))}
         </div>
       </div>`).join("")}
-  </div>`;
+  </div>
+  ${renderPager(all.length, f.page)}`;
 }
 
 // ---------- Dossier detail ----------
@@ -4155,20 +4184,54 @@ function modalWrap(title, bodyHtml){
   </div>`;
 }
 
+function knownClients(){
+  const seen = {}, out = [];
+  DOSSIERS.forEach(d=>{
+    const key = (d.client+"|"+(d.telephone||"")).toLowerCase();
+    if(seen[key] || d.client==="Marie Laurent") return;
+    seen[key] = 1; out.push(d);
+  });
+  return out;
+}
 function modalNewDemande(){
-  return modalWrap("Créer un client", `
+  const m = state.modal || {};
+  const role = state.role;
+  const needTech = role==="sales", needCom = role==="tech";
+  const techOpts = activeStaff("tech").map(n=>`<option>${esc(n)}</option>`).join("");
+  const comOpts = activeStaff("sales").map(n=>`<option>${esc(n)}</option>`).join("");
+  const assign = needTech
+    ? `<div class="form-field"><label>Technicien à affecter <span class="req">obligatoire</span></label><select id="fTech"><option value="">— Choisir un technicien —</option>${techOpts}</select><div class="form-help">Vous êtes automatiquement le commercial de ce client.</div></div>`
+    : needCom
+    ? `<div class="form-field"><label>Commercial à affecter <span class="req">obligatoire</span></label><select id="fCommercial"><option value="">— Choisir un commercial —</option>${comOpts}</select><div class="form-help">Vous êtes automatiquement le technicien de ce client.</div></div>`
+    : `<div class="form-field"><label>Technicien</label><select id="fTech"><option value="">À affecter</option>${techOpts}</select></div>
+       <div class="form-field"><label>Commercial</label><select id="fCommercial"><option value="">À affecter</option>${comOpts}</select></div>`;
+  return modalWrap(m.toDiagnostic ? "Créer un diagnostic" : "Créer un client", `
+    <div class="form-field"><label>Client déjà enregistré ? Recherchez-le</label>
+      <input type="search" id="fExisting" list="knownClients" placeholder="Tapez un nom ou une ville…" autocomplete="off">
+      <datalist id="knownClients">${knownClients().map(d=>`<option value="${esc(d.client)} · ${esc(d.ville)}"></option>`).join("")}</datalist>
+      <div class="form-help" id="fExistingNote">Choisissez un client existant pour préremplir sa fiche, ou saisissez un nouveau client ci-dessous.</div>
+    </div>
     <div class="form-field"><label>Nom du client</label><input type="text" id="fName"></div>
     <div class="form-field"><label>Téléphone</label><input type="tel" id="fPhone" value="06 00 00 00 00"></div>
     <div class="form-field"><label>E-mail</label><input type="email" id="fEmail"></div>
     <div class="form-field"><label>Ville</label><input type="text" id="fVille"></div>
-    <div class="form-field"><label>Type de bâtiment</label><select id="fType"><option>Maison individuelle</option><option>Immeuble collectif</option><option>Bâtiment professionnel</option><option>Dépendance</option><option>Autre</option></select></div>
+    <div class="form-field"><label>Type de bâtiment</label><select id="fType">${["Maison individuelle","Immeuble collectif","Bâtiment professionnel","Dépendance","Autre"].map(o=>`<option>${o}</option>`).join("")}</select></div>
     <div class="form-field"><label>Adresse</label><input type="text" id="fAdresse" value="12 rue des Tilleuls"></div>
     <div class="form-field"><label>Informations sur le bâtiment</label><textarea id="fInfos"></textarea></div>
     <div class="form-field"><label>Objet de la demande</label><textarea id="fMotif"></textarea></div>
     <div class="form-field"><label>Priorité</label><select id="fPriorite"><option>Normale</option><option>Urgente</option><option>Infiltration signalée</option></select></div>
-    <div class="form-field"><label>Commercial</label><select id="fCommercial"><option>À affecter</option>${activeStaff("sales").map(n=>`<option>${esc(n)}</option>`).join("")}</select></div>
-    <div class="modal-actions"><button class="btn-primary" data-action="submit-new">Créer le client</button><button class="btn-secondary" data-action="modal-close">Annuler</button></div>
+    ${assign}
+    <div class="modal-actions"><button class="btn-primary" data-action="submit-new">${m.toDiagnostic?"Créer et démarrer le diagnostic":"Créer le client"}</button><button class="btn-secondary" data-action="modal-close">Annuler</button></div>
   `);
+}
+function prefillExistingClient(val){
+  const d = knownClients().find(x=>(x.client+" · "+x.ville)===val);
+  const set = (id, v)=>{ const e = document.getElementById(id); if(e && v!=null) e.value = v; };
+  const note = document.getElementById("fExistingNote");
+  if(!d){ if(note) note.textContent = "Aucun client correspondant : saisissez un nouveau client ci-dessous."; return; }
+  set("fName", d.client); set("fPhone", d.telephone); set("fEmail", d.email); set("fVille", d.ville);
+  set("fAdresse", d.adresse); set("fType", d.typeBatiment); set("fInfos", d.infosGenerales);
+  if(note) note.textContent = "Fiche préremplie depuis le dossier "+d.id+". Indiquez l’objet de cette nouvelle demande.";
 }
 
 function modalEditDossier(d){
@@ -4346,18 +4409,22 @@ document.addEventListener("DOMContentLoaded", ()=>{
     }
     if(action==="submit-new"){
       const name = document.getElementById("fName").value.trim() || "Nouveau client";
+      const val = id=>{ const e = document.getElementById(id); return e ? e.value : ""; };
+      let tech = val("fTech") || null, com = val("fCommercial") || null;
+      if(state.role==="tech"){ tech = currentName(); if(!com){ showToast("Affectez un commercial à ce client."); return; } }
+      if(state.role==="sales"){ com = currentName(); if(!tech){ showToast("Affectez un technicien à ce client."); return; } }
       const nid = "TP-"+(Math.max(1048, ...DOSSIERS.map(x=>parseInt(x.id.slice(3),10)||0))+1);
       const newD = {
         id: nid, client:name, ville: document.getElementById("fVille").value.trim()||"—",
         motif: document.getElementById("fMotif").value.trim()||"Nouvelle demande",
         priorite: document.getElementById("fPriorite").value, statut:"Nouvelle",
-        technicien:null, commercial: document.getElementById("fCommercial").value==="À affecter"?null:document.getElementById("fCommercial").value,
+        technicien:tech, commercial:com, creePar:{id:state.userId, nom:currentName(), role:state.role},
         telephone: document.getElementById("fPhone").value||"06 00 00 00 00",
         email: document.getElementById("fEmail").value||"client@example.com",
         adresse: document.getElementById("fAdresse").value||"12 rue des Tilleuls",
         typeBatiment: document.getElementById("fType").value,
         infosGenerales: document.getElementById("fInfos").value,
-        notes:[], historique:[{date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Demande créée dans la démonstration."}],
+        notes:[], historique:[{date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Dossier créé par "+authorLabel()+(tech||com ? " · affecté à "+[tech,com].filter(Boolean).join(" et ") : "")+"."}],
         commercialStage:"À contacter", montant:0, prochaineRelance:null, compteRendu:"",
         visiteDate:null, visiteHeure:null, diagnostic:freshDiagnostic(),
         devis:[], factures:[], chantier:null, taches:[]
@@ -4593,6 +4660,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
       return;
     }
     if(action==="ask-delete"){ askDelete(t.dataset); return; }
+    if(action==="dl-page"){ const f = dossierListState(); f.page = Math.max(1, f.page+parseInt(t.dataset.dir,10)); render(); return; }
     if(action==="task-toggle"){
       const d = byId(t.dataset.id);
       const tk = d.taches.find(x=>x.id===t.dataset.tid);
@@ -4713,6 +4781,12 @@ document.addEventListener("DOMContentLoaded", ()=>{
     savePointFieldsFromDOM();
     saveSynthFieldsFromDOM();
     saveDevisLinesFromDOM();
+    if(e.target.id==="fExisting"){ prefillExistingClient(e.target.value); return; }
+    if(e.target.dataset && e.target.dataset.dl){
+      const f = dossierListState(); f.page = 1;
+      f[e.target.dataset.dl] = e.target.value;
+      render(); return;
+    }
     if(e.target.dataset && e.target.dataset.wz){
       wzFlush();
       const k = e.target.dataset.wz;
