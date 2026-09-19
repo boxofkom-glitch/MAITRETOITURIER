@@ -10,6 +10,7 @@ Fichiers dans `docs/blueprint/`. Chaque partie est autonome ; l'index dit où tr
 | 4 | `04_IA_AUTOMATISATION_UX.md` | 22 IA · 23 Automatisations · 24 Dashboards/cockpit · 25 UX/UI · 26 Écrans (fiches) | **écrit** |
 | 5 | `05_TECH_SECURITE_DONNEES.md` | 27 Data model · 28 Architecture · 29 API · 30 Intégrations · 31 Sécurité · 32 Conformité · 33 Analytics | **écrit** |
 | 6 | `06_BUSINESS_ROADMAP_PASSES.md` | 34 Pricing · 35 Onboarding · 36 Growth · 37 Moat · 38 Cas limites · 39 Opportunités cachées · 40 À ne pas construire · 41–45 MVP/V1–V3/vision · 46 Roadmap · 47 Dépendances · 48 Checklist · Simulations · **Second pass** · **Troisième pass (80/20)** | **écrit** |
+| 7 | `07_ETAPES_0_1_2.md` | Complément 75–190 : équipe d'experts, Golden Path, never-ask-twice, Étape 0 (audit), Étape 1 (modèle d'information, sync, données), Étape 2 (Acquisition → Lead, format A→Z, red team, simulation) | **écrit — à valider** |
 
 Règles de lecture :
 - **[EXISTE]** = déjà construit dans l'application actuelle (dépôt `toitpilot-crm`) ; **[À FAIRE]** = à construire ; **[SERVEUR]** = impossible sans backend.
