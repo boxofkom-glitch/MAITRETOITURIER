@@ -671,6 +671,20 @@ a.btn-secondary{text-decoration:none;display:inline-flex;align-items:center}
   .btn-primary,.btn-secondary{min-height:44px}
   input,select,textarea{font-size:16px}
 }
+
+.pc-row{display:grid;grid-template-columns:2fr 1fr 90px 90px auto;gap:8px;align-items:center;margin-bottom:8px}
+.pc-anom{grid-template-columns:56px 1.2fr 2fr auto}
+.pc-new{padding-top:8px;border-top:1px dashed var(--line)}
+.pc-point{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px;background:var(--panel2)}
+.pc-point summary{cursor:pointer;font-weight:600;display:flex;justify-content:space-between;gap:10px}
+.pc-point[open] summary{margin-bottom:10px}
+.chip-list{display:flex;flex-wrap:wrap;gap:8px}
+.pc-chip{display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border-radius:999px;background:var(--gold-soft);border:1px solid var(--gold-line);font-size:13px}
+.pc-chip button{background:none;border:none;color:var(--muted);cursor:pointer;padding:0}
+@media (max-width:700px){.pc-row,.pc-anom{grid-template-columns:1fr 1fr}.pc-row input[type=text]:first-child{grid-column:1/-1}.pc-anom input:nth-child(3){grid-column:1/-1}}
+
+.pc-row input,.pc-row select,.inv-row input,.inv-row select,.pc-point input,.mat-input{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:9px;padding:10px 11px;font-size:13.5px;width:100%}
+.pc-row input:focus,.pc-row select:focus,.inv-row input:focus{outline:none;border-color:var(--gold-line)}
 </style>
 </head>
 <body>

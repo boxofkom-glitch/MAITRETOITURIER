@@ -896,6 +896,7 @@ function render(){
   if(document.fonts && document.fonts.status!=="loaded") document.fonts.ready.then(()=>fitPointPages());
   numberPdfPages();
   applyPdfScale();
+  scheduleSave();
   const newContent = app.querySelector(".content");
   if(newContent) newContent.scrollTop = savedScrollTop;
   window.scrollTo(0, savedScrollY);
@@ -2416,8 +2417,10 @@ function modalMailSend(m){
 }
 
 // Onglet Paramètres › E-mails
-const PARAM_EXTRA_TABS = [["emails","E-mails"]];
+const PARAM_EXTRA_TABS = [["perso","Personnalisation"],["donnees","Données"],["emails","E-mails"]];
 function renderParamExtra(tab){
+  if(tab==="perso") return renderParamPerso();
+  if(tab==="donnees") return renderParamDonnees();
   if(tab!=="emails") return "";
   const groups = {};
   Object.keys(EMAIL_TEMPLATES).forEach(k=>{ const g = EMAIL_TEMPLATES[k].group; (groups[g] = groups[g]||[]).push(k); });
@@ -2428,6 +2431,238 @@ function renderParamExtra(tab){
       <div class="row-item"><div><div class="row-title">${esc(EMAIL_TEMPLATES[k].label)}</div><div class="row-sub">${esc(EMAIL_TEMPLATES[k].desc)}</div></div>
       <button class="btn-secondary btn-sm" data-action="mail-preview" data-tpl="${k}">Aperçu</button></div>`).join("")}
   </div>`).join("") + `<p class="form-help">Tous les e-mails reprennent l’identité de la marque et les coordonnées saisies dans « Entreprise ».</p>`;
+}
+
+// ---------- Persistance locale (IndexedDB) : les dossiers survivent au rechargement ----------
+// NB : sans serveur, les données restent DANS CE NAVIGATEUR (pas partagées entre appareils). Sauvegarde/restauration en JSON dans l'onglet Données.
+const DATA_VERSION = 1;
+let PERSIST_READY = false, SAVE_TIMER = null;
+function idbOpen(){
+  return new Promise((res, rej)=>{
+    const r = indexedDB.open("mt_data", 1);
+    r.onupgradeneeded = ()=>r.result.createObjectStore("kv");
+    r.onsuccess = ()=>res(r.result);
+    r.onerror = ()=>rej(r.error);
+  });
+}
+async function idbSet(k, v){
+  const db = await idbOpen();
+  return new Promise((res, rej)=>{ const tx = db.transaction("kv","readwrite"); tx.objectStore("kv").put(v, k); tx.oncomplete = res; tx.onerror = ()=>rej(tx.error); });
+}
+async function idbGet(k){
+  const db = await idbOpen();
+  return new Promise((res, rej)=>{ const tx = db.transaction("kv","readonly"); const q = tx.objectStore("kv").get(k); q.onsuccess = ()=>res(q.result); q.onerror = ()=>rej(q.error); });
+}
+function scheduleSave(){
+  if(!PERSIST_READY) return;
+  clearTimeout(SAVE_TIMER);
+  SAVE_TIMER = setTimeout(()=>{ idbSet("data", {v:DATA_VERSION, dossiers:DOSSIERS, contracts:CONTRACTS, parrainages:PARRAINAGES}).catch(()=>{}); }, 700);
+}
+function applyData(x){
+  DOSSIERS = x.dossiers;
+  CONTRACTS.length = 0; (x.contracts||[]).forEach(c=>CONTRACTS.push(c));
+  PARRAINAGES.length = 0; (x.parrainages||[]).forEach(p=>PARRAINAGES.push(p));
+  ensurePoints();
+}
+async function loadPersisted(){
+  try{
+    const x = await idbGet("data");
+    if(x && x.v===DATA_VERSION && Array.isArray(x.dossiers)) applyData(x);
+  }catch(e){}
+  PERSIST_READY = true;
+}
+
+// ---------- Personnalisation sans développeur (catalogue, paiements, diagnostic) ----------
+const CUSTOM_KEY = "mt_custom_v1";
+function saveCustom(){
+  try{ localStorage.setItem(CUSTOM_KEY, JSON.stringify({catalogue:SERVICE_CATALOG, payModes:PAY_MODES, points:POINTS, pointAnoms:POINT_ANOMALIES, vocab:ANOMALY_VOCAB})); }catch(e){}
+}
+function loadCustom(){
+  try{
+    const c = JSON.parse(localStorage.getItem(CUSTOM_KEY) || "null");
+    if(!c) return;
+    const fill = (arr, src)=>{ if(Array.isArray(src) && src.length){ arr.length = 0; src.forEach(x=>arr.push(x)); } };
+    fill(SERVICE_CATALOG, c.catalogue); fill(PAY_MODES, c.payModes); fill(POINTS, c.points);
+    if(c.pointAnoms){ Object.keys(POINT_ANOMALIES).forEach(k=>delete POINT_ANOMALIES[k]); Object.assign(POINT_ANOMALIES, c.pointAnoms); }
+    if(c.vocab) Object.assign(ANOMALY_VOCAB, c.vocab);
+  }catch(e){}
+}
+function ensurePoints(){
+  DOSSIERS.forEach(d=>{
+    if(!d.diagnostic || !d.diagnostic.points) return;
+    POINTS.forEach(p=>{ if(!d.diagnostic.points[p]) d.diagnostic.points[p] = freshPoint(); });
+  });
+}
+function persoChange(el){
+  const [kind, key, field] = el.dataset.pc.split("|");
+  const v = el.value;
+  if(kind==="cat"){
+    const s = SERVICE_CATALOG[parseInt(key,10)]; if(!s) return;
+    if(field==="label") s.label = v.trim() || s.label;
+    else if(field==="prix") s.prixUnitaireCt = Math.round((parseFloat(v)||0)*100);
+    else if(field==="tva") s.tvaPct = parseFloat(v)||0;
+    else if(field==="unite") s.unite = v.trim() || "forfait";
+  } else if(kind==="anom"){
+    const a = ANOMALY_VOCAB[key]; if(!a) return;
+    if(field==="label") a.label = v.trim() || a.label; else if(field==="icon") a.icon = v.trim() || a.icon; else if(field==="risk") a.risk = v.trim() || a.risk;
+  }
+  saveCustom(); showToast("Enregistré.");
+}
+
+function renderParamPerso(){
+  const tvas = [0,5.5,10,20];
+  return `
+  <div class="card">
+    <div class="card-header"><h3>Catalogue produits et prestations</h3></div>
+    <p class="form-help" style="margin:0 0 12px">Ces lignes sont proposées dans les devis et les factures. Modifiez un prix ou un nom : c’est enregistré immédiatement (les devis déjà créés gardent leurs prix).</p>
+    ${SERVICE_CATALOG.map((s,i)=>`
+    <div class="pc-row">
+      <input type="text" value="${esc(s.label)}" data-pc="cat|${i}|label" aria-label="Nom">
+      <input type="number" step="0.01" min="0" value="${(s.prixUnitaireCt/100).toFixed(2)}" data-pc="cat|${i}|prix" aria-label="Prix HT">
+      <select data-pc="cat|${i}|tva" aria-label="TVA">${tvas.map(t=>`<option value="${t}" ${s.tvaPct===t?"selected":""}>${t} %</option>`).join("")}</select>
+      <input type="text" value="${esc(s.unite||"forfait")}" data-pc="cat|${i}|unite" aria-label="Unité" style="max-width:90px">
+      <button class="btn-ghost btn-sm" data-action="perso-del-cat" data-idx="${i}">✕</button>
+    </div>`).join("")}
+    <div class="pc-row pc-new">
+      <input type="text" id="pcNewLabel" placeholder="Nouveau produit ou prestation…">
+      <input type="number" step="0.01" min="0" id="pcNewPrix" placeholder="Prix HT €">
+      <select id="pcNewTva">${tvas.map(t=>`<option value="${t}" ${t===10?"selected":""}>${t} %</option>`).join("")}</select>
+      <input type="text" id="pcNewUnite" placeholder="Unité" value="forfait" style="max-width:90px">
+      <button class="btn-primary btn-sm" data-action="perso-add-cat">+ Ajouter</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><h3>Moyens de paiement</h3></div>
+    <div class="chip-list">${PAY_MODES.map((m,i)=>`<span class="pc-chip">${esc(m)} <button data-action="perso-del-pay" data-idx="${i}" aria-label="Retirer">✕</button></span>`).join("")}</div>
+    <div class="pc-row pc-new" style="margin-top:10px"><input type="text" id="pcNewPay" placeholder="Nouveau moyen (ex. Prélèvement, Chèque énergie…)"><button class="btn-primary btn-sm" data-action="perso-add-pay">+ Ajouter</button></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><h3>Diagnostic : points de contrôle et réponses</h3></div>
+    <p class="form-help" style="margin:0 0 12px">Ajoutez un point de contrôle (une « question »), ou de nouvelles réponses possibles pour chaque point. Elles apparaissent aussitôt dans le diagnostic et le rapport. La trame du rapport PDF reste inchangée.</p>
+    ${POINTS.map((p,pi)=>{
+      const ids = POINT_ANOMALIES[p] || [];
+      return `<details class="pc-point"><summary>${esc(p)} <span class="row-sub">${ids.length} réponse(s)</span></summary>
+        ${ids.map(id=>{ const a = ANOMALY_VOCAB[id]; if(!a) return ""; return `
+        <div class="pc-row pc-anom">
+          <input type="text" value="${esc(a.icon)}" data-pc="anom|${id}|icon" style="max-width:56px" aria-label="Icône">
+          <input type="text" value="${esc(a.label)}" data-pc="anom|${id}|label" aria-label="Réponse">
+          <input type="text" value="${esc(a.risk)}" data-pc="anom|${id}|risk" aria-label="Risque expliqué au client">
+          <button class="btn-ghost btn-sm" data-action="perso-del-anom" data-pi="${pi}" data-aid="${id}">✕</button>
+        </div>`; }).join("")}
+        <div class="pc-row pc-new">
+          <input type="text" id="pcaIcon-${pi}" placeholder="🔧" style="max-width:56px">
+          <input type="text" id="pcaLabel-${pi}" placeholder="Nouvelle réponse (ex. Zinc oxydé)">
+          <input type="text" id="pcaRisk-${pi}" placeholder="Ce que cela risque (phrase pour le client)">
+          <button class="btn-secondary btn-sm" data-action="perso-add-anom" data-pi="${pi}">+ Ajouter</button>
+        </div>
+        <button class="btn-ghost btn-sm" data-action="perso-del-point" data-pi="${pi}">Retirer ce point de contrôle</button>
+      </details>`; }).join("")}
+    <div class="pc-row pc-new" style="margin-top:12px"><input type="text" id="pcNewPoint" placeholder="Nouveau point de contrôle (ex. Fenêtres de toit)"><button class="btn-primary btn-sm" data-action="perso-add-point">+ Ajouter le point</button></div>
+  </div>`;
+}
+
+// ---------- Données : sauvegarde, restauration, import CSV, base vierge ----------
+function renderParamDonnees(){
+  return `
+  <div class="card">
+    <div class="card-header"><h3>Base de données (${DOSSIERS.length} dossier${DOSSIERS.length>1?"s":""})</h3></div>
+    <p class="form-help" style="margin:0 0 12px">Les dossiers sont enregistrés automatiquement <b>dans ce navigateur</b> (ils survivent au rechargement). Ils ne sont pas partagés entre appareils : pensez à exporter une sauvegarde.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn-primary btn-sm" data-action="data-export">Exporter une sauvegarde (JSON)</button>
+      <button class="btn-secondary btn-sm" data-action="trigger-file" data-target="importJson">Restaurer une sauvegarde</button>
+    </div>
+    <input type="file" id="importJson" accept="application/json,.json" style="display:none">
+  </div>
+  <div class="card">
+    <div class="card-header"><h3>Importer des clients (CSV / Excel enregistré en CSV)</h3></div>
+    <p class="form-help" style="margin:0 0 12px">1ʳᵉ ligne = titres de colonnes. Reconnus : <b>nom, téléphone, e-mail, ville, adresse, motif, type</b> (séparateur « ; » ou « , »). Les doublons (même nom + téléphone) sont ignorés ; un récapitulatif vous est présenté avant l’import.</p>
+    <button class="btn-secondary btn-sm" data-action="trigger-file" data-target="importCsv">Choisir un fichier CSV</button>
+    <input type="file" id="importCsv" accept=".csv,text/csv,text/plain" style="display:none">
+  </div>
+  <div class="card">
+    <div class="card-header"><h3>Repartir d’une base vierge</h3></div>
+    <p class="form-help" style="margin:0 0 12px">Supprime tous les dossiers, contrats et parrainages de démonstration pour commencer avec vos vrais clients. Réglages, équipe et personnalisation sont conservés. Pensez à exporter une sauvegarde avant.</p>
+    <button class="btn-danger" data-action="data-clear">Effacer les données de démonstration</button>
+  </div>`;
+}
+function norm(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z]/g,""); }
+function parseCsv(text){
+  text = text.replace(/^﻿/, "");
+  const first = text.split(/\r?\n/)[0] || "";
+  const delim = [";","\t",","].sort((a,b)=>first.split(b).length-first.split(a).length)[0];
+  const rows = []; let row = [], cur = "", q = false;
+  for(let i=0;i<text.length;i++){
+    const c = text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){ cur += '"'; i++; } else q = false; } else cur += c; }
+    else if(c==='"') q = true;
+    else if(c===delim){ row.push(cur); cur = ""; }
+    else if(c==="\n"){ row.push(cur); rows.push(row); row = []; cur = ""; }
+    else if(c!=="\r") cur += c;
+  }
+  if(cur!=="" || row.length){ row.push(cur); rows.push(row); }
+  return rows.filter(r=>r.some(x=>x.trim()!==""));
+}
+function csvToClients(text){
+  const rows = parseCsv(text);
+  if(rows.length<2) return {list:[], dup:0, err:"Le fichier ne contient pas de lignes de données."};
+  const map = {nom:["nom","client","nomclient","nomprenom","name"], tel:["telephone","tel","mobile","portable","phone"], email:["email","mail","courriel"], ville:["ville","commune"], adresse:["adresse","rue"], motif:["motif","demande","objet","besoin"], type:["type","typebatiment","batiment"]};
+  const heads = rows[0].map(norm);
+  const idx = {}; Object.keys(map).forEach(k=>{ idx[k] = heads.findIndex(h=>map[k].includes(h)); });
+  if(idx.nom<0) return {list:[], dup:0, err:"Colonne « nom » introuvable dans la première ligne."};
+  const seen = new Set(DOSSIERS.map(d=>(d.client+"|"+(d.telephone||"").replace(/\D/g,"")).toLowerCase()));
+  const list = []; let dup = 0;
+  rows.slice(1).forEach(r=>{
+    const g = k=>idx[k]>=0 ? (r[idx[k]]||"").trim() : "";
+    const nom = g("nom"); if(!nom) return;
+    const key = (nom+"|"+g("tel").replace(/\D/g,"")).toLowerCase();
+    if(seen.has(key)){ dup++; return; }
+    seen.add(key);
+    list.push({nom, tel:g("tel"), email:g("email"), ville:g("ville"), adresse:g("adresse"), motif:g("motif"), type:g("type")});
+  });
+  return {list, dup, err:""};
+}
+function blankDossier(f){
+  const nid = "TP-"+(Math.max(1048, ...DOSSIERS.map(x=>parseInt(x.id.slice(3),10)||0))+1);
+  return {
+    id:nid, client:f.nom||"Nouveau client", ville:f.ville||"—", motif:f.motif||"Nouvelle demande", priorite:"Normale", statut:"Nouvelle",
+    technicien:null, commercial:null, creePar:{id:state.userId, nom:currentName(), role:state.role},
+    telephone:f.tel||"", email:f.email||"", adresse:f.adresse||"", typeBatiment:f.type||"Maison individuelle", infosGenerales:"",
+    notes:[], historique:[{date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Client importé (fichier CSV)."}],
+    commercialStage:"À contacter", montant:0, prochaineRelance:null, compteRendu:"", visiteDate:null, visiteHeure:null,
+    diagnostic:freshDiagnostic(), devis:[], factures:[], chantier:null, taches:[]
+  };
+}
+function importCsvFile(file){
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    const r = csvToClients(String(reader.result||""));
+    if(r.err){ showToast(r.err); return; }
+    if(!r.list.length){ showToast("Aucun nouveau client à importer ("+r.dup+" doublon(s))."); return; }
+    askConfirm("Importer "+r.list.length+" client(s) ?", r.list.length+" nouveau(x) client(s) seront créés"+(r.dup?" ; "+r.dup+" doublon(s) ignoré(s)":"")+". Exemple : "+r.list.slice(0,3).map(x=>x.nom).join(", ")+(r.list.length>3?"…":"")+".", ()=>{
+      r.list.forEach(f=>DOSSIERS.unshift(blankDossier(f)));
+      showToast(r.list.length+" client(s) importé(s).");
+    }, "Importer", "btn-primary");
+  };
+  reader.readAsText(file, "utf-8");
+}
+function exportBackup(){
+  const blob = new Blob([JSON.stringify({app:"maitre-toiturier", v:DATA_VERSION, date:new Date().toISOString(), dossiers:DOSSIERS, contracts:CONTRACTS, parrainages:PARRAINAGES, custom:JSON.parse(localStorage.getItem(CUSTOM_KEY)||"null")})], {type:"application/json"});
+  downloadBlob(blob, "sauvegarde-maitre-toiturier-"+new Date().toISOString().slice(0,10)+".json");
+}
+function importBackupFile(file){
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const x = JSON.parse(String(reader.result||""));
+      if(x.app!=="maitre-toiturier" || !Array.isArray(x.dossiers)) throw new Error("format");
+      askConfirm("Restaurer cette sauvegarde ?", "Les "+DOSSIERS.length+" dossiers actuels seront remplacés par les "+x.dossiers.length+" de la sauvegarde.", ()=>{
+        applyData(x);
+        if(x.custom){ try{ localStorage.setItem(CUSTOM_KEY, JSON.stringify(x.custom)); }catch(e){} loadCustom(); ensurePoints(); }
+        showToast("Sauvegarde restaurée.");
+      }, "Restaurer", "btn-primary");
+    }catch(e){ showToast("Ce fichier n’est pas une sauvegarde Maître Toiturier valide."); }
+  };
+  reader.readAsText(file, "utf-8");
 }
 
 function empStatutBadge(e){ return badge(e.statut==="actif"?"Actif":"Suspendu", e.statut==="actif"?"green":"gray"); }
@@ -4642,7 +4877,10 @@ if(/[?&]inscription=1/.test(location.search)){
   try{ const q = new URLSearchParams(location.search); state.signup = {nom:q.get("nom")||"", email:q.get("email")||"", tel:"", poste:""}; }catch(e){}
 }
 document.addEventListener("DOMContentLoaded", ()=>{
+  loadCustom();
+  ensurePoints();
   render();
+  loadPersisted().then(()=>render());
   window.addEventListener("resize", applyPdfScale);
 
   document.getElementById("app").addEventListener("click", (e)=>{
@@ -5058,6 +5296,62 @@ document.addEventListener("DOMContentLoaded", ()=>{
       return;
     }
     if(action==="ask-delete"){ askDelete(t.dataset); return; }
+    if(action==="data-export"){ exportBackup(); return; }
+    if(action==="data-clear"){
+      askConfirm("Effacer toutes les données de démonstration ?", "Tous les dossiers, contrats et parrainages seront supprimés de ce navigateur. Exportez une sauvegarde avant si besoin.", ()=>{
+        DOSSIERS = []; CONTRACTS.length = 0; PARRAINAGES.length = 0; state.dossierId = null; showToast("Base vierge : vous pouvez créer ou importer vos clients.");
+      }, "Tout effacer");
+      return;
+    }
+    if(action==="perso-add-cat"){
+      const label = document.getElementById("pcNewLabel").value.trim();
+      if(!label){ showToast("Donnez un nom au produit ou à la prestation."); return; }
+      SERVICE_CATALOG.push({code:"CUS-"+Date.now().toString(36).toUpperCase(), label, prixUnitaireCt:Math.round((parseFloat(document.getElementById("pcNewPrix").value)||0)*100), tvaPct:parseFloat(document.getElementById("pcNewTva").value)||0, unite:document.getElementById("pcNewUnite").value.trim()||"forfait"});
+      saveCustom(); showToast("Ajouté au catalogue."); render(); return;
+    }
+    if(action==="perso-del-cat"){
+      const i = parseInt(t.dataset.idx,10), sv = SERVICE_CATALOG[i];
+      askConfirm("Retirer du catalogue ?", "« "+sv.label+" » ne sera plus proposé. Les devis déjà créés ne changent pas.", ()=>{ SERVICE_CATALOG.splice(i,1); saveCustom(); });
+      return;
+    }
+    if(action==="perso-add-pay"){
+      const v = document.getElementById("pcNewPay").value.trim();
+      if(!v){ showToast("Indiquez le nom du moyen de paiement."); return; }
+      if(PAY_MODES.includes(v)){ showToast("Ce moyen existe déjà."); return; }
+      PAY_MODES.push(v); saveCustom(); render(); return;
+    }
+    if(action==="perso-del-pay"){
+      const i = parseInt(t.dataset.idx,10);
+      if(PAY_MODES.length<2){ showToast("Gardez au moins un moyen de paiement."); return; }
+      askConfirm("Retirer ce moyen de paiement ?", "« "+PAY_MODES[i]+" » ne sera plus proposé pour les prochains devis et paiements.", ()=>{ PAY_MODES.splice(i,1); saveCustom(); });
+      return;
+    }
+    if(action==="perso-add-anom"){
+      const pi = parseInt(t.dataset.pi,10), p = POINTS[pi];
+      const label = document.getElementById("pcaLabel-"+pi).value.trim();
+      if(!label){ showToast("Donnez un nom à la réponse."); return; }
+      const id = "c_"+Date.now().toString(36);
+      ANOMALY_VOCAB[id] = {icon:document.getElementById("pcaIcon-"+pi).value.trim()||"🔧", label, risk:document.getElementById("pcaRisk-"+pi).value.trim()||"un défaut à faire évaluer par un professionnel"};
+      const ids = (POINT_ANOMALIES[p] = POINT_ANOMALIES[p] || []);
+      const at = ids.indexOf("autre"); if(at>=0) ids.splice(at,0,id); else ids.push(id);
+      saveCustom(); showToast("Réponse ajoutée au point « "+p+" »."); render(); return;
+    }
+    if(action==="perso-del-anom"){
+      const p = POINTS[parseInt(t.dataset.pi,10)], aid = t.dataset.aid;
+      POINT_ANOMALIES[p] = (POINT_ANOMALIES[p]||[]).filter(x=>x!==aid); saveCustom(); render(); return;
+    }
+    if(action==="perso-add-point"){
+      const v = document.getElementById("pcNewPoint").value.trim();
+      if(!v){ showToast("Nommez le nouveau point de contrôle."); return; }
+      if(POINTS.includes(v)){ showToast("Ce point existe déjà."); return; }
+      POINTS.push(v); POINT_ANOMALIES[v] = ["autre"]; ensurePoints(); saveCustom(); showToast("Point ajouté : il apparaît dans tous les diagnostics."); render(); return;
+    }
+    if(action==="perso-del-point"){
+      const i = parseInt(t.dataset.pi,10), p = POINTS[i];
+      if(POINTS.length<2){ showToast("Gardez au moins un point de contrôle."); return; }
+      askConfirm("Retirer ce point de contrôle ?", "« "+p+" » disparaît des nouveaux diagnostics ; les diagnostics déjà saisis conservent leurs données.", ()=>{ POINTS.splice(i,1); saveCustom(); });
+      return;
+    }
     if(action==="mat-new"){ state.modal = {type:"matnew", id:t.dataset.id}; render(); return; }
     if(action==="mat-create"){
       const d = byId(t.dataset.id); d.materiel = d.materiel || [];
@@ -5202,6 +5496,9 @@ document.addEventListener("DOMContentLoaded", ()=>{
     savePointFieldsFromDOM();
     saveSynthFieldsFromDOM();
     saveDevisLinesFromDOM();
+    if(e.target.dataset && e.target.dataset.pc){ persoChange(e.target); return; }
+    if(e.target.id==="importCsv"){ const f = e.target.files[0]; e.target.value = ""; if(f) importCsvFile(f); return; }
+    if(e.target.id==="importJson"){ const f = e.target.files[0]; e.target.value = ""; if(f) importBackupFile(f); return; }
     if(e.target.id==="fExisting"){ prefillExistingClient(e.target.value); return; }
     if(e.target.dataset && e.target.dataset.dl){
       const f = dossierListState(); f.page = 1;
