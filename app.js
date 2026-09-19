@@ -2568,9 +2568,37 @@ function buildApp(){
       <div class="disclaimer">Démo interactive · Données fictives, modifications conservées jusqu’au rechargement · Rôles simulés · Aucun e-mail envoyé</div>
       <div class="content">${buildSection()}</div>
     </div>
+    ${buildBottomNav()}
     ${state.modal ? buildModal() : ""}
     ${state.toast ? `<div class="toast">${esc(state.toast)}</div>` : ""}
   `;
+}
+
+const NAV_ICONS = {
+  overview:'<path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+  dossiers:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
+  agenda:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  entretiens:'<path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z"/><path d="M9 12l2 2 4-4"/>',
+  diagnostics:'<path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 13l2 2 4-4"/>',
+  commercial:'<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+  documents:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
+  parrainages:'<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5"/>',
+  connexions:'<path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>',
+  "client-preview":'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  client:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  parametres:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  more:'<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>'
+};
+function navIcon(key){ return `<svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${NAV_ICONS[key]||NAV_ICONS.overview}</svg>`; }
+const SHORT_LABELS = {overview:"Accueil", dossiers:"Clients", agenda:"Agenda", entretiens:"Entretiens", diagnostics:"Diagnostics", commercial:"Suivi", documents:"Devis", parrainages:"Parrainage", connexions:"Liens", "client-preview":"Aperçu", client:"Mon espace", parametres:"Réglages"};
+function buildBottomNav(){
+  const nav = navItems();
+  const main = nav.slice(0, nav.length>5 ? 4 : nav.length);
+  const rest = nav.length>5;
+  return `<nav class="bottom-nav" aria-label="Navigation principale">
+    ${main.map(([key,label])=>`<button class="bn-item ${state.section===key?"active":""}" data-action="nav" data-section="${key}">${navIcon(key)}<span>${esc(SHORT_LABELS[key]||label)}</span>${key==="parametres" && pendingRequests().length ? `<i class="bn-dot"></i>`:""}</button>`).join("")}
+    ${rest ? `<button class="bn-item ${nav.slice(4).some(n=>n[0]===state.section)?"active":""}" data-action="toggle-sidebar">${navIcon("more")}<span>Plus</span></button>` : ""}
+  </nav>`;
 }
 
 function buildSidebar(){
@@ -2589,7 +2617,7 @@ function buildSidebar(){
       </div>
     </div>
     <nav class="sidebar-nav">
-      ${nav.map(([key,label])=>`<button class="nav-btn ${state.section===key?"active":""}" data-action="nav" data-section="${key}">${esc(label)}${key==="parametres" && pendingRequests().length ? `<span class="nav-badge">${pendingRequests().length}</span>` : ""}</button>`).join("")}
+      ${nav.map(([key,label])=>`<button class="nav-btn ${state.section===key?"active":""}" data-action="nav" data-section="${key}">${navIcon(key)}${esc(label)}${key==="parametres" && pendingRequests().length ? `<span class="nav-badge">${pendingRequests().length}</span>` : ""}</button>`).join("")}
     </nav>
     <div class="sidebar-footer">
       <div>Maître Toiturier</div>
@@ -3786,11 +3814,11 @@ function renderDossierDevis(d){
             <tbody>
             ${dv.lignes.map((l,i)=>`
               <tr>
-                <td>${canEditDv?`<input type="text" class="devis-line-input" data-idx="${i}" data-field="designation" value="${esc(l.designation)}" placeholder="Désignation">`:esc(l.designation)}</td>
-                <td style="width:64px">${canEditDv?`<input type="number" min="0" step="1" class="devis-line-input" data-idx="${i}" data-field="qte" value="${l.qte}">`:l.qte}</td>
-                <td style="width:100px">${canEditDv?`<input type="number" min="0" step="0.01" class="devis-line-input" data-idx="${i}" data-field="prixUnitaire" value="${(l.prixUnitaireCt/100).toFixed(2)}">`:fmtEuros(l.prixUnitaireCt)}</td>
-                <td style="width:64px">${canEditDv?`<input type="number" min="0" step="1" class="devis-line-input" data-idx="${i}" data-field="tva" value="${l.tvaPct}">`:l.tvaPct+"%"}</td>
-                <td style="white-space:nowrap">${fmtEuros(lineTotalHTct(l))}</td>
+                <td data-label="Désignation">${canEditDv?`<input type="text" class="devis-line-input" data-idx="${i}" data-field="designation" value="${esc(l.designation)}" placeholder="Désignation">`:esc(l.designation)}</td>
+                <td data-label="Quantité" style="width:64px">${canEditDv?`<input type="number" min="0" step="1" class="devis-line-input" data-idx="${i}" data-field="qte" value="${l.qte}">`:l.qte}</td>
+                <td data-label="Prix unitaire HT" style="width:100px">${canEditDv?`<input type="number" min="0" step="0.01" class="devis-line-input" data-idx="${i}" data-field="prixUnitaire" value="${(l.prixUnitaireCt/100).toFixed(2)}">`:fmtEuros(l.prixUnitaireCt)}</td>
+                <td data-label="TVA %" style="width:64px">${canEditDv?`<input type="number" min="0" step="1" class="devis-line-input" data-idx="${i}" data-field="tva" value="${l.tvaPct}">`:l.tvaPct+"%"}</td>
+                <td data-label="Total HT" style="white-space:nowrap">${fmtEuros(lineTotalHTct(l))}</td>
                 <td>${canEditDv && dv.lignes.length>1 ?`<button class="btn-ghost btn-sm" data-action="devis-remove-line" data-id="${d.id}" data-idx="${i}">✕</button>`:""}</td>
               </tr>`).join("")}
             </tbody>
