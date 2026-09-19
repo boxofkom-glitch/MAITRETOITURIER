@@ -954,8 +954,8 @@ async function buildPdfFromHtml(docHtmlString, onProgress){
     const pdf = new jsPDF({ unit:"mm", format:"a4", orientation:"portrait" });
     for(let i=0;i<pages.length;i++){
       if(onProgress) onProgress(i+1, pages.length);
-      const canvas = await window.html2canvas(pages[i], { scale:1.5, useCORS:true, backgroundColor:"#ffffff" });
-      const imgData = canvas.toDataURL("image/jpeg", 0.9);
+      const canvas = await window.html2canvas(pages[i], { scale:2, useCORS:true, backgroundColor:"#ffffff", imageTimeout:15000 });
+      const imgData = canvas.toDataURL("image/jpeg", 0.92);
       if(i>0) pdf.addPage();
       pdf.addImage(imgData, "JPEG", 0, 0, 210, 297, "", "FAST");
     }
@@ -3432,10 +3432,10 @@ const PP_PHOTOS = {};
     const im = new Image();
     im.onload = ()=>{
       try{
-        const w = Math.min(1200, im.naturalWidth), h = Math.round(im.naturalHeight * w / im.naturalWidth);
+        const w = Math.min(1800, im.naturalWidth), h = Math.round(im.naturalHeight * w / im.naturalWidth);
         const c = document.createElement("canvas"); c.width = w; c.height = h;
         c.getContext("2d").drawImage(im, 0, 0, w, h);
-        PP_PHOTOS[key] = c.toDataURL("image/jpeg", .85);
+        PP_PHOTOS[key] = c.toDataURL("image/jpeg", .92);
         if(typeof render === "function" && state && state.appStage==="app") render();
       }catch(e){}
     };
