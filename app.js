@@ -553,6 +553,8 @@ function defaultSettings(){
     company: {nom:"Maître Toiturier", telephone:"", email:"", site:"www.maitretoiturier.fr", adresse:"", siret:"", iban:"", devisValidite:30, acomptePct:30},
     employees: seedEmployees(),
     requests: [],
+    invitations: [],
+    resets: [],
     materielLib: JSON.parse(JSON.stringify(DEFAULT_MATERIEL_LIB))
   };
 }
@@ -681,7 +683,7 @@ async function doLogin(){
     if(!emp.pwdHash) state.loginMsg = "Ce compte n’a pas de mot de passe : utilisez « Entrer en mode démo » ci-dessous.";
     else if(await hashPwd(pwd) !== emp.pwdHash) state.loginMsg = bad;
     else if(emp.statut==="suspendu") state.loginMsg = "Votre accès est suspendu. Contactez la direction.";
-    else { enterAs(emp.id); render(); return; }
+    else { enterAs(emp.id); if(emp.mustChange) state.modal = {type:"chgpwd"}; render(); return; }
   } else if(req){
     if(await hashPwd(pwd) !== req.pwdHash) state.loginMsg = bad;
     else if(req.statut==="en attente") state.loginMsg = "Votre demande d’accès est en attente de validation par la direction.";
@@ -2189,6 +2191,7 @@ function buildLogin(){
       <div class="form-field"><label>Mot de passe</label><input type="password" id="loginPwd" autocomplete="current-password"></div>
       ${state.loginMsg ? `<div class="login-msg">${esc(state.loginMsg)}</div>` : ""}
       <button class="btn-primary login-submit" data-action="login-submit">Se connecter</button>
+      <button class="link-btn login-link" data-action="goto-forgot">Mot de passe oublié ?</button>
       <button class="link-btn login-link" data-action="goto-signup">Nouveau salarié ? Créer mon accès</button>
       <div class="login-sep"><span>Accès démonstration</span></div>
       <div class="form-field"><label>Profil de démonstration</label><select id="loginRole">${opts}</select></div>
@@ -2198,6 +2201,27 @@ function buildLogin(){
   </div>`;
 }
 
+function buildForgot(){
+  return `
+  <div class="login-screen">
+    <div class="login-card">
+      <img class="login-logo" src="assets/logo-full.png" alt="Maître Toiturier">
+      <h1>Mot de passe oublié</h1>
+      <p>Indiquez votre e-mail : la direction est prévenue et vous envoie un mot de passe temporaire.</p>
+      <div class="form-field"><label>E-mail</label><input type="email" id="fgEmail" value="${esc(state.loginEmail||"")}" autocomplete="username"></div>
+      ${state.loginMsg ? `<div class="login-msg ok">${esc(state.loginMsg)}</div>` : ""}
+      <button class="btn-primary login-submit" data-action="forgot-submit">Envoyer la demande</button>
+      <button class="link-btn login-link" data-action="goto-login">← Retour à la connexion</button>
+    </div>
+  </div>`;
+}
+function modalChgPwd(){
+  return modalWrap("Choisissez votre mot de passe", `
+    <p class="form-help" style="margin-bottom:12px">Votre mot de passe a été réinitialisé : choisissez-en un nouveau pour continuer.</p>
+    <div class="form-field"><label>Nouveau mot de passe</label><input type="password" id="npPwd" autocomplete="new-password"></div>
+    <div class="form-field"><label>Confirmer</label><input type="password" id="npPwd2" autocomplete="new-password"></div>
+    <div class="modal-actions"><button class="btn-primary" data-action="chgpwd-save">Enregistrer</button></div>`);
+}
 function buildSignup(){
   const s = state.signup || {};
   return `
@@ -2249,6 +2273,162 @@ function renderParametres(){
   ${body}`;
 }
 
+// ---------- E-mails de marque : modèles, aperçu, invitations, réinitialisation ----------
+// NB : l'application est 100 % navigateur, sans serveur d'envoi. Les messages sont générés à l'identique de ce que recevra le
+// destinataire (HTML de marque) puis ouverts dans la messagerie de l'utilisateur, copiés ou téléchargés. L'envoi automatique
+// (confirmation d'e-mail, mot de passe oublié…) suppose un service d'e-mail : voir docs/erp/EMAILS.md.
+function siteBase(){ return location.origin + location.pathname.replace(/[^/]*$/, ""); }
+function mailBrand(){
+  const c = SETTINGS.company || {};
+  return {nom:c.nom||"Maître Toiturier", tel:c.telephone||"", email:c.email||"contact@maitretoiturier.fr", site:c.site||"www.maitretoiturier.fr"};
+}
+function mailSign(){
+  const b = mailBrand();
+  return "L’équipe "+b.nom;
+}
+
+const EMAIL_TEMPLATES = {
+  invitation_salarie: {
+    label:"Invitation d’un salarié", group:"Équipe", desc:"Envoyée par la direction pour inviter un salarié à créer son accès.",
+    sample:{nom:"Julien", role:"Technicien", inviteur:"la direction", lien:"https://app-maitretoiturier.fr/?inscription=1"},
+    build:v=>({subject:"Vous êtes invité(e) à rejoindre "+mailBrand().nom, preheader:"Créez votre accès en 2 minutes.", title:"Bienvenue dans l’équipe",
+      paras:["Bonjour"+(v.nom?" "+v.nom:"")+",", esc0(v.inviteur||"La direction")+" vous invite à rejoindre l’espace de travail de "+mailBrand().nom+(v.role?" en tant que "+v.role.toLowerCase():"")+".", "Créez votre accès en quelques instants : renseignez vos coordonnées et choisissez votre mot de passe. La direction validera ensuite votre demande et activera votre profil."],
+      cta:{label:"Créer mon accès", url:v.lien}, note:"Ce lien est personnel. Si vous n’attendiez pas cette invitation, vous pouvez ignorer ce message."})
+  },
+  invitation_client: {
+    label:"Invitation client — espace personnel", group:"Clients", desc:"Invite un client à consulter son dossier, ses documents et son rapport.",
+    sample:{client:"Marie Laurent", conseiller:"Sarah Durand", lien:"https://app-maitretoiturier.fr/"},
+    build:v=>({subject:"Votre espace client "+mailBrand().nom, preheader:"Retrouvez votre rapport, vos devis et vos factures.", title:"Votre espace client est prêt",
+      paras:["Bonjour "+(v.client||"")+",", "Nous avons ouvert votre espace client : vous y retrouvez en un seul endroit le rapport de diagnostic de votre toiture, vos devis, vos factures et l’avancement de votre chantier.", (v.conseiller?v.conseiller+", votre conseiller, reste":"Notre équipe reste")+" à votre disposition pour toute question."],
+      cta:{label:"Accéder à mon espace", url:v.lien}, note:"Vos informations sont confidentielles et ne sont visibles que par vous et notre équipe."})
+  },
+  confirmation_email: {
+    label:"Confirmation d’adresse e-mail", group:"Compte", desc:"À envoyer à la création d’un compte pour confirmer l’adresse.",
+    sample:{nom:"Julien", lien:"https://app-maitretoiturier.fr/confirmer?token=…"},
+    build:v=>({subject:"Confirmez votre adresse e-mail", preheader:"Un dernier clic pour activer votre compte.", title:"Confirmez votre adresse e-mail",
+      paras:["Bonjour"+(v.nom?" "+v.nom:"")+",", "Merci d’avoir créé votre compte "+mailBrand().nom+". Pour finaliser votre inscription, confirmez votre adresse e-mail en cliquant sur le bouton ci-dessous."],
+      cta:{label:"Confirmer mon adresse", url:v.lien}, note:"Ce lien est valable 24 heures. Si vous n’êtes pas à l’origine de cette demande, ignorez simplement ce message."})
+  },
+  reinit_mdp: {
+    label:"Réinitialisation du mot de passe", group:"Compte", desc:"Envoyée quand la direction réinitialise l’accès d’un salarié.",
+    sample:{nom:"Julien", mdp:"K7m-92xQ", lien:"https://app-maitretoiturier.fr/"},
+    build:v=>({subject:"Réinitialisation de votre mot de passe", preheader:"Votre mot de passe temporaire est prêt.", title:"Mot de passe réinitialisé",
+      paras:["Bonjour"+(v.nom?" "+v.nom:"")+",", "Suite à votre demande, votre mot de passe a été réinitialisé. Utilisez le mot de passe temporaire ci-dessous pour vous connecter ; il vous sera demandé d’en choisir un nouveau immédiatement.", {rows:[["Mot de passe temporaire", v.mdp||"—"]]}],
+      cta:{label:"Me connecter", url:v.lien}, note:"Si vous n’avez pas demandé cette réinitialisation, prévenez la direction sans attendre."})
+  },
+  acces_accepte: {
+    label:"Accès accepté", group:"Équipe", desc:"Confirme au salarié que son accès est activé et son rôle attribué.",
+    sample:{nom:"Julien", role:"Technicien", lien:"https://app-maitretoiturier.fr/"},
+    build:v=>({subject:"Votre accès est activé", preheader:"Vous pouvez vous connecter dès maintenant.", title:"Votre accès est activé",
+      paras:["Bonjour"+(v.nom?" "+v.nom:"")+",", "La direction a validé votre demande. Votre profil est configuré en tant que "+(v.role||"salarié").toLowerCase()+" : vous accédez aux onglets qui correspondent à votre rôle.", "Connectez-vous avec votre adresse e-mail et le mot de passe choisi lors de votre inscription."],
+      cta:{label:"Me connecter", url:v.lien}, note:"Un souci de connexion ? Répondez simplement à cet e-mail."})
+  },
+  acces_refuse: {
+    label:"Demande d’accès refusée", group:"Équipe", desc:"Informe poliment qu’une demande d’accès n’a pas été retenue.",
+    sample:{nom:"Julien"},
+    build:v=>({subject:"Votre demande d’accès", preheader:"Réponse à votre demande.", title:"À propos de votre demande",
+      paras:["Bonjour"+(v.nom?" "+v.nom:"")+",", "Nous avons bien reçu votre demande d’accès à l’espace de travail. Elle n’a malheureusement pas pu être acceptée pour le moment.", "Pour toute précision, vous pouvez contacter directement la direction."],
+      cta:null, note:""})
+  },
+  devis: {
+    label:"Envoi d’un devis", group:"Commercial", desc:"Message d’accompagnement d’un devis (PDF en pièce jointe).",
+    sample:{client:"Claire Fontaine", numero:"TP-1042-D2", montant:"806,50 €", conditions:"30 % à la commande, solde en 2 fois par chèque", conseiller:"Sarah Durand", lien:""},
+    build:v=>({subject:"Votre devis "+(v.numero||"")+" — "+mailBrand().nom, preheader:"Votre devis est en pièce jointe.", title:"Votre devis",
+      paras:["Bonjour "+(v.client||"")+",", "Suite à notre échange, veuillez trouver ci-joint votre devis. Il détaille l’ensemble des prestations proposées pour votre toiture.", {rows:[["Devis", v.numero||"—"],["Montant TTC", v.montant||"—"],["Conditions", v.conditions||"—"]]}, "Pour l’accepter, il vous suffit de nous répondre « bon pour accord » : nous planifierons ensuite le chantier avec vous."],
+      cta:null, note:(v.conseiller?"Votre conseiller : "+v.conseiller+".":"")})
+  },
+  facture: {
+    label:"Envoi d’une facture", group:"Commercial", desc:"Message d’accompagnement d’une facture (PDF en pièce jointe).",
+    sample:{client:"Claire Fontaine", numero:"TP-1042-F1", montant:"241,95 €", echeance:"27 sept.", mode:"Virement", iban:"", lien:""},
+    build:v=>({subject:"Votre facture "+(v.numero||"")+" — "+mailBrand().nom, preheader:"Votre facture est en pièce jointe.", title:"Votre facture",
+      paras:["Bonjour "+(v.client||"")+",", "Veuillez trouver ci-joint votre facture.", {rows:[["Facture", v.numero||"—"],["Montant TTC", v.montant||"—"],["À régler avant le", v.echeance||"—"],["Mode de paiement", v.mode||"—"]].concat(v.iban?[["IBAN", v.iban]]:[])}, "Merci de votre confiance."],
+      cta:null, note:""})
+  },
+  rappel_paiement: {
+    label:"Rappel de paiement", group:"Commercial", desc:"Relance courtoise d’une facture impayée.",
+    sample:{client:"Antoine Garnier", numero:"TP-1043-F1", montant:"108,00 €", echeance:"26 sept."},
+    build:v=>({subject:"Rappel — facture "+(v.numero||""), preheader:"Un petit rappel concernant votre facture.", title:"Un petit rappel",
+      paras:["Bonjour "+(v.client||"")+",", "Sauf erreur de notre part, la facture ci-dessous n’a pas encore été réglée.", {rows:[["Facture", v.numero||"—"],["Reste à régler", v.montant||"—"],["Échéance", v.echeance||"—"]]}, "Si votre règlement est déjà parti, merci de ne pas tenir compte de ce message. Dans le cas contraire, nous restons à votre disposition pour toute question."],
+      cta:null, note:""})
+  },
+  paiement_recu: {
+    label:"Paiement reçu", group:"Commercial", desc:"Accusé de réception d’un règlement.",
+    sample:{client:"Claire Fontaine", numero:"TP-1042-F1", montant:"241,95 €", reste:"564,55 €"},
+    build:v=>({subject:"Paiement reçu — merci !", preheader:"Nous avons bien reçu votre règlement.", title:"Paiement bien reçu",
+      paras:["Bonjour "+(v.client||"")+",", "Nous avons bien reçu votre règlement, merci !", {rows:[["Facture", v.numero||"—"],["Montant reçu", v.montant||"—"],["Reste à régler", v.reste||"0,00 €"]]}, "À très bientôt sur votre chantier."],
+      cta:null, note:""})
+  }
+};
+function esc0(x){ return esc(x); }
+
+function mailLogoUrl(){ return siteBase()+"assets/logo-full.png"; }
+function buildEmail(id, vars){
+  const t = EMAIL_TEMPLATES[id], b = mailBrand();
+  const m = t.build(vars || t.sample);
+  const rowsHtml = rows=>`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:6px 0 18px;border:1px solid #e8e2d2;border-radius:10px;border-collapse:separate;background:#fbf8f0">${rows.map(([k,v],i)=>`<tr><td style="padding:10px 14px;font-size:13px;color:#7a7263;${i?"border-top:1px solid #eee7d6;":""}">${esc(k)}</td><td style="padding:10px 14px;font-size:14px;font-weight:600;color:#1a1814;text-align:right;${i?"border-top:1px solid #eee7d6;":""}">${esc(v)}</td></tr>`).join("")}</table>`;
+  const body = m.paras.map(p=> typeof p==="string" ? `<p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#2b2822">${p}</p>` : rowsHtml(p.rows)).join("");
+  const cta = m.cta && m.cta.url ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:22px 0 8px"><tr><td style="background:#d4af37;border-radius:10px"><a href="${esc(m.cta.url)}" style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:700;color:#111;text-decoration:none;font-family:Arial,Helvetica,sans-serif">${esc(m.cta.label)}</a></td></tr></table><p style="margin:8px 0 0;font-size:12px;color:#8a8272;word-break:break-all">Si le bouton ne s’affiche pas, copiez ce lien : ${esc(m.cta.url)}</p>` : "";
+  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(m.subject)}</title></head>
+<body style="margin:0;padding:0;background:#efeadf;font-family:Arial,Helvetica,sans-serif">
+<span style="display:none;max-height:0;overflow:hidden;opacity:0">${esc(m.preheader||"")}</span>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#efeadf;padding:28px 12px"><tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;border-radius:16px;overflow:hidden;background:#ffffff;box-shadow:0 8px 30px rgba(0,0,0,.12)">
+  <tr><td style="background:#0b0b0b;padding:26px 32px;text-align:center;border-bottom:3px solid #d4af37"><img src="${esc(mailLogoUrl())}" alt="${esc(b.nom)}" height="54" style="height:54px;max-width:100%;display:inline-block"></td></tr>
+  <tr><td style="padding:34px 34px 10px">
+    <h1 style="margin:0 0 18px;font-family:Georgia,'Times New Roman',serif;font-size:26px;line-height:1.25;color:#111">${esc(m.title)}</h1>
+    ${body}${cta}
+    ${m.note?`<p style="margin:18px 0 0;font-size:12.5px;line-height:1.55;color:#8a8272">${esc(m.note)}</p>`:""}
+    <p style="margin:26px 0 4px;font-size:15px;color:#2b2822">Cordialement,</p>
+    <p style="margin:0 0 26px;font-size:15px;font-weight:700;color:#111">${esc(mailSign())}</p>
+  </td></tr>
+  <tr><td style="background:#0b0b0b;padding:20px 32px;text-align:center;font-size:12px;line-height:1.7;color:#b7ae9c">
+    <span style="color:#d4af37;font-weight:700">${esc(b.nom)}</span><br>${b.tel?esc(b.tel)+" · ":""}${esc(b.email)}<br>${esc(b.site)}
+  </td></tr>
+</table>
+<p style="margin:14px 0 0;font-size:11px;color:#9a9282">Cet e-mail vous a été envoyé par ${esc(b.nom)}.</p>
+</td></tr></table></body></html>`;
+  const text = [m.title, ""].concat(m.paras.map(p=> typeof p==="string" ? p : p.rows.map(([k,v])=>k+" : "+v).join("\n"))).concat(m.cta&&m.cta.url?["", m.cta.label+" : "+m.cta.url]:[]).concat(m.note?["", m.note]:[]).concat(["", "Cordialement,", mailSign(), b.nom+(b.tel?" · "+b.tel:"")+" · "+b.email]).join("\n");
+  return {subject:m.subject, html, text};
+}
+
+// Modal d'envoi : aperçu fidèle + messagerie / copie / téléchargement / WhatsApp
+function openMailSend(tpl, vars, to, phone){
+  state.modal = {type:"mailsend", tpl, vars, to:to||"", phone:phone||""};
+  render();
+}
+function modalMailSend(m){
+  const e = buildEmail(m.tpl, m.vars);
+  const label = EMAIL_TEMPLATES[m.tpl].label;
+  const mailto = "mailto:"+encodeURIComponent(m.to||"")+"?subject="+encodeURIComponent(e.subject)+"&body="+encodeURIComponent(e.text);
+  const wa = m.phone ? "https://wa.me/"+m.phone.replace(/\D/g,"").replace(/^0/,"33")+"?text="+encodeURIComponent(e.subject+"\n\n"+e.text) : "";
+  return modalWrap(label, `
+    <p class="form-help" style="margin:0 0 10px">${m.to?"Destinataire : <b>"+esc(m.to)+"</b> · ":""}Objet : <b>${esc(e.subject)}</b></p>
+    <iframe class="mail-frame" sandbox="" srcdoc="${esc(e.html)}"></iframe>
+    <div class="modal-actions" style="flex-wrap:wrap">
+      <a class="btn-primary btn-sm" href="${mailto}" style="text-decoration:none;display:inline-block">Ouvrir dans ma messagerie</a>
+      ${wa?`<a class="btn-secondary btn-sm" href="${wa}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">WhatsApp</a>`:""}
+      <button class="btn-secondary btn-sm" data-action="mail-copy-html">Copier le HTML</button>
+      <button class="btn-secondary btn-sm" data-action="mail-download">Télécharger</button>
+      <button class="btn-ghost btn-sm" data-action="modal-close">Fermer</button>
+    </div>
+    <p class="form-help" style="margin-top:10px">Aucun envoi automatique depuis cette démo : le message s’ouvre prêt à partir dans votre messagerie (version texte) ; le HTML de marque ci-dessus est copiable pour un service d’e-mail.</p>`);
+}
+
+// Onglet Paramètres › E-mails
+const PARAM_EXTRA_TABS = [["emails","E-mails"]];
+function renderParamExtra(tab){
+  if(tab!=="emails") return "";
+  const groups = {};
+  Object.keys(EMAIL_TEMPLATES).forEach(k=>{ const g = EMAIL_TEMPLATES[k].group; (groups[g] = groups[g]||[]).push(k); });
+  return Object.keys(groups).map(g=>`
+  <div class="card">
+    <div class="card-header"><h3>${esc(g)}</h3></div>
+    ${groups[g].map(k=>`
+      <div class="row-item"><div><div class="row-title">${esc(EMAIL_TEMPLATES[k].label)}</div><div class="row-sub">${esc(EMAIL_TEMPLATES[k].desc)}</div></div>
+      <button class="btn-secondary btn-sm" data-action="mail-preview" data-tpl="${k}">Aperçu</button></div>`).join("")}
+  </div>`).join("") + `<p class="form-help">Tous les e-mails reprennent l’identité de la marque et les coordonnées saisies dans « Entreprise ».</p>`;
+}
+
 function empStatutBadge(e){ return badge(e.statut==="actif"?"Actif":"Suspendu", e.statut==="actif"?"green":"gray"); }
 
 function paramEquipe(){
@@ -2267,22 +2447,32 @@ function paramEquipe(){
           ${empStatutBadge(e)}
           ${fixed ? badge("Directeur","gold") : `<select class="emp-role" data-emp-role="${e.id}">${["admin","tech","sales"].map(r=>`<option value="${r}" ${e.role===r?"selected":""}>${esc(ROLES[r].label)}</option>`).join("")}</select>`}
           ${fixed ? "" : `<div class="doc-row-actions">
-            <button class="btn-ghost btn-sm" data-action="emp-toggle" data-eid="${e.id}">${e.statut==="actif"?"Suspendre":"Réactiver"}</button>
+            <button class="btn-ghost btn-sm" data-action="emp-reset" data-eid="${e.id}">Mot de passe</button><button class="btn-ghost btn-sm" data-action="emp-toggle" data-eid="${e.id}">${e.statut==="actif"?"Suspendre":"Réactiver"}</button>
             <button class="btn-ghost btn-sm" data-action="ask-delete" data-what="employee" data-eid="${e.id}">✕</button></div>`}
         </div>
       </div>`; }).join("")}
   </div>
   <div class="card">
     <div class="card-header"><h3>Inviter un salarié</h3></div>
-    <p class="form-help" style="margin:0 0 12px">Envoyez ce lien à votre futur salarié : il crée lui-même son accès (nom, e-mail, mot de passe). Sa demande apparaît ensuite dans « Demandes d’accès » : vous l’acceptez et lui donnez un rôle.</p>
-    <div class="copy-row"><input type="text" readonly value="${esc(link)}" id="signupLink"><button class="btn-secondary btn-sm" data-action="copy-signup">Copier le lien</button></div>
-  </div>`;
+    <p class="form-help" style="margin:0 0 12px">Saisissez son e-mail et le rôle prévu : un e-mail d’invitation aux couleurs de la marque est préparé. Il crée lui-même son accès (mot de passe compris) ; sa demande arrive dans « Demandes d’accès » avec le rôle déjà proposé.</p>
+    <div class="inv-row">
+      <input type="text" id="invNom" placeholder="Prénom (facultatif)">
+      <input type="email" id="invEmail" placeholder="E-mail du salarié">
+      <select id="invRole">${["tech","sales","admin"].map(r=>`<option value="${r}">${esc(ROLES[r].label)}</option>`).join("")}</select>
+      <button class="btn-primary btn-sm" data-action="invite-create">Préparer l’invitation</button>
+    </div>
+    <div class="copy-row" style="margin-top:12px"><input type="text" readonly value="${esc(link)}" id="signupLink"><button class="btn-secondary btn-sm" data-action="copy-signup">Copier le lien général</button></div>
+    ${(SETTINGS.invitations||[]).length ? `<div style="margin-top:14px">${SETTINGS.invitations.slice().reverse().map(iv=>`
+      <div class="row-item"><div><div class="row-title">${esc(iv.nom||iv.email)}</div><div class="row-sub">${esc(iv.email)} · ${esc(ROLES[iv.role].label)} · ${esc(iv.date)}</div></div>
+      <div style="display:flex;gap:8px;align-items:center">${badge(iv.statut==="acceptée"?"Accès créé":"Invitation envoyée", iv.statut==="acceptée"?"green":"blue")}<button class="btn-ghost btn-sm" data-action="invite-resend" data-iid="${iv.id}">Renvoyer</button></div></div>`).join("")}</div>` : ""}
+  </div>
+  ${(SETTINGS.resets||[]).filter(r=>r.statut==="à traiter").length ? `<div class="card"><div class="card-header"><h3>Mots de passe oubliés</h3></div>${SETTINGS.resets.filter(r=>r.statut==="à traiter").map(r=>{ const emp = SETTINGS.employees.find(e=>e.email.toLowerCase()===r.email.toLowerCase()); return `<div class="row-item"><div><div class="row-title">${esc(r.email)}</div><div class="row-sub">Demandé le ${esc(r.date)}</div></div>${emp?`<button class="btn-primary btn-sm" data-action="emp-reset" data-eid="${emp.id}">Réinitialiser et envoyer</button>`:badge("Compte introuvable","gray")}</div>`; }).join("")}</div>` : ""}`;
 }
 
 function paramDemandes(){
   const pend = pendingRequests();
   const done = SETTINGS.requests.filter(r=>r.statut!=="en attente").slice().reverse();
-  const guess = poste=>/comm/i.test(poste) ? "sales" : (/tech/i.test(poste) ? "tech" : "admin");
+  const guess = (poste, r)=>{ const iv = r && (SETTINGS.invitations||[]).find(i=>i.email.toLowerCase()===r.email.toLowerCase()); return iv ? iv.role : (/comm/i.test(poste) ? "sales" : (/tech/i.test(poste) ? "tech" : "admin")); };
   return `
   <div class="card">
     <div class="card-header"><h3>Demandes en attente (${pend.length})</h3></div>
@@ -2291,7 +2481,7 @@ function paramDemandes(){
         <div class="row-left"><div class="row-avatar">${initials(r.nom)}</div>
           <div style="min-width:0"><div class="row-title">${esc(r.nom)}</div><div class="row-sub">${esc(r.email)}${r.telephone?" · "+esc(r.telephone):""} · poste souhaité : ${esc(r.poste)} · ${esc(r.date)}</div></div></div>
         <div class="doc-row-right">
-          <select id="reqRole-${r.id}">${["admin","tech","sales"].map(x=>`<option value="${x}" ${guess(r.poste)===x?"selected":""}>${esc(ROLES[x].label)}</option>`).join("")}</select>
+          <select id="reqRole-${r.id}">${["admin","tech","sales"].map(x=>`<option value="${x}" ${guess(r.poste, r)===x?"selected":""}>${esc(ROLES[x].label)}</option>`).join("")}</select>
           <div class="doc-row-actions"><button class="btn-primary btn-sm" data-action="req-accept" data-rid="${r.id}">Accepter</button><button class="btn-ghost btn-sm" data-action="req-refuse" data-rid="${r.id}">Refuser</button></div>
         </div>
       </div>`).join("") : `<div class="empty-note">Aucune demande en attente. Partagez le lien d’inscription depuis l’onglet « Équipe ».</div>`}
@@ -2336,21 +2526,27 @@ function paramEntreprise(){
   </div>`;
 }
 
+function inviteMail(iv){
+  const lien = siteBase()+"?inscription=1&email="+encodeURIComponent(iv.email)+(iv.nom?"&nom="+encodeURIComponent(iv.nom):"");
+  openMailSend("invitation_salarie", {nom:iv.nom, role:ROLES[iv.role].label, inviteur:currentName(), lien}, iv.email, "");
+}
 function acceptRequest(rid){
   const r = SETTINGS.requests.find(x=>x.id===rid);
   const role = document.getElementById("reqRole-"+rid).value;
   const id = "E"+(SETTINGS.employees.reduce((m,e)=>Math.max(m, parseInt(e.id.slice(1),10)||0),0)+1);
   SETTINGS.employees.push({id, nom:r.nom, email:r.email, telephone:r.telephone, poste:r.poste, role, statut:"actif", ajoute:"12 sept.", pwdHash:r.pwdHash});
-  r.statut = "accepté"; r.pwdHash = r.pwdHash;
+  r.statut = "accepté";
+  (SETTINGS.invitations||[]).forEach(iv=>{ if(iv.email.toLowerCase()===r.email.toLowerCase()) iv.statut = "acceptée"; });
   saveSettings();
-  render();
   showToast(r.nom+" a maintenant accès en tant que "+ROLES[role].label.toLowerCase()+".");
+  openMailSend("acces_accepte", {nom:r.nom.split(" ")[0], role:ROLES[role].label, lien:siteBase()}, r.email, r.telephone);
 }
 
 function buildApp(){
   if(state.appStage==="splash") return buildSplash();
   if(state.appStage==="login") return buildLogin();
   if(state.appStage==="signup") return buildSignup();
+  if(state.appStage==="forgot") return buildForgot();
   if(state.appStage==="signup-done") return buildSignupDone();
   if(state.role!=="client" && !sectionReachable(state.section)){ state.section = firstSection(); state.dossierId = null; }
   if(state.role==="client"){
@@ -2776,6 +2972,7 @@ function renderDossierInfo(d){
       ${d.email?`<a class="btn-secondary btn-sm" href="mailto:${esc(d.email)}">E-mail</a>`:""}
       ${canEditActivity()?`<button class="btn-secondary btn-sm" data-action="form-open" data-form="task" data-id="${d.id}">+ Tâche</button><button class="btn-secondary btn-sm" data-action="dossier-tab" data-tab="activite">+ Note</button>`:""}
       ${canQuote?`<button class="btn-primary btn-sm" data-action="wizard-devis" data-id="${d.id}">+ Devis</button>`:""}
+      ${d.email?`<button class="btn-secondary btn-sm" data-action="client-invite" data-id="${d.id}">Inviter (espace client)</button>`:""}
       ${sendReport?`<button class="btn-primary btn-sm" data-action="modal-send" data-id="${d.id}">Envoyer le rapport</button>`:""}
     </div>
   </div>
@@ -4279,6 +4476,8 @@ function buildModal(){
   if(m.type==="form") return modalForm(m);
   if(m.type==="confirm") return modalConfirm(m);
   if(m.type==="pay") return modalPay(m);
+  if(m.type==="mailsend") return modalMailSend(m);
+  if(m.type==="chgpwd") return modalChgPwd();
   if(m.type==="matnew") return modalMatNew(m);
   if(m.type==="matlib") return modalMatLib();
   return "";
@@ -4409,7 +4608,10 @@ function modalInfo(msg){
 
 // ---------- Event handling ----------
 
-if(/[?&]inscription=1/.test(location.search)) state.appStage = "signup";
+if(/[?&]inscription=1/.test(location.search)){
+  state.appStage = "signup";
+  try{ const q = new URLSearchParams(location.search); state.signup = {nom:q.get("nom")||"", email:q.get("email")||"", tel:"", poste:""}; }catch(e){}
+}
 document.addEventListener("DOMContentLoaded", ()=>{
   render();
   window.addEventListener("resize", applyPdfScale);
@@ -4431,6 +4633,58 @@ document.addEventListener("DOMContentLoaded", ()=>{
     }
     if(action==="do-login"){ enterAs(document.getElementById("loginRole").value); render(); return; }
     if(action==="login-submit"){ doLogin(); return; }
+    if(action==="goto-forgot"){ state.appStage="forgot"; state.loginMsg=""; render(); return; }
+    if(action==="forgot-submit"){
+      const em = (document.getElementById("fgEmail").value||"").trim().toLowerCase();
+      if(!/^\S+@\S+\.\S+$/.test(em)){ state.loginMsg = "Indiquez une adresse e-mail valide."; render(); return; }
+      SETTINGS.resets = (SETTINGS.resets||[]).filter(r=>r.email.toLowerCase()!==em);
+      SETTINGS.resets.push({id:"P"+Date.now(), email:em, date:"12 sept., "+new Date().toTimeString().slice(0,5), statut:"à traiter"});
+      saveSettings(); state.loginEmail = em;
+      state.loginMsg = "Demande enregistrée. Si cette adresse correspond à un compte, la direction vous enverra un mot de passe temporaire.";
+      render(); return;
+    }
+    if(action==="invite-create"){
+      const em = (document.getElementById("invEmail").value||"").trim().toLowerCase();
+      if(!/^\S+@\S+\.\S+$/.test(em)){ showToast("Indiquez l’e-mail du salarié."); return; }
+      const nom = document.getElementById("invNom").value.trim(), role = document.getElementById("invRole").value;
+      SETTINGS.invitations = (SETTINGS.invitations||[]).filter(i=>i.email.toLowerCase()!==em);
+      const iv = {id:"I"+Date.now(), email:em, nom, role, date:"12 sept.", statut:"envoyée"};
+      SETTINGS.invitations.push(iv); saveSettings();
+      inviteMail(iv); return;
+    }
+    if(action==="invite-resend"){ const iv = SETTINGS.invitations.find(i=>i.id===t.dataset.iid); if(iv) inviteMail(iv); return; }
+    if(action==="emp-reset"){
+      const e = SETTINGS.employees.find(x=>x.id===t.dataset.eid);
+      askConfirm("Réinitialiser le mot de passe ?", "Un mot de passe temporaire sera généré pour "+e.nom+" ; il devra en choisir un nouveau à sa prochaine connexion.", async ()=>{
+        const tmp = Array.from(crypto.getRandomValues(new Uint8Array(8))).map(b=>"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"[b%54]).join("");
+        e.pwdHash = await hashPwd(tmp); e.mustChange = true;
+        (SETTINGS.resets||[]).forEach(r=>{ if(r.email.toLowerCase()===e.email.toLowerCase()) r.statut = "traité"; });
+        saveSettings();
+        openMailSend("reinit_mdp", {nom:e.nom.split(" ")[0], mdp:tmp, lien:siteBase()}, e.email, e.telephone);
+      }, "Réinitialiser", "btn-primary");
+      return;
+    }
+    if(action==="chgpwd-save"){
+      const a = document.getElementById("npPwd").value, b = document.getElementById("npPwd2").value;
+      if(a.length<6){ showToast("Au moins 6 caractères."); return; }
+      if(a!==b){ showToast("Les deux mots de passe ne correspondent pas."); return; }
+      const u = currentUser(); hashPwd(a).then(h=>{ u.pwdHash = h; u.mustChange = false; saveSettings(); state.modal = null; render(); showToast("Mot de passe enregistré."); });
+      return;
+    }
+    if(action==="mail-preview"){ const tp = t.dataset.tpl; openMailSend(tp, EMAIL_TEMPLATES[tp].sample, "", ""); return; }
+    if(action==="mail-copy-html"){
+      const e = buildEmail(state.modal.tpl, state.modal.vars);
+      (navigator.clipboard ? navigator.clipboard.writeText(e.html) : Promise.reject()).then(()=>showToast("HTML copié.")).catch(()=>showToast("Copie impossible : utilisez « Télécharger »."));
+      return;
+    }
+    if(action==="mail-download"){
+      const e = buildEmail(state.modal.tpl, state.modal.vars);
+      downloadBlob(new Blob([e.html], {type:"text/html"}), state.modal.tpl+".html"); return;
+    }
+    if(action==="client-invite"){
+      const d = byId(t.dataset.id);
+      openMailSend("invitation_client", {client:d.client, conseiller:d.commercial||"", lien:siteBase()}, d.email, d.telephone); return;
+    }
     if(action==="goto-signup"){ state.appStage="signup"; state.signupMsg=""; render(); return; }
     if(action==="goto-login"){ state.appStage="login"; state.loginMsg=""; render(); return; }
     if(action==="signup-submit"){ doSignup(); return; }
