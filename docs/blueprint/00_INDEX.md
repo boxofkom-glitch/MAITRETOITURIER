@@ -1,0 +1,17 @@
+# MASTER BLUEPRINT — Maître Toiturier, système d'exploitation d'une entreprise de couverture
+
+Fichiers dans `docs/blueprint/`. Chaque partie est autonome ; l'index dit où trouver chaque section du master prompt.
+
+| Partie | Fichier | Sections du blueprint | État |
+|---|---|---|---|
+| 1 | `01_METIER_ET_PRODUIT.md` | 01 Vision · 02 Problème · 03 Marché · 04 Personas · 05 JTBD · 06 Proposition de valeur · 07 Operating model (transitions) · 08 Architecture du produit | **écrit** |
+| 2 | `02_CRM_ACQUISITION_VENTE.md` | 09 CRM · 10 Acquisition/attribution · 11 Secrétariat · 12 Commercial (pipeline, speed-to-lead, relances) · 13 Diagnostic · 14 Devis | à écrire |
+| 3 | `03_EXECUTION.md` | 15 Planning · 16 Chantier · 17 App terrain/offline · 18 SAV · 19 Entretien · 20 Finance · 21 Attribution marketing | à écrire |
+| 4 | `04_IA_AUTOMATISATION_UX.md` | 22 IA · 23 Automatisations · 24 Dashboards/cockpit · 25 UX/UI · 26 Écrans (fiches) | à écrire |
+| 5 | `05_TECH_SECURITE_DONNEES.md` | 27 Data model · 28 Architecture · 29 API · 30 Intégrations · 31 Sécurité · 32 Conformité · 33 Analytics | à écrire |
+| 6 | `06_BUSINESS_ROADMAP_PASSES.md` | 34 Pricing · 35 Onboarding · 36 Growth · 37 Moat · 38 Cas limites · 39 Opportunités cachées · 40 À ne pas construire · 41–45 MVP/V1–V3/vision · 46 Roadmap · 47 Dépendances · 48 Checklist · Simulations · **Second pass** · **Troisième pass (80/20)** | à écrire |
+
+Règles de lecture :
+- **[EXISTE]** = déjà construit dans l'application actuelle (dépôt `toitpilot-crm`) ; **[À FAIRE]** = à construire ; **[SERVEUR]** = impossible sans backend.
+- Éléments protégés (identité, diagnostic, trames PDF, bibliothèque de prestations) : jamais remplacés, seulement entourés.
+- Voir aussi `docs/erp/VISION_OS.md` (audit de l'existant) — ce blueprint en est la suite.
