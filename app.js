@@ -494,56 +494,210 @@ function incidentCatLabel(c){
   return {materiel:"Matériel manquant",technique:"Problème technique",acces:"Accès impossible",meteo:"Météo",dommage:"Dommage constaté",autre:"Autre"}[c] || c;
 }
 
+// ---------- Rôles, salariés et accès par onglet (modifiables depuis Paramètres) ----------
+// NB : application 100 % navigateur, sans serveur : les comptes, demandes d'accès et droits sont
+// mémorisés dans ce navigateur (localStorage). Voir docs/erp/TARGET_ARCHITECTURE.md pour la version serveur.
+
 const ROLES = {
-  admin:{ label:"Administration", avatar:"AD" },
-  tech:{ label:"Technicien · Julien", avatar:"JB" },
-  sales:{ label:"Commerciale · Sarah", avatar:"SD" },
-  client:{ label:"Cliente · Marie", avatar:"ML" }
+  directeur:{ label:"Directeur", avatar:"DI" },
+  admin:{ label:"Administrateur", avatar:"AD" },
+  tech:{ label:"Technicien", avatar:"TE" },
+  sales:{ label:"Commercial", avatar:"CO" },
+  client:{ label:"Client", avatar:"CL" }
+};
+const ACCESS_LEVELS = ["Aucun","Lecture","Édition"];
+
+// Un "module" = un onglet (ou une moitié d'onglet) dont l'accès se règle par rôle.
+const MODULES = [
+  {id:"overview", section:"overview", label:"Vue d’ensemble", readOnly:true},
+  {id:"dossiers", section:"dossiers", label:"Dossiers clients"},
+  {id:"agenda", section:"agenda", label:"Agenda d’équipe"},
+  {id:"entretiens", section:"entretiens", label:"Entretiens"},
+  {id:"diagnostics", section:"diagnostics", label:"Diagnostics"},
+  {id:"commercial", section:"commercial", label:"Suivi commercial"},
+  {id:"devis", section:"documents", label:"Devis"},
+  {id:"factures", section:"documents", label:"Factures"},
+  {id:"parrainages", section:"parrainages", label:"Parrainages"},
+  {id:"connexions", section:"connexions", label:"Connexions"},
+  {id:"client-preview", section:"client-preview", label:"Aperçu espace client", readOnly:true}
+];
+const CONFIG_ROLES = ["admin","tech","sales"];
+const SECTION_ORDER = ["overview","dossiers","agenda","entretiens","diagnostics","commercial","documents","parrainages","connexions","client-preview"];
+
+const DEFAULT_ACCESS = {
+  admin:{overview:1, dossiers:2, agenda:2, entretiens:2, diagnostics:2, commercial:2, devis:2, factures:2, parrainages:2, connexions:2, "client-preview":1},
+  tech:{overview:1, dossiers:2, agenda:2, entretiens:0, diagnostics:2, commercial:0, devis:2, factures:2, parrainages:2, connexions:0, "client-preview":0},
+  sales:{overview:1, dossiers:2, agenda:2, entretiens:2, diagnostics:1, commercial:2, devis:2, factures:2, parrainages:2, connexions:0, "client-preview":0}
 };
 
-// ---------- RBAC : matrice de permissions (simulée côté client, voir docs/erp/RBAC_MATRIX.md) ----------
-// Chaque rôle est un set de permissions "entite.action". hasPermission() est la seule
-// source de vérité ; les fonctions canXxx() existantes deviennent de simples alias
-// pour ne rien casser dans le reste du code.
-const PERMISSIONS = {
-  admin: new Set([
-    "client.read.all","client.create","client.update",
-    "lead.assign","appointment.create","appointment.update",
-    "diagnostic.read.all","diagnostic.execute",
-    "opportunity.read.all","opportunity.update",
-    "quote.create","quote.update","quote.send",
-    "invoice.create","payment.register",
-    "job.read.all","job.update",
-    "referral.create","team.manage","analytics.company.read"
-  ]),
-  sales: new Set([
-    "client.read.team","client.create",
-    "diagnostic.read.team",
-    "opportunity.read.team","opportunity.update",
-    "quote.create","quote.update","quote.send",
-    "payment.register","job.read.team","referral.create"
-  ]),
-  tech: new Set([
-    "client.read.own","client.create",
-    "diagnostic.read.own","diagnostic.execute",
-    "payment.register","job.read.own"
-  ]),
-  client: new Set([
-    "client.read.own","diagnostic.read.own"
-  ])
-};
+const SETTINGS_KEY = "mt_settings_v1";
+function seedEmployees(){
+  const mk = (id, nom, role, poste)=>({id, nom, role, poste, email: nom.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z]+/g,".")+"@maitretoiturier.fr", telephone:"", statut:"actif", ajoute:"1 sept.", pwdHash:null});
+  const list = [mk("E1","Direction","directeur","Directeur"), mk("E2","Administration","admin","Administration"), mk("E3","Julien Bernard","tech","Technicien"), mk("E4","Léa Petit","tech","Technicienne"), mk("E5","Sarah Durand","sales","Commerciale"), mk("E6","Lucas Robert","sales","Commercial")];
+  list[0].email = "direction@maitretoiturier.fr";
+  return list;
+}
+function defaultSettings(){
+  return {
+    access: JSON.parse(JSON.stringify(DEFAULT_ACCESS)),
+    company: {nom:"Maître Toiturier", telephone:"", email:"", site:"www.maitretoiturier.fr", adresse:"", siret:"", iban:"", devisValidite:30, acomptePct:30},
+    employees: seedEmployees(),
+    requests: []
+  };
+}
+let SETTINGS = defaultSettings();
+function loadSettings(){
+  try{
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if(!raw) return;
+    const saved = JSON.parse(raw);
+    SETTINGS = Object.assign(defaultSettings(), saved);
+    SETTINGS.company = Object.assign(defaultSettings().company, saved.company||{});
+    CONFIG_ROLES.forEach(r=>{
+      SETTINGS.access[r] = Object.assign({}, DEFAULT_ACCESS[r], (saved.access||{})[r]||{});
+    });
+  }catch(e){}
+}
+function saveSettings(){ try{ localStorage.setItem(SETTINGS_KEY, JSON.stringify(SETTINGS)); }catch(e){} }
+loadSettings();
+
+function accessLevel(role, mod){
+  if(role==="directeur") return 2;
+  if(role==="client") return 0;
+  const a = SETTINGS.access[role];
+  const v = a ? (a[mod]||0) : 0;
+  const m = MODULES.find(x=>x.id===mod);
+  return m && m.readOnly ? Math.min(v,1) : v;
+}
+function lvl(mod){ return accessLevel(state.role, mod); }
+function canView(mod){ return lvl(mod)>=1; }
+function canEditMod(mod){ return lvl(mod)>=2; }
+function isManager(){ return state.role==="directeur" || state.role==="admin"; }
+
+function sectionInNav(section){
+  if(state.role==="client") return section==="client";
+  if(section==="parametres") return state.role==="directeur";
+  return MODULES.some(m=>m.section===section && lvl(m.id)>=1);
+}
+// Une section reste atteignable si elle sert de porte d'entrée à un module autorisé (ex. fiche dossier depuis les devis).
+function sectionReachable(section){
+  if(sectionInNav(section)) return true;
+  if(section==="dossiers") return ["diagnostics","commercial","devis","factures","parrainages"].some(canView);
+  return false;
+}
+function sectionLabel(section){
+  if(section==="documents"){
+    const d = canView("devis"), f = canView("factures");
+    return d && f ? "Devis & factures" : (d ? "Devis" : "Factures");
+  }
+  const m = MODULES.find(x=>x.section===section);
+  return m ? m.label : section;
+}
+function navItems(){
+  if(state.role==="client") return [["client","Mon espace client"]];
+  const items = SECTION_ORDER.filter(sectionInNav).map(s=>[s, sectionLabel(s)]);
+  if(state.role==="directeur") items.push(["parametres","Paramètres"]);
+  return items;
+}
+function firstSection(){ const n = navItems(); return n.length ? n[0][0] : "overview"; }
+
 function hasPermission(perm){
-  const set = PERMISSIONS[state.role];
-  return !!set && set.has(perm);
+  const r = state.role;
+  if(r==="client") return perm==="client.read.own" || perm==="diagnostic.read.own";
+  const mgr = isManager();
+  const scope = mgr ? "all" : (r==="sales" ? "team" : "own");
+  switch(perm){
+    case "client.read.all": case "client.read.team": case "client.read.own":
+      return perm==="client.read."+scope && lvl("dossiers")>=1;
+    case "client.create": return lvl("dossiers")>=2;
+    case "client.update": case "lead.assign": case "appointment.create": case "appointment.update":
+      return mgr && lvl("dossiers")>=2;
+    case "diagnostic.read.all": case "diagnostic.read.team": case "diagnostic.read.own":
+      return perm==="diagnostic.read."+scope && lvl("diagnostics")>=1;
+    case "diagnostic.execute": return lvl("diagnostics")>=2;
+    case "opportunity.read.all": case "opportunity.read.team": case "opportunity.read.own":
+      return perm==="opportunity.read."+scope && lvl("commercial")>=1;
+    case "opportunity.update": return lvl("commercial")>=2;
+    case "quote.create": case "quote.update": case "quote.send": case "quote.accept": return lvl("devis")>=2;
+    case "invoice.create": case "payment.register": return lvl("factures")>=2;
+    case "job.read.all": case "job.read.team": case "job.read.own":
+      return perm==="job.read."+scope && lvl("dossiers")>=1;
+    case "job.update": return mgr && lvl("dossiers")>=2;
+    case "referral.create": return lvl("parrainages")>=2;
+    case "contract.manage": return lvl("entretiens")>=2;
+    case "team.manage": case "settings.manage": return r==="directeur";
+    case "analytics.company.read": return mgr;
+  }
+  return false;
 }
 function canReadJob(){ return hasPermission("job.read.all") || hasPermission("job.read.team") || hasPermission("job.read.own"); }
 
-const NAV = {
-  admin:[["overview","Vue d’ensemble"],["dossiers","Dossiers clients"],["agenda","Agenda d’équipe"],["entretiens","Entretiens"],["diagnostics","Diagnostics"],["commercial","Suivi commercial"],["documents","Devis & factures"],["parrainages","Parrainages"],["equipe","Équipe & accès"],["connexions","Connexions"],["client-preview","Aperçu espace client"]],
-  tech:[["overview","Vue d’ensemble"],["dossiers","Dossiers clients"],["agenda","Agenda d’équipe"],["entretiens","Entretiens"],["diagnostics","Diagnostics"]],
-  sales:[["overview","Vue d’ensemble"],["dossiers","Dossiers clients"],["agenda","Agenda d’équipe"],["entretiens","Entretiens"],["commercial","Suivi commercial"],["documents","Devis & factures"],["parrainages","Parrainages"]],
-  client:[["client","Mon espace client"]]
-};
+// ---------- Utilisateur courant ----------
+function currentUser(){ return SETTINGS.employees.find(e=>e.id===state.userId) || null; }
+function currentName(){
+  const u = currentUser();
+  if(u) return u.nom;
+  return state.role==="client" ? "Marie Laurent" : authorLabel();
+}
+function authorLabel(){ return currentName(); }
+function activeStaff(role){ return SETTINGS.employees.filter(e=>e.statut==="actif" && (!role || e.role===role)).map(e=>e.nom); }
+function teamNames(){ return activeStaff(); }
+function pendingRequests(){ return SETTINGS.requests.filter(r=>r.statut==="en attente"); }
+
+async function hashPwd(pwd){
+  const bytes = new TextEncoder().encode("maitre-toiturier:"+pwd);
+  const h = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(h)).map(x=>x.toString(16).padStart(2,"0")).join("");
+}
+
+function enterAs(userId){
+  if(userId==="CLIENT"){ state.userId = "CLIENT"; state.role = "client"; }
+  else { const e = SETTINGS.employees.find(x=>x.id===userId); state.userId = e.id; state.role = e.role; }
+  state.dossierId = null;
+  state.section = firstSection();
+  state.appStage = "app";
+  state.loginMsg = "";
+}
+
+async function doLogin(){
+  const email = (document.getElementById("loginEmail").value||"").trim().toLowerCase();
+  const pwd = document.getElementById("loginPwd").value||"";
+  state.loginEmail = email;
+  const emp = SETTINGS.employees.find(e=>e.email.toLowerCase()===email);
+  const req = SETTINGS.requests.find(r=>r.email.toLowerCase()===email);
+  const bad = "E-mail ou mot de passe incorrect.";
+  if(emp){
+    if(!emp.pwdHash) state.loginMsg = "Ce compte n’a pas de mot de passe : utilisez « Entrer en mode démo » ci-dessous.";
+    else if(await hashPwd(pwd) !== emp.pwdHash) state.loginMsg = bad;
+    else if(emp.statut==="suspendu") state.loginMsg = "Votre accès est suspendu. Contactez la direction.";
+    else { enterAs(emp.id); render(); return; }
+  } else if(req){
+    if(await hashPwd(pwd) !== req.pwdHash) state.loginMsg = bad;
+    else if(req.statut==="en attente") state.loginMsg = "Votre demande d’accès est en attente de validation par la direction.";
+    else state.loginMsg = "Votre demande d’accès a été refusée. Contactez la direction.";
+  } else state.loginMsg = bad;
+  render();
+}
+
+async function doSignup(){
+  const val = id=>(document.getElementById(id).value||"").trim();
+  const nom = val("suNom"), email = val("suEmail").toLowerCase(), tel = val("suTel"), poste = val("suPoste");
+  const pwd = document.getElementById("suPwd").value, pwd2 = document.getElementById("suPwd2").value;
+  state.signup = {nom, email, tel, poste};
+  if(!nom || !email){ state.signupMsg = "Indiquez votre nom et votre e-mail."; render(); return; }
+  if(!/^\S+@\S+\.\S+$/.test(email)){ state.signupMsg = "Cette adresse e-mail n’est pas valide."; render(); return; }
+  if(pwd.length<6){ state.signupMsg = "Le mot de passe doit contenir au moins 6 caractères."; render(); return; }
+  if(pwd!==pwd2){ state.signupMsg = "Les deux mots de passe ne correspondent pas."; render(); return; }
+  if(SETTINGS.employees.some(e=>e.email.toLowerCase()===email) || SETTINGS.requests.some(r=>r.email.toLowerCase()===email && r.statut!=="refusé")){
+    state.signupMsg = "Un accès existe déjà pour cette adresse e-mail."; render(); return;
+  }
+  SETTINGS.requests = SETTINGS.requests.filter(r=>r.email.toLowerCase()!==email);
+  SETTINGS.requests.push({id:"R"+Date.now(), nom, email, telephone:tel, poste, pwdHash:await hashPwd(pwd), date:"12 sept., "+new Date().toTimeString().slice(0,5), statut:"en attente"});
+  saveSettings();
+  state.signupMsg = "";
+  state.appStage = "signup-done";
+  render();
+}
 
 const MONTH_NAMES = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
 const MONTH_SHORT = ["janv.","févr.","mars","avr.","mai","juin","juil.","août","sept.","oct.","nov.","déc."];
@@ -578,7 +732,10 @@ let DOSSIERS = seedDossiers();
 let state = {
   appStage:"splash",
   splashExiting:false,
-  role:"admin",
+  role:"directeur",
+  userId:"E1",
+  paramTab:"equipe",
+  loginMsg:"",
   section:"overview",
   dossierId:null,
   dossierTab:"info",
@@ -614,25 +771,26 @@ function esc(s){
 function byId(id){ return DOSSIERS.find(d=>d.id===id); }
 
 function visibleDossiers(){
-  if(state.role==="tech") return DOSSIERS.filter(d=>d.technicien==="Julien Bernard");
-  if(state.role==="sales") return DOSSIERS.filter(d=>d.commercial==="Sarah Durand");
+  const n = currentName();
+  if(state.role==="tech") return DOSSIERS.filter(d=>d.technicien===n);
+  if(state.role==="sales") return DOSSIERS.filter(d=>d.commercial===n);
   if(state.role==="client") return DOSSIERS.filter(d=>d.client==="Marie Laurent");
   return DOSSIERS;
 }
 function visibleContracts(){
-  if(state.role==="tech") return CONTRACTS.filter(c=>c.technicien==="Julien Bernard");
-  if(state.role==="sales") return CONTRACTS.filter(c=>c.commercial==="Sarah Durand");
+  const n = currentName();
+  if(state.role==="tech") return CONTRACTS.filter(c=>c.technicien===n);
+  if(state.role==="sales") return CONTRACTS.filter(c=>c.commercial===n);
   return CONTRACTS;
 }
 function visibleParrainages(){
-  if(state.role==="sales") return PARRAINAGES.filter(p=>p.commercial==="Sarah Durand");
-  if(state.role==="tech") return [];
+  if(state.role==="sales") return PARRAINAGES.filter(p=>p.commercial===currentName());
   return PARRAINAGES;
 }
 
 function canCreateDemande(){ return hasPermission("client.create"); }
 function canPlanifierVisite(){ return hasPermission("appointment.create"); }
-function canNouveauContrat(){ return state.role==="admin"; }
+function canNouveauContrat(){ return hasPermission("contract.manage"); }
 function canAjouterParrainage(){ return hasPermission("referral.create"); }
 function canEditDossier(){ return hasPermission("client.update"); }
 function canAffecter(){ return hasPermission("lead.assign"); }
@@ -856,7 +1014,7 @@ function factureTotals(d, f){
 const PAY_MODES = ["Virement","Chèque","Carte bancaire","Espèces"];
 const PAY_FOIS = [1,2,3,4,6,10];
 
-function paiementDefaults(){ return {acompte:true, acomptePct:30, fois:1, mode:"Virement"}; }
+function paiementDefaults(){ return {acompte:true, acomptePct:SETTINGS.company.acomptePct||30, fois:1, mode:"Virement"}; }
 function devisPaiement(dv){ return Object.assign(paiementDefaults(), (dv && dv.paiement) || {}); }
 function acompteTtcCt(dv){ const p = devisPaiement(dv); return p.acompte ? Math.round(devisTotals(dv).ttcCt * p.acomptePct / 100) : 0; }
 
@@ -916,7 +1074,7 @@ function createFacture(d, dv, type, o){
     echeance: echeances[0].date, echeances, fois, mode: o.mode || p.mode, paiements:[]
   };
   d.factures.push(f);
-  d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:factureLabel(d, f)+" créée ("+fmtEuros(montant)+")."});
+  d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:factureLabel(d, f)+" créée ("+fmtEuros(montant)+")."});
   return f;
 }
 
@@ -1075,7 +1233,7 @@ function renderFactureDoc(d, f){
     rows,
     bannerIcon: "check",
     bannerLabel: paid>0 ? "Règlements et échéances" : "Règlement",
-    bannerText: (paid>0 ? pays+"<br>" : "") + echTxt + " Facture de démonstration : mentions légales et coordonnées bancaires à renseigner.",
+    bannerText: (paid>0 ? pays+"<br>" : "") + echTxt + (SETTINGS.company.siret||SETTINGS.company.iban ? " "+(SETTINGS.company.siret?"SIRET "+esc(SETTINGS.company.siret)+". ":"")+(SETTINGS.company.iban?"IBAN "+esc(SETTINGS.company.iban)+".":"") : " Facture de démonstration : mentions légales et coordonnées bancaires à renseigner."),
     totals: docTotalsHtml(totals)
   });
 }
@@ -1186,7 +1344,7 @@ function renderDocRow(kind, d, doc, hideOpen){
       <div class="doc-row-actions">
         <button class="btn-ghost btn-sm" data-action="doc-pdf" data-id="${d.id}" data-kind="${kind}" data-doc="${doc.id}">PDF</button>
         ${canSend ? `<button class="btn-secondary btn-sm" data-action="modal-send-doc" data-id="${d.id}" data-kind="${kind}" data-doc="${doc.id}">Envoyer</button>` : ""}
-        ${hideOpen ? "" : `<button class="btn-ghost btn-sm" data-action="open-dossier" data-id="${d.id}" data-tab="devis">Ouvrir</button>`}
+        ${hideOpen || !canView("dossiers") ? "" : `<button class="btn-ghost btn-sm" data-action="open-dossier" data-id="${d.id}" data-tab="devis">Ouvrir</button>`}
       </div>
     </div>
   </div>`;
@@ -1202,8 +1360,8 @@ function renderDocuments(){
   <div class="page-header">
     <div><h1>Devis & factures</h1><p>Tous les documents commerciaux, en PDF, prêts à être envoyés.</p></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
-      ${hasPermission("quote.create") ? `<button class="btn-primary" data-action="wizard-devis">+ Nouveau devis</button>` : ""}
-      ${hasPermission("invoice.create") ? `<button class="btn-secondary" data-action="wizard-facture">+ Nouvelle facture</button>` : ""}
+      ${hasPermission("quote.create") ? `<button class="btn-primary" data-action="wizard-devis">+ Créer un devis</button>` : ""}
+      ${hasPermission("invoice.create") ? `<button class="btn-secondary" data-action="wizard-facture">+ Créer une facture</button>` : ""}
     </div>
   </div>
   <div class="stat-grid">
@@ -1212,14 +1370,14 @@ function renderDocuments(){
     ${stat("Encaissé", fmtEuros(encaisse), "Paiements confirmés")}
     ${stat("Reste à encaisser", fmtEuros(aRegler), "Factures envoyées")}
   </div>
-  <div class="card">
+  ${canView("devis") ? `<div class="card">
     <div class="card-header"><h3>Devis</h3><span class="badge gray">${devis.length}</span></div>
     ${devis.length ? devis.map(x=>renderDocRow("devis", x.d, x.dv)).join("") : `<div class="empty-note">Aucun devis pour l’instant. Créez-en un depuis un dossier (onglet « Devis & factures »).</div>`}
-  </div>
-  <div class="card">
+  </div>` : ""}
+  ${canView("factures") ? `<div class="card">
     <div class="card-header"><h3>Factures</h3><span class="badge gray">${factures.length}</span></div>
     ${factures.length ? factures.map(x=>renderDocRow("facture", x.d, x.f)).join("") : `<div class="empty-note">Aucune facture pour l’instant.</div>`}
-  </div>`;
+  </div>` : ""}`;
 }
 
 // ---------- Exemples de devis / factures pour la démonstration ----------
@@ -1298,7 +1456,7 @@ function addSampleDocs(list){
 
 // ---------- Suppressions (toujours confirmées) ----------
 function stampHist(d, texte){
-  d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte});
+  d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte});
 }
 
 function askDelete(ds){
@@ -1355,6 +1513,12 @@ function askDelete(ds){
       DOSSIERS = DOSSIERS.filter(x=>x.id!==d.id);
       state.dossierId = null; state.section = "dossiers";
       showToast("Dossier supprimé.");
+    });
+  } else if(what==="employee"){
+    askConfirm("Supprimer ce salarié ?", "Son accès sera retiré. Ses dossiers restent à son nom jusqu’à réaffectation.", ()=>{
+      SETTINGS.employees = SETTINGS.employees.filter(x=>x.id!==ds.eid);
+      saveSettings();
+      showToast("Salarié supprimé.");
     });
   } else if(what==="incident"){
     askConfirm("Supprimer cet incident ?", "L’incident sera retiré du chantier.", ()=>{
@@ -1421,7 +1585,7 @@ function wzNew(kind, dossierId){
 
 function wzInitDevis(){
   const w = state.wizard, d = w.dossierId ? byId(w.dossierId) : null;
-  w.data = {objet: d ? d.motif : "", validite:30, lignes:[freshDevisLine()], acompte:"1", acomptePct:30, fois:1, mode:"Virement"};
+  w.data = {objet: d ? d.motif : "", validite:SETTINGS.company.devisValidite||30, lignes:[freshDevisLine()], acompte:"1", acomptePct:30, fois:1, mode:"Virement"};
   if(d && d.devis.length){
     const prev = latestDevis(d), pp = devisPaiement(prev);
     Object.assign(w.data, {objet: prev.objet||d.motif, validite: prev.validite||30, lignes: prev.lignes.map(l=>Object.assign({},l)), acompte: pp.acompte?"1":"0", acomptePct: pp.acomptePct, fois: pp.fois, mode: pp.mode});
@@ -1694,7 +1858,7 @@ function wzCreate(send){
     const dvLike = wzDevisFromData();
     const dv = {id:numero, numero, version:d.devis.length+1, statut:"Brouillon", lignes:dvLike.lignes, dateCreation:"12 sept.", dateEnvoi:null, objet:x.objet.trim(), validite:x.validite, paiement:dvLike.paiement};
     d.devis.push(dv);
-    d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:"Devis "+numero+" créé ("+fmtEuros(devisTotals(dv).ttcCt)+" TTC)."});
+    d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Devis "+numero+" créé ("+fmtEuros(devisTotals(dv).ttcCt)+" TTC)."});
     state.wizard = null;
     if(send) state.modal = {type:"send", id:d.id, kind:"devis", docId:dv.id, phase:"choose"};
     else { state.modal = null; state.section="dossiers"; state.dossierId=d.id; state.dossierTab="devis"; }
@@ -1733,7 +1897,7 @@ async function prepareSend(d, channel){
 
 function finishSend(d, channel, how){
   const m = state.modal || {};
-  d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:docHistoryLabel(m.kind||"report", m.docId)+" envoyé au client ("+(channel==="whatsapp"?"WhatsApp":"e-mail")+", "+how+")."});
+  d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:docHistoryLabel(m.kind||"report", m.docId)+" envoyé au client ("+(channel==="whatsapp"?"WhatsApp":"e-mail")+", "+how+")."});
   const sentTarget = m.kind==="devis" ? findDevis(d, m.docId) : (m.kind==="facture" ? findFacture(d, m.docId) : d.diagnostic);
   if(sentTarget){ sentTarget.sent = sentTarget.sent || []; sentTarget.sent.push({date:"12 sept.", canal: channel==="whatsapp" ? "WhatsApp" : "e-mail"}); }
   if(m.kind==="devis" && m.docId){
@@ -1804,26 +1968,183 @@ function buildSplash(){
   </div>`;
 }
 
+// ---------- Connexion, inscription salarié ----------
 function buildLogin(){
-  const roleOptions = Object.keys(ROLES).map(k=>`<option value="${k}" ${state.role===k?"selected":""}>${esc(ROLES[k].label)}</option>`).join("");
+  const opts = SETTINGS.employees.filter(e=>e.statut==="actif").map(e=>`<option value="${e.id}" ${state.userId===e.id?"selected":""}>${esc(e.nom)} · ${esc(ROLES[e.role].label)}</option>`).join("") + `<option value="CLIENT">Marie Laurent · Client</option>`;
   return `
   <div class="login-screen">
     <div class="login-card">
       <img class="login-logo" src="assets/logo-full.png" alt="Maître Toiturier">
       <h1>Connexion à votre espace</h1>
-      <p>Choisissez un profil de démonstration pour continuer.</p>
-      <div class="form-field"><label>Profil</label>
-        <select id="loginRole">${roleOptions}</select>
-      </div>
-      <button class="btn-primary login-submit" data-action="do-login">Se connecter</button>
+      <p>Salarié : connectez-vous avec votre e-mail.</p>
+      <div class="form-field"><label>E-mail</label><input type="email" id="loginEmail" value="${esc(state.loginEmail||"")}" autocomplete="username" placeholder="prenom.nom@entreprise.fr"></div>
+      <div class="form-field"><label>Mot de passe</label><input type="password" id="loginPwd" autocomplete="current-password"></div>
+      ${state.loginMsg ? `<div class="login-msg">${esc(state.loginMsg)}</div>` : ""}
+      <button class="btn-primary login-submit" data-action="login-submit">Se connecter</button>
+      <button class="link-btn login-link" data-action="goto-signup">Nouveau salarié ? Créer mon accès</button>
+      <div class="login-sep"><span>Accès démonstration</span></div>
+      <div class="form-field"><label>Profil de démonstration</label><select id="loginRole">${opts}</select></div>
+      <button class="btn-secondary login-submit" data-action="do-login">Entrer en mode démo</button>
       <div class="login-help">Démo interactive · Aucune donnée réelle · Aucun e-mail envoyé</div>
     </div>
   </div>`;
 }
 
+function buildSignup(){
+  const s = state.signup || {};
+  return `
+  <div class="login-screen">
+    <div class="login-card">
+      <img class="login-logo" src="assets/logo-full.png" alt="Maître Toiturier">
+      <h1>Créer mon accès salarié</h1>
+      <p>Remplissez ce formulaire : la direction recevra votre demande, l’acceptera et vous attribuera un rôle.</p>
+      <div class="form-field"><label>Nom et prénom</label><input type="text" id="suNom" value="${esc(s.nom||"")}" autocomplete="name"></div>
+      <div class="form-field"><label>E-mail</label><input type="email" id="suEmail" value="${esc(s.email||"")}" autocomplete="username"></div>
+      <div class="form-field"><label>Téléphone</label><input type="tel" id="suTel" value="${esc(s.tel||"")}" autocomplete="tel"></div>
+      <div class="form-field"><label>Poste souhaité</label><select id="suPoste">${["Technicien","Commercial","Administratif","Autre"].map(p=>`<option ${s.poste===p?"selected":""}>${p}</option>`).join("")}</select></div>
+      <div class="form-field"><label>Mot de passe</label><input type="password" id="suPwd" autocomplete="new-password"></div>
+      <div class="form-field"><label>Confirmer le mot de passe</label><input type="password" id="suPwd2" autocomplete="new-password"></div>
+      ${state.signupMsg ? `<div class="login-msg">${esc(state.signupMsg)}</div>` : ""}
+      <button class="btn-primary login-submit" data-action="signup-submit">Envoyer ma demande</button>
+      <button class="link-btn login-link" data-action="goto-login">← Retour à la connexion</button>
+    </div>
+  </div>`;
+}
+
+function buildSignupDone(){
+  return `
+  <div class="login-screen">
+    <div class="login-card">
+      <img class="login-logo" src="assets/logo-full.png" alt="Maître Toiturier">
+      <div class="signup-ok">✓</div>
+      <h1>Demande envoyée</h1>
+      <p>Votre demande d’accès a bien été transmise à la direction. Vous pourrez vous connecter avec votre e-mail dès qu’elle aura été acceptée.</p>
+      <button class="btn-primary login-submit" data-action="goto-login">Retour à la connexion</button>
+    </div>
+  </div>`;
+}
+
+// ---------- Paramètres (directeur) ----------
+function renderParametres(){
+  const pend = pendingRequests().length;
+  const tabs = [["equipe","Équipe"],["demandes","Demandes d’accès"+(pend?" ("+pend+")":"")],["acces","Accès par rôle"],["entreprise","Entreprise"]].concat(typeof PARAM_EXTRA_TABS!=="undefined" ? PARAM_EXTRA_TABS : []);
+  if(!tabs.find(t=>t[0]===state.paramTab)) state.paramTab = "equipe";
+  let body = "";
+  if(state.paramTab==="equipe") body = paramEquipe();
+  else if(state.paramTab==="demandes") body = paramDemandes();
+  else if(state.paramTab==="acces") body = paramAcces();
+  else if(state.paramTab==="entreprise") body = paramEntreprise();
+  else if(typeof renderParamExtra==="function") body = renderParamExtra(state.paramTab);
+  return `
+  <div class="page-header"><div><h1>Paramètres</h1><p>Réservé au directeur : équipe, accès, entreprise et personnalisation de l’application.</p></div></div>
+  <div class="tabs">${tabs.map(([k,l])=>`<button class="tab-btn ${state.paramTab===k?"active":""}" data-action="param-tab" data-tab="${k}">${esc(l)}</button>`).join("")}</div>
+  ${body}`;
+}
+
+function empStatutBadge(e){ return badge(e.statut==="actif"?"Actif":"Suspendu", e.statut==="actif"?"green":"gray"); }
+
+function paramEquipe(){
+  const link = location.origin + location.pathname + "?inscription=1";
+  return `
+  <div class="card">
+    <div class="card-header"><h3>Salariés (${SETTINGS.employees.length})</h3></div>
+    ${SETTINGS.employees.map(e=>{
+      const isMe = e.id===state.userId;
+      const fixed = e.role==="directeur";
+      return `
+      <div class="row-item emp-row">
+        <div class="row-left"><div class="row-avatar">${initials(e.nom)}</div>
+          <div style="min-width:0"><div class="row-title">${esc(e.nom)}${isMe?" · vous":""}</div><div class="row-sub">${esc(e.poste||"")} · ${esc(e.email)}${e.telephone?" · "+esc(e.telephone):""}</div></div></div>
+        <div class="doc-row-right">
+          ${empStatutBadge(e)}
+          ${fixed ? badge("Directeur","gold") : `<select class="emp-role" data-emp-role="${e.id}">${["admin","tech","sales"].map(r=>`<option value="${r}" ${e.role===r?"selected":""}>${esc(ROLES[r].label)}</option>`).join("")}</select>`}
+          ${fixed ? "" : `<div class="doc-row-actions">
+            <button class="btn-ghost btn-sm" data-action="emp-toggle" data-eid="${e.id}">${e.statut==="actif"?"Suspendre":"Réactiver"}</button>
+            <button class="btn-ghost btn-sm" data-action="ask-delete" data-what="employee" data-eid="${e.id}">✕</button></div>`}
+        </div>
+      </div>`; }).join("")}
+  </div>
+  <div class="card">
+    <div class="card-header"><h3>Inviter un salarié</h3></div>
+    <p class="form-help" style="margin:0 0 12px">Envoyez ce lien à votre futur salarié : il crée lui-même son accès (nom, e-mail, mot de passe). Sa demande apparaît ensuite dans « Demandes d’accès » : vous l’acceptez et lui donnez un rôle.</p>
+    <div class="copy-row"><input type="text" readonly value="${esc(link)}" id="signupLink"><button class="btn-secondary btn-sm" data-action="copy-signup">Copier le lien</button></div>
+  </div>`;
+}
+
+function paramDemandes(){
+  const pend = pendingRequests();
+  const done = SETTINGS.requests.filter(r=>r.statut!=="en attente").slice().reverse();
+  const guess = poste=>/comm/i.test(poste) ? "sales" : (/tech/i.test(poste) ? "tech" : "admin");
+  return `
+  <div class="card">
+    <div class="card-header"><h3>Demandes en attente (${pend.length})</h3></div>
+    ${pend.length ? pend.map(r=>`
+      <div class="row-item emp-row">
+        <div class="row-left"><div class="row-avatar">${initials(r.nom)}</div>
+          <div style="min-width:0"><div class="row-title">${esc(r.nom)}</div><div class="row-sub">${esc(r.email)}${r.telephone?" · "+esc(r.telephone):""} · poste souhaité : ${esc(r.poste)} · ${esc(r.date)}</div></div></div>
+        <div class="doc-row-right">
+          <select id="reqRole-${r.id}">${["admin","tech","sales"].map(x=>`<option value="${x}" ${guess(r.poste)===x?"selected":""}>${esc(ROLES[x].label)}</option>`).join("")}</select>
+          <div class="doc-row-actions"><button class="btn-primary btn-sm" data-action="req-accept" data-rid="${r.id}">Accepter</button><button class="btn-ghost btn-sm" data-action="req-refuse" data-rid="${r.id}">Refuser</button></div>
+        </div>
+      </div>`).join("") : `<div class="empty-note">Aucune demande en attente. Partagez le lien d’inscription depuis l’onglet « Équipe ».</div>`}
+  </div>
+  ${done.length ? `<div class="card"><div class="card-header"><h3>Historique</h3></div>${done.map(r=>`<div class="row-item"><div><div class="row-title">${esc(r.nom)}</div><div class="row-sub">${esc(r.email)} · ${esc(r.date)}</div></div>${badge(r.statut, r.statut==="accepté"?"green":"red")}</div>`).join("")}</div>` : ""}`;
+}
+
+function paramAcces(){
+  const roles = CONFIG_ROLES;
+  return `
+  <div class="card">
+    <div class="card-header"><h3>Accès aux onglets, par rôle</h3><button class="btn-ghost btn-sm" data-action="acces-reset">Rétablir les valeurs par défaut</button></div>
+    <p class="form-help" style="margin:0 0 14px"><b>Aucun</b> : l’onglet est masqué · <b>Lecture</b> : consultation seule · <b>Édition</b> : créer, modifier et supprimer. Les changements s’appliquent immédiatement. Le directeur a toujours accès à tout, y compris à Paramètres ; le client n’accède qu’à son espace.</p>
+    <div class="acc-wrap"><div class="acc-grid">
+      <div class="acc-h">Onglet</div><div class="acc-h">Directeur</div>${roles.map(r=>`<div class="acc-h">${esc(ROLES[r].label)}</div>`).join("")}
+      ${MODULES.map(m=>`
+        <div class="acc-mod">${esc(m.label)}</div>
+        <div class="acc-lock">Édition</div>
+        ${roles.map(r=>`<div><select class="acc-sel lv${accessLevel(r,m.id)}" data-acc-role="${r}" data-acc-mod="${m.id}">${ACCESS_LEVELS.map((l,i)=>(m.readOnly&&i===2)?"":`<option value="${i}" ${accessLevel(r,m.id)===i?"selected":""}>${l}</option>`).join("")}</select></div>`).join("")}
+      `).join("")}
+      <div class="acc-mod">Paramètres</div><div class="acc-lock">Édition</div>${roles.map(()=>`<div class="acc-lock off">Réservé</div>`).join("")}
+    </div></div>
+  </div>`;
+}
+
+function paramEntreprise(){
+  const c = SETTINGS.company;
+  const f = (id,label,val,type)=>`<div class="form-field"><label>${label}</label><input type="${type||"text"}" id="co_${id}" value="${esc(val)}"></div>`;
+  return `
+  <div class="card">
+    <div class="card-header"><h3>Informations de l’entreprise</h3></div>
+    <p class="form-help" style="margin:0 0 14px">Ces informations alimentent les PDF (contact en dernière page, mentions des factures) et les valeurs par défaut des devis.</p>
+    <div class="wz-grid">
+      ${f("nom","Nom commercial",c.nom)}${f("site","Site internet",c.site)}
+      ${f("telephone","Téléphone",c.telephone,"tel")}${f("email","E-mail de contact",c.email,"email")}
+      ${f("adresse","Adresse",c.adresse)}${f("siret","SIRET",c.siret)}
+      ${f("iban","IBAN (pour les virements)",c.iban)}
+      <div class="form-field"><label>Validité par défaut d’un devis</label><select id="co_devisValidite">${[15,30,60,90].map(n=>`<option value="${n}" ${c.devisValidite===n?"selected":""}>${n} jours</option>`).join("")}</select></div>
+      <div class="form-field"><label>Acompte par défaut</label><select id="co_acomptePct">${[20,30,40,50].map(n=>`<option value="${n}" ${c.acomptePct===n?"selected":""}>${n} %</option>`).join("")}</select></div>
+    </div>
+    <button class="btn-primary btn-sm" data-action="company-save">Enregistrer</button>
+  </div>`;
+}
+
+function acceptRequest(rid){
+  const r = SETTINGS.requests.find(x=>x.id===rid);
+  const role = document.getElementById("reqRole-"+rid).value;
+  const id = "E"+(SETTINGS.employees.reduce((m,e)=>Math.max(m, parseInt(e.id.slice(1),10)||0),0)+1);
+  SETTINGS.employees.push({id, nom:r.nom, email:r.email, telephone:r.telephone, poste:r.poste, role, statut:"actif", ajoute:"12 sept.", pwdHash:r.pwdHash});
+  r.statut = "accepté"; r.pwdHash = r.pwdHash;
+  saveSettings();
+  render();
+  showToast(r.nom+" a maintenant accès en tant que "+ROLES[role].label.toLowerCase()+".");
+}
+
 function buildApp(){
   if(state.appStage==="splash") return buildSplash();
   if(state.appStage==="login") return buildLogin();
+  if(state.appStage==="signup") return buildSignup();
+  if(state.appStage==="signup-done") return buildSignupDone();
+  if(state.role!=="client" && !sectionReachable(state.section)){ state.section = firstSection(); state.dossierId = null; }
   if(state.role==="client"){
     return `
       ${buildSidebar()}
@@ -1849,7 +2170,7 @@ function buildApp(){
 }
 
 function buildSidebar(){
-  const nav = NAV[state.role];
+  const nav = navItems();
   return `
   <div class="sidebar-backdrop ${state.sidebarOpen?"open":""}" data-action="close-sidebar"></div>
   <div class="sidebar ${state.sidebarOpen?"open":""}">
@@ -1864,7 +2185,7 @@ function buildSidebar(){
       </div>
     </div>
     <nav class="sidebar-nav">
-      ${nav.map(([key,label])=>`<button class="nav-btn ${state.section===key?"active":""}" data-action="nav" data-section="${key}">${esc(label)}</button>`).join("")}
+      ${nav.map(([key,label])=>`<button class="nav-btn ${state.section===key?"active":""}" data-action="nav" data-section="${key}">${esc(label)}${key==="parametres" && pendingRequests().length ? `<span class="nav-badge">${pendingRequests().length}</span>` : ""}</button>`).join("")}
     </nav>
     <div class="sidebar-footer">
       <div>Maître Toiturier</div>
@@ -1876,7 +2197,7 @@ function buildSidebar(){
 
 function buildTopbar(){
   const dateStr = "samedi 12 septembre 2026";
-  const roleOptions = Object.keys(ROLES).map(k=>`<option value="${k}" ${state.role===k?"selected":""}>${esc(ROLES[k].label)}</option>`).join("");
+  const roleOptions = SETTINGS.employees.filter(e=>e.statut==="actif").map(e=>`<option value="${e.id}" ${state.userId===e.id?"selected":""}>${esc(e.nom)} · ${esc(ROLES[e.role].label)}</option>`).join("") + `<option value="CLIENT" ${state.userId==="CLIENT"?"selected":""}>Marie Laurent · Client</option>`;
   return `
   <div class="topbar">
     <div class="topbar-left">
@@ -1888,8 +2209,8 @@ function buildTopbar(){
     </div>
     <div class="topbar-right">
       <div class="demo-tag">Vue démo</div>
-      <select class="role-select" id="roleSelect">${roleOptions}</select>
-      <div class="avatar">${ROLES[state.role].avatar}</div>
+      <select class="role-select" id="profileSelect">${roleOptions}</select>
+      <div class="avatar">${esc(initials(currentName()))}</div>
     </div>
   </div>`;
 }
@@ -1907,7 +2228,7 @@ function buildSection(){
     case "commercial": return renderCommercialKanban();
     case "documents": return renderDocuments();
     case "parrainages": return renderParrainages();
-    case "equipe": return renderEquipe();
+    case "parametres": return state.role==="directeur" ? renderParametres() : renderOverview();
     case "connexions": return renderConnexions();
     case "client-preview": return renderClientPortal("Marie Laurent");
     default: return renderOverview();
@@ -2059,7 +2380,7 @@ function renderDossiersList(){
   return `
   <div class="page-header">
     <div><h1>Dossiers clients</h1><p>Un dossier unique pour les demandes, les visites et les échanges.</p></div>
-    ${canCreateDemande() ? `<button class="btn-primary" data-action="modal-new">+ Nouvelle demande</button>` : ""}
+    ${canCreateDemande() ? `<button class="btn-primary" data-action="modal-new">+ Créer un client</button>` : ""}
   </div>
   <div class="filters-row">
     <input type="text" placeholder="Rechercher un client, une ville, un dossier…" disabled>
@@ -2102,9 +2423,10 @@ function renderDossiersList(){
 // ---------- Dossier detail ----------
 
 function tabsForRole(d){
-  const tabs = [["info","Résumé"],["activite","Activité"],["diagnostic","Diagnostic terrain"],["rapport","Rapport PDF"]];
-  if(state.role!=="tech") tabs.push(["commercial","Suivi commercial"]);
-  if(hasPermission("quote.create")) tabs.push(["devis","Devis & factures"]);
+  const tabs = [["info","Résumé"],["activite","Activité"]];
+  if(canView("diagnostics")) tabs.push(["diagnostic","Diagnostic terrain"],["rapport","Rapport PDF"]);
+  if(canView("commercial")) tabs.push(["commercial","Suivi commercial"]);
+  if(canView("devis") || canView("factures")) tabs.push(["devis","Devis & factures"]);
   if(d && d.chantier && canReadJob()) tabs.push(["chantier","Chantier"]);
   tabs.push(["documents","Documents"]);
   return tabs;
@@ -2158,7 +2480,6 @@ function renderDossierDetail(id){
 
 // ---------- Dossier client façon CRM : Résumé, Activité, Documents ----------
 
-const TEAM_MEMBERS = ["Administration","Sarah Durand","Lucas Robert","Julien Bernard","Léa Petit"];
 function canEditActivity(){ return state.role!=="client"; }
 function nextTaskId(d){ return "T"+(((d.taches||[]).reduce((m,t)=>Math.max(m, parseInt(t.id.slice(1),10)||0),0))+1); }
 
@@ -2346,11 +2667,11 @@ function renderDossierDocuments(d){
 function modalForm(m){
   const d = m.id ? byId(m.id) : null;
   if(m.form==="task"){
-    const t = m.tid ? d.taches.find(x=>x.id===m.tid) : {titre:"", echeance:"", assigne:d.commercial||TEAM_MEMBERS[0]};
+    const t = m.tid ? d.taches.find(x=>x.id===m.tid) : {titre:"", echeance:"", assigne:d.commercial||teamNames()[0]};
     return modalWrap(m.tid?"Modifier la tâche":"Nouvelle tâche", `
       <div class="form-field"><label>Tâche</label><input type="text" id="ffTitre" value="${esc(t.titre)}" placeholder="Ex. Relancer le client pour le devis"></div>
       <div class="form-field"><label>Échéance</label><input type="text" id="ffEcheance" value="${esc(t.echeance||"")}" placeholder="ex. 15 sept."></div>
-      <div class="form-field"><label>Responsable</label><select id="ffAssigne">${TEAM_MEMBERS.map(n=>`<option ${t.assigne===n?"selected":""}>${esc(n)}</option>`).join("")}</select></div>
+      <div class="form-field"><label>Responsable</label><select id="ffAssigne">${teamNames().map(n=>`<option ${t.assigne===n?"selected":""}>${esc(n)}</option>`).join("")}</select></div>
       <div class="modal-actions"><button class="btn-primary" data-action="form-save">Enregistrer</button><button class="btn-secondary" data-action="modal-close">Annuler</button></div>`);
   }
   if(m.form==="note"){
@@ -2412,7 +2733,7 @@ function saveForm(){
   if(m.form==="parrainage"){
     const parrain = val("ffParrain").trim(), apporte = val("ffApporte").trim();
     if(!parrain || !apporte){ showToast("Indiquez le parrain et le client apporté."); return; }
-    const p = {parrain, clientApporte:apporte, date:val("ffDate"), affaire:val("ffAffaire"), recompense:parseInt(val("ffRecomp"),10)||0, suivi:val("ffSuivi"), commercial: m.idx!=null ? PARRAINAGES[m.idx].commercial : (state.role==="sales"?"Sarah Durand":"Lucas Robert"), dossierId: m.idx!=null ? PARRAINAGES[m.idx].dossierId : null};
+    const p = {parrain, clientApporte:apporte, date:val("ffDate"), affaire:val("ffAffaire"), recompense:parseInt(val("ffRecomp"),10)||0, suivi:val("ffSuivi"), commercial: m.idx!=null ? PARRAINAGES[m.idx].commercial : (state.role==="sales" ? currentName() : (activeStaff("sales")[0]||"")), dossierId: m.idx!=null ? PARRAINAGES[m.idx].dossierId : null};
     if(m.idx!=null) PARRAINAGES[m.idx] = p; else PARRAINAGES.push(p);
     state.modal = null; render(); showToast("Parrainage enregistré."); return;
   }
@@ -2708,7 +3029,7 @@ function ppShell(d, o){
     </div>
     <div class="pp-foot">
       <div class="pp-foot-item">${iconSvg("pin",20)}<span>${esc(d.ville)}</span></div>
-      <div class="pp-foot-item">${iconSvg("globe",20)}<span>www.maitretoiturier.fr</span></div>
+      <div class="pp-foot-item">${iconSvg("globe",20)}<span>${esc(SETTINGS.company.site||"")}</span></div>
       ${o.pagenum===false ? `<div class="pp-pagenum"></div>` : `<div class="pdf-page-num pp-pagenum"></div>`}
     </div>
   </div></div>`;
@@ -2884,7 +3205,7 @@ function ppBackPage(d){
     title: "À votre disposition",
     titleFs: 40,
     cards: [
-      ppCard("globe","Nous contacter","www.maitretoiturier.fr<br>Téléphone : à renseigner<br>E-mail : à renseigner"),
+      ppCard("globe","Nous contacter",esc(SETTINGS.company.site||"")+"<br>Téléphone : "+esc(SETTINGS.company.telephone||"à renseigner")+"<br>E-mail : "+esc(SETTINGS.company.email||"à renseigner")),
       ppCard("check","Et maintenant ?","Ce rapport vous a été remis à l’issue de la visite diagnostic. Notre équipe reste à votre disposition pour répondre à vos questions et organiser les travaux recommandés.")
     ],
     banner: ppBanner("shield","Information","Document de démonstration. Contrôle visuel des zones accessibles, selon les observations renseignées par le technicien. Ce rapport n’est pas une certification.", PP_QUOTE),
@@ -2929,15 +3250,15 @@ function renderDossierCommercial(d){
   <div class="card">
     <div class="card-header"><h3>Suivi de l’opportunité</h3>${badge(d.commercialStage, d.commercialStage==="Gagné"?"green":d.commercialStage==="Perdu"?"red":"blue")}</div>
     <div class="form-field"><label>Étape commerciale</label>
-      <select id="comStage" ${state.role==="tech"?"disabled":""}>
+      <select id="comStage" ${!hasPermission("opportunity.update")?"disabled":""}>
         ${["À contacter","Devis à préparer","Devis envoyé","Gagné","Perdu"].map(o=>`<option ${d.commercialStage===o?"selected":""}>${o}</option>`).join("")}
       </select>
     </div>
-    <div class="form-field"><label>Montant estimé du devis (€)</label><input type="number" id="comMontant" value="${d.montant}" ${state.role==="tech"?"disabled":""}></div>
-    <div class="form-field"><label>Prochaine relance</label><input type="text" id="comRelance" placeholder="ex. 20 sept." value="${esc(d.prochaineRelance||"")}" ${state.role==="tech"?"disabled":""}></div>
+    <div class="form-field"><label>Montant estimé du devis (€)</label><input type="number" id="comMontant" value="${d.montant}" ${!hasPermission("opportunity.update")?"disabled":""}></div>
+    <div class="form-field"><label>Prochaine relance</label><input type="text" id="comRelance" placeholder="ex. 20 sept." value="${esc(d.prochaineRelance||"")}" ${!hasPermission("opportunity.update")?"disabled":""}></div>
     <div class="form-field"><label>Commercial responsable</label><input type="text" value="${esc(d.commercial||"À affecter")}" disabled></div>
     <div class="form-field"><label>Compte rendu / prochaine action</label><textarea id="comCompteRendu" placeholder="Ex. rappeler le client après réception du devis…">${esc(d.compteRendu)}</textarea></div>
-    ${state.role!=="tech" ? `<button class="btn-primary btn-sm" data-action="save-commercial" data-id="${d.id}">Enregistrer le suivi</button>` : ""}
+    ${hasPermission("opportunity.update") ? `<button class="btn-primary btn-sm" data-action="save-commercial" data-id="${d.id}">Enregistrer le suivi</button>` : ""}
   </div>
   <div class="card">
     <h3 style="margin:0 0 10px;font-size:14.5px">Diagnostic associé</h3>
@@ -2999,7 +3320,7 @@ function renderFactureCard(d, f){
 
 function renderDossierDevis(d){
   const dv = latestDevis(d);
-  const canEditDv = !dv || dv.statut==="Brouillon";
+  const canEditDv = (!dv || dv.statut==="Brouillon") && hasPermission("quote.update");
   const catalogOptions = SERVICE_CATALOG.map(s=>`<option value="${s.code}">${esc(s.label)} — ${fmtEuros(s.prixUnitaireCt)}</option>`).join("");
 
   let devisBlock;
@@ -3046,8 +3367,8 @@ function renderDossierDevis(d){
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
           ${canEditDv?`<button class="btn-primary btn-sm" data-action="devis-save" data-id="${d.id}">Enregistrer</button>`:""}
-          ${dv.statut==="Brouillon"?`<button class="btn-secondary btn-sm" data-action="devis-send" data-id="${d.id}">Marquer comme envoyé</button>`:""}
-          ${dv.statut==="Envoyé"?`<button class="btn-secondary btn-sm" data-action="devis-accept" data-id="${d.id}">Marquer accepté</button><button class="btn-ghost btn-sm" data-action="devis-reject" data-id="${d.id}">Marquer refusé</button>`:""}
+          ${dv.statut==="Brouillon" && hasPermission("quote.update")?`<button class="btn-secondary btn-sm" data-action="devis-send" data-id="${d.id}">Marquer comme envoyé</button>`:""}
+          ${dv.statut==="Envoyé" && hasPermission("quote.update")?`<button class="btn-secondary btn-sm" data-action="devis-accept" data-id="${d.id}">Marquer accepté</button><button class="btn-ghost btn-sm" data-action="devis-reject" data-id="${d.id}">Marquer refusé</button>`:""}
           ${dv.statut!=="Brouillon"?`<button class="btn-ghost btn-sm" data-action="wizard-devis" data-id="${d.id}">+ Nouvelle version</button>`:""}
           <button class="btn-ghost btn-sm" data-action="doc-pdf" data-id="${d.id}" data-kind="devis" data-doc="${dv.id}">Télécharger le PDF</button>
           ${hasPermission("quote.send")?`<button class="btn-secondary btn-sm" data-action="modal-send-doc" data-id="${d.id}" data-kind="devis" data-doc="${dv.id}">Envoyer au client</button>`:""}
@@ -3071,7 +3392,7 @@ function renderDossierDevis(d){
       ${!d.factures.length ? `<div class="empty-note">${dv && dv.statut==="Accepté" ? "Aucune facture pour l’instant." : "Le devis doit être accepté avant de pouvoir facturer."}</div>` : d.factures.map(f=>renderFactureCard(d,f)).join("")}
     </div>`;
 
-  return devisBlock + facturesBlock;
+  return (canView("devis") ? devisBlock : "") + (canView("factures") ? facturesBlock : "");
 }
 
 function renderDossierChantier(d){
@@ -3187,7 +3508,7 @@ function renderEventCard(e, cls){
 
 function renderCalToolbar(){
   const v = state.calendarView;
-  const members = ["Toute l’équipe","Julien Bernard","Léa Petit","Sarah Durand","Lucas Robert"];
+  const members = ["Toute l’équipe", ...activeStaff("tech"), ...activeStaff("sales")];
   let label = "";
   if(v==="day") label = fmtFullDate(state.calendarDate);
   else if(v==="week"){ const s=startOfWeek(state.calendarDate), en=addDays(s,6); label = `${fmtDayMonth(s)} — ${fmtDayMonth(en)} ${en.getFullYear()}`; }
@@ -3328,7 +3649,7 @@ function renderEntretiens(){
   return `
   <div class="page-header">
     <div><h1>Contrats d’entretien</h1><p>Conservez le programme prévu et les prochaines visites de chaque toiture.</p></div>
-    ${canNouveauContrat() ? `<button class="btn-primary" data-action="form-open" data-form="contract">+ Nouveau contrat</button>` : ""}
+    ${canNouveauContrat() ? `<button class="btn-primary" data-action="form-open" data-form="contract">+ Créer un entretien</button>` : ""}
   </div>
   <div class="stat-grid">
     ${stat("Contrats suivis", contracts.length, "Proposés et en cours")}
@@ -3377,7 +3698,7 @@ function renderDiagnosticsList(){
   return `
   <div class="page-header">
     <div><h1>Diagnostics de toiture</h1><p>Vos contrôles terrain, photos et rapports PDF.</p></div>
-    ${diagEditable() ? `<button class="btn-primary" data-action="modal-new-diag">+ Nouveau diagnostic</button>` : ""}
+    ${diagEditable() ? `<button class="btn-primary" data-action="modal-new-diag">+ Créer un diagnostic</button>` : ""}
   </div>
   <div class="filters-row">
     <input type="text" placeholder="Rechercher un client, une ville, un dossier…" disabled>
@@ -3527,46 +3848,6 @@ function renderParrainages(){
 
 // ---------- Équipe & accès ----------
 
-function renderEquipe(){
-  return `
-  <div class="page-header"><div><h1>Une équipe, trois responsabilités.</h1><p>Les rôles sont simulés. Les comptes et les autorisations réelles restent à connecter.</p></div></div>
-  <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">
-    <div class="stat-card">
-      <div class="role-card-title">Administration</div>
-      <div class="role-card-sub">Coordonne les demandes et toute l’activité.</div>
-      <ul class="perm-list">
-        <li>Créer et modifier les dossiers</li><li>Affecter les techniciens et commerciaux</li>
-        <li>Planifier les rendez-vous</li><li>Partager les rapports aux clients</li>
-        <li>Suivre les parrainages et récompenses</li>
-      </ul>
-    </div>
-    <div class="stat-card">
-      <div class="role-card-title">Techniciens</div>
-      <div class="role-card-sub">Julien Bernard · Léa Petit</div>
-      <ul class="perm-list">
-        <li>Consulter leurs visites et dossiers</li><li>Remplir les diagnostics et ajouter des photos</li>
-        <li>Générer les rapports PDF</li><li>Ajouter des notes internes</li>
-      </ul>
-    </div>
-    <div class="stat-card">
-      <div class="role-card-title">Commerciaux</div>
-      <div class="role-card-sub">Sarah Durand · Lucas Robert</div>
-      <ul class="perm-list">
-        <li>Suivre les prospects affectés</li><li>Consulter les rapports techniques</li>
-        <li>Mettre à jour les étapes et montants</li><li>Programmer les relances</li>
-        <li>Suivre les recommandations clients</li>
-      </ul>
-    </div>
-  </div>
-  <div class="card">
-    <h3 style="margin:0 0 10px;font-size:14.5px">Espace client</h3>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:14px">Chaque client doit retrouver uniquement son dossier, ses rendez-vous et ses documents partagés. Le sélecteur de rôle permet de tester le parcours et ne constitue pas une connexion sécurisée.</p>
-    <button class="btn-secondary" data-action="nav" data-section="client-preview">Voir l’espace de Marie Laurent</button>
-  </div>`;
-}
-
-// ---------- Connexions ----------
-
 function renderConnexions(){
   const items = [
     {title:"Google Agenda", desc:"Synchroniser les rendez-vous des techniciens avec leur agenda.", detail:"Connexion de chaque compte, choix des agendas et gestion des modifications dans les deux sens."},
@@ -3665,7 +3946,7 @@ function modalWrap(title, bodyHtml){
 }
 
 function modalNewDemande(){
-  return modalWrap("Nouvelle demande", `
+  return modalWrap("Créer un client", `
     <div class="form-field"><label>Nom du client</label><input type="text" id="fName"></div>
     <div class="form-field"><label>Téléphone</label><input type="tel" id="fPhone" value="06 00 00 00 00"></div>
     <div class="form-field"><label>E-mail</label><input type="email" id="fEmail"></div>
@@ -3675,8 +3956,8 @@ function modalNewDemande(){
     <div class="form-field"><label>Informations sur le bâtiment</label><textarea id="fInfos"></textarea></div>
     <div class="form-field"><label>Objet de la demande</label><textarea id="fMotif"></textarea></div>
     <div class="form-field"><label>Priorité</label><select id="fPriorite"><option>Normale</option><option>Urgente</option><option>Infiltration signalée</option></select></div>
-    <div class="form-field"><label>Commercial</label><select id="fCommercial"><option>À affecter</option><option>Sarah Durand</option><option>Lucas Robert</option></select></div>
-    <div class="modal-actions"><button class="btn-primary" data-action="submit-new">Créer la demande</button><button class="btn-secondary" data-action="modal-close">Annuler</button></div>
+    <div class="form-field"><label>Commercial</label><select id="fCommercial"><option>À affecter</option>${activeStaff("sales").map(n=>`<option>${esc(n)}</option>`).join("")}</select></div>
+    <div class="modal-actions"><button class="btn-primary" data-action="submit-new">Créer le client</button><button class="btn-secondary" data-action="modal-close">Annuler</button></div>
   `);
 }
 
@@ -3698,8 +3979,8 @@ function modalEditDossier(d){
 function modalAffecter(d){
   return modalWrap("Affecter et planifier", `
     <p class="form-help" style="margin-bottom:14px">${esc(d.client)} · ${esc(d.ville)}</p>
-    <div class="form-field"><label>Technicien</label><select id="fTech"><option>À affecter</option>${["Julien Bernard","Léa Petit"].map(o=>`<option ${d.technicien===o?"selected":""}>${o}</option>`).join("")}</select></div>
-    <div class="form-field"><label>Commercial</label><select id="fCom"><option>À affecter</option>${["Sarah Durand","Lucas Robert"].map(o=>`<option ${d.commercial===o?"selected":""}>${o}</option>`).join("")}</select></div>
+    <div class="form-field"><label>Technicien</label><select id="fTech"><option>À affecter</option>${activeStaff("tech").map(o=>`<option ${d.technicien===o?"selected":""}>${o}</option>`).join("")}</select></div>
+    <div class="form-field"><label>Commercial</label><select id="fCom"><option>À affecter</option>${activeStaff("sales").map(o=>`<option ${d.commercial===o?"selected":""}>${o}</option>`).join("")}</select></div>
     <div class="form-field"><label>Date de visite</label><input type="date" id="fDate"></div>
     <div class="form-field"><label>Heure de visite</label><input type="time" id="fHeure" value="09:00"></div>
     <div class="form-help" style="margin-bottom:6px">Une visite nécessite un technicien et une heure. Les collisions au même horaire sont signalées ; l’équipe reste responsable de la confirmation finale.</div>
@@ -3746,6 +4027,7 @@ function modalInfo(msg){
 
 // ---------- Event handling ----------
 
+if(/[?&]inscription=1/.test(location.search)) state.appStage = "signup";
 document.addEventListener("DOMContentLoaded", ()=>{
   render();
   window.addEventListener("resize", applyPdfScale);
@@ -3765,7 +4047,45 @@ document.addEventListener("DOMContentLoaded", ()=>{
       setTimeout(()=>{ state.appStage="login"; state.splashExiting=false; render(); }, 650);
       return;
     }
-    if(action==="do-login"){ state.appStage="app"; render(); return; }
+    if(action==="do-login"){ enterAs(document.getElementById("loginRole").value); render(); return; }
+    if(action==="login-submit"){ doLogin(); return; }
+    if(action==="goto-signup"){ state.appStage="signup"; state.signupMsg=""; render(); return; }
+    if(action==="goto-login"){ state.appStage="login"; state.loginMsg=""; render(); return; }
+    if(action==="signup-submit"){ doSignup(); return; }
+    if(action==="param-tab"){ state.paramTab=t.dataset.tab; render(); return; }
+    if(action==="req-accept"){ acceptRequest(t.dataset.rid); return; }
+    if(action==="req-refuse"){
+      const rid = t.dataset.rid;
+      askConfirm("Refuser cette demande ?", "La personne ne pourra pas se connecter. Elle pourra refaire une demande.", ()=>{
+        const r = SETTINGS.requests.find(x=>x.id===rid); r.statut = "refusé"; saveSettings(); showToast("Demande refusée.");
+      }, "Refuser");
+      return;
+    }
+    if(action==="emp-toggle"){
+      const e = SETTINGS.employees.find(x=>x.id===t.dataset.eid);
+      e.statut = e.statut==="actif" ? "suspendu" : "actif";
+      saveSettings(); render(); return;
+    }
+    if(action==="copy-signup"){
+      const inp = document.getElementById("signupLink");
+      const done = ()=>showToast("Lien copié.");
+      if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(inp.value).then(done).catch(()=>{ inp.select(); showToast("Sélectionnez puis copiez le lien."); });
+      else { inp.select(); showToast("Sélectionnez puis copiez le lien."); }
+      return;
+    }
+    if(action==="acces-reset"){
+      askConfirm("Rétablir les accès par défaut ?", "Les accès des rôles administrateur, technicien et commercial reviendront aux valeurs d’origine.", ()=>{
+        SETTINGS.access = JSON.parse(JSON.stringify(DEFAULT_ACCESS)); saveSettings(); showToast("Accès rétablis.");
+      }, "Rétablir");
+      return;
+    }
+    if(action==="company-save"){
+      const c = SETTINGS.company;
+      ["nom","site","telephone","email","adresse","siret","iban"].forEach(k=>{ c[k] = document.getElementById("co_"+k).value.trim(); });
+      c.devisValidite = parseInt(document.getElementById("co_devisValidite").value,10);
+      c.acomptePct = parseInt(document.getElementById("co_acomptePct").value,10);
+      saveSettings(); showToast("Informations enregistrées."); return;
+    }
     if(action==="toggle-sidebar"){ state.sidebarOpen=!state.sidebarOpen; render(); return; }
     if(action==="close-sidebar"){ state.sidebarOpen=false; render(); return; }
     if(action==="nav"){ state.section=t.dataset.section; state.dossierId=null; state.diagStep=1; state.sidebarOpen=false; render(); scrollContentTop(); return; }
@@ -3780,7 +4100,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(action==="choose-dossier"){ state.modal={type:"affect", id:t.dataset.id}; render(); return; }
     if(action==="reset-demo"){
       DOSSIERS = seedDossiers();
-      state = {appStage:"app",splashExiting:false,role:"admin",section:"overview",dossierId:null,dossierTab:"info",diagStep:1,agendaMember:"all",
+      state = {appStage:"app",splashExiting:false,role:"directeur",userId:"E1",paramTab:"equipe",loginMsg:"",section:"overview",dossierId:null,dossierTab:"info",diagStep:1,agendaMember:"all",
         calendarView:"day",calendarDate:new Date(TODAY_REF),datePickerOpen:false,pickerViewDate:new Date(TODAY_REF),
         kanbanStage:"À contacter",modal:null,toast:null,sidebarOpen:false};
       render();
@@ -3827,7 +4147,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
         adresse: document.getElementById("fAdresse").value||"12 rue des Tilleuls",
         typeBatiment: document.getElementById("fType").value,
         infosGenerales: document.getElementById("fInfos").value,
-        notes:[], historique:[{date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:"Demande créée dans la démonstration."}],
+        notes:[], historique:[{date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Demande créée dans la démonstration."}],
         commercialStage:"À contacter", montant:0, prochaineRelance:null, compteRendu:"",
         visiteDate:null, visiteHeure:null, diagnostic:freshDiagnostic(),
         devis:[], factures:[], chantier:null, taches:[]
@@ -3965,7 +4285,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
       d.diagnostic.synthese.conclusion = document.getElementById("synConclusion").value;
       d.diagnostic.rapportPret = true;
       d.statut = "Rapport prêt";
-      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:"Diagnostic validé, rapport généré."});
+      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Diagnostic validé, rapport généré."});
       state.dossierTab = "rapport";
       render();
       return;
@@ -4024,7 +4344,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
       dv.dateEnvoi = "12 sept.";
       d.montant = Math.round(devisTotals(dv).ttcCt/100);
       if(d.commercialStage==="À contacter" || d.commercialStage==="Devis à préparer") d.commercialStage = "Devis envoyé";
-      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:"Devis "+dv.numero+" envoyé au client."});
+      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Devis "+dv.numero+" envoyé au client."});
       showToast("Devis marqué comme envoyé.");
       render();
       return;
@@ -4034,10 +4354,10 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const dv = latestDevis(d);
       dv.statut = "Accepté";
       d.commercialStage = "Gagné";
-      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:"Devis "+dv.numero+" accepté par le client."});
+      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Devis "+dv.numero+" accepté par le client."});
       if(!d.chantier){
         d.chantier = freshChantier();
-        d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:"Chantier préparé automatiquement suite à l'acceptation du devis."});
+        d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Chantier préparé automatiquement suite à l'acceptation du devis."});
       }
       showToast("Devis accepté. Chantier préparé.");
       render();
@@ -4048,7 +4368,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const dv = latestDevis(d);
       dv.statut = "Refusé";
       d.commercialStage = "Perdu";
-      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:"Devis "+dv.numero+" refusé par le client."});
+      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Devis "+dv.numero+" refusé par le client."});
       showToast("Devis marqué comme refusé.");
       render();
       return;
@@ -4096,7 +4416,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const d = byId(t.dataset.id);
       const f = d.factures.find(x=>x.id===t.dataset.fid);
       f.statut = "Envoyée";
-      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:"Facture "+f.numero+" envoyée au client."});
+      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Facture "+f.numero+" envoyée au client."});
       showToast("Facture envoyée.");
       render();
       return;
@@ -4111,7 +4431,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const pid = f.id+"-P"+(f.paiements.length+1);
       f.paiements.push({ id:pid, montantCt:Math.round(montant*100), mode, date, virementStatut: mode==="Virement" ? "Annoncé" : null });
       f.statut = factureStatutFromPayments(f);
-      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:"Paiement de "+fmtEuros(Math.round(montant*100))+" enregistré sur "+f.numero+"."});
+      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Paiement de "+fmtEuros(Math.round(montant*100))+" enregistré sur "+f.numero+"."});
       showToast(mode==="Virement" ? "Virement enregistré (annoncé, non encaissé)." : "Paiement enregistré.");
       render();
       return;
@@ -4158,8 +4478,8 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const desc = document.getElementById("incDescription").value.trim();
       if(!desc){ showToast("Décrivez le problème avant de l'envoyer."); return; }
       const cat = document.getElementById("incCategorie").value;
-      d.chantier.incidents.unshift({categorie:cat, description:desc, date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label});
-      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:ROLES[state.role].label, texte:"Incident chantier signalé : "+incidentCatLabel(cat)+"."});
+      d.chantier.incidents.unshift({categorie:cat, description:desc, date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel()});
+      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Incident chantier signalé : "+incidentCatLabel(cat)+"."});
       showToast("Incident signalé.");
       render();
       return;
@@ -4203,16 +4523,16 @@ document.addEventListener("DOMContentLoaded", ()=>{
       }
       render();
     }
-    if(e.target.id==="loginRole"){
-      state.role = e.target.value;
-      state.section = NAV[state.role][0][0];
-      render();
+    if(e.target.id==="profileSelect"){ enterAs(e.target.value); render(); scrollContentTop(); return; }
+    if(e.target.dataset && e.target.dataset.empRole){
+      const emp = SETTINGS.employees.find(x=>x.id===e.target.dataset.empRole);
+      emp.role = e.target.value; saveSettings(); render();
+      showToast(emp.nom+" est maintenant "+ROLES[emp.role].label.toLowerCase()+".");
+      return;
     }
-    if(e.target.id==="roleSelect"){
-      state.role = e.target.value;
-      state.section = NAV[state.role][0][0];
-      state.dossierId=null;
-      render();
+    if(e.target.dataset && e.target.dataset.accRole){
+      SETTINGS.access[e.target.dataset.accRole][e.target.dataset.accMod] = parseInt(e.target.value,10);
+      saveSettings(); render(); return;
     }
     if(e.target.id==="agendaMemberSelect"){
       state.agendaMember = e.target.value;
