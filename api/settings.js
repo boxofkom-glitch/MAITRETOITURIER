@@ -14,6 +14,16 @@ module.exports = L.wrap(async (req, res)=>{
     await L.setJson("mt:settings", st);
     return L.send(res, 200, {ok:true});
   }
+  if(b.action==="self"){
+    // Chacun peut modifier son propre nom/téléphone (jamais son e-mail, son rôle ou son statut).
+    const nom = String(b.nom||"").trim().slice(0,80);
+    if(!nom) return L.send(res, 400, {error:"Indiquez votre nom."});
+    const e = st.employees.find(x=>x.id===a.user.id);
+    if(!e) return L.send(res, 404, {error:"Compte introuvable."});
+    e.nom = nom; e.telephone = String(b.telephone||"").trim().slice(0,30);
+    await L.setJson("mt:settings", st);
+    return L.send(res, 200, {ok:true});
+  }
   if(!isDir) return L.send(res, 403, {error:"Réservé au directeur."});
 
   if(b.action==="put"){

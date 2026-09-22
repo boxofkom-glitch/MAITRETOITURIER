@@ -3127,6 +3127,14 @@ function renderMaterielSection(){
 }
 function empStatutBadge(e){ return badge(e.statut==="actif"?"Actif":"Suspendu", e.statut==="actif"?"green":"gray"); }
 
+function modalProfile(m){
+  const e = SETTINGS.employees.find(x=>x.id===m.eid) || currentUser();
+  return modalWrap("Mon profil", `
+    <div class="form-field"><label>Nom et prénom</label><input type="text" id="mpNom" value="${esc(e.nom)}"></div>
+    <div class="form-field"><label>Téléphone</label><input type="tel" id="mpTel" value="${esc(e.telephone||"")}"></div>
+    <p class="form-help" style="margin:0 0 14px">L’e-mail (${esc(e.email)}) et le rôle ne se changent pas ici.</p>
+    <div class="modal-actions"><button class="btn-primary" data-action="profile-save" data-eid="${e.id}">Enregistrer</button><button class="btn-secondary" data-action="modal-close">Annuler</button></div>`);
+}
 function paramEquipe(){
   const link = location.origin + location.pathname + "?inscription=1";
   return `
@@ -3142,9 +3150,11 @@ function paramEquipe(){
         <div class="doc-row-right">
           ${empStatutBadge(e)}
           ${fixed ? badge("Directeur","gold") : `<select class="emp-role" data-emp-role="${e.id}">${["admin","tech","sales"].map(r=>`<option value="${r}" ${e.role===r?"selected":""}>${esc(ROLES[r].label)}</option>`).join("")}</select>`}
-          ${fixed ? "" : `<div class="doc-row-actions">
-            <button class="btn-ghost btn-sm" data-action="emp-reset" data-eid="${e.id}">Mot de passe</button><button class="btn-ghost btn-sm" data-action="emp-toggle" data-eid="${e.id}">${e.statut==="actif"?"Suspendre":"Réactiver"}</button>
-            <button class="btn-ghost btn-sm" data-action="ask-delete" data-what="employee" data-eid="${e.id}">✕</button></div>`}
+          <div class="doc-row-actions">
+            ${isMe?`<button class="btn-secondary btn-sm" data-action="profile-open" data-eid="${e.id}">Modifier mon profil</button>`:""}
+            ${fixed ? "" : `<button class="btn-ghost btn-sm" data-action="emp-reset" data-eid="${e.id}">Mot de passe</button><button class="btn-ghost btn-sm" data-action="emp-toggle" data-eid="${e.id}">${e.statut==="actif"?"Suspendre":"Réactiver"}</button>
+            <button class="btn-ghost btn-sm" data-action="ask-delete" data-what="employee" data-eid="${e.id}">✕</button>`}
+          </div>
         </div>
       </div>`; }).join("")}
   </div>
@@ -5217,6 +5227,7 @@ function buildModal(){
   if(m.type==="pay") return modalPay(m);
   if(m.type==="mailsend") return modalMailSend(m);
   if(m.type==="chgpwd") return modalChgPwd();
+  if(m.type==="profile") return modalProfile(m);
   if(m.type==="matnew") return modalMatNew(m);
   if(m.type==="matlib") return modalMatLib();
   return "";
@@ -5466,6 +5477,21 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const e = SETTINGS.employees.find(x=>x.id===t.dataset.eid);
       e.statut = e.statut==="actif" ? "suspendu" : "actif";
       saveSettings(); render(); return;
+    }
+    if(action==="profile-open"){ state.modal = {type:"profile", eid:t.dataset.eid}; render(); return; }
+    if(action==="profile-save"){
+      const nom = (document.getElementById("mpNom").value||"").trim();
+      const tel = (document.getElementById("mpTel").value||"").trim();
+      if(!nom){ showToast("Indiquez votre nom."); return; }
+      const finish = ()=>{
+        const e = SETTINGS.employees.find(x=>x.id===t.dataset.eid);
+        if(e){ e.nom = nom; e.telephone = tel; }
+        if(SRV.user && SRV.user.id===t.dataset.eid){ SRV.user.nom = nom; SRV.user.telephone = tel; }
+        state.modal = null; render(); showToast("Profil mis à jour.");
+      };
+      if(SRV.on){ srvApi("settings","POST",{action:"self", nom, telephone:tel}).then(finish).catch(e=>showToast(e.message)); }
+      else { finish(); saveSettings(); }
+      return;
     }
     if(action==="copy-signup"){
       const inp = document.getElementById("signupLink");
