@@ -590,17 +590,19 @@ const MODULES = [
   {id:"commercial", section:"commercial", label:"Suivi commercial"},
   {id:"devis", section:"documents", label:"Devis"},
   {id:"factures", section:"documents", label:"Factures"},
+  {id:"prestations", section:"prestations", label:"Prestations"},
+  {id:"materiel", section:"materiel", label:"Matériel"},
   {id:"parrainages", section:"parrainages", label:"Parrainages"},
   {id:"connexions", section:"connexions", label:"Connexions"},
   {id:"client-preview", section:"client-preview", label:"Aperçu espace client", readOnly:true}
 ];
 const CONFIG_ROLES = ["admin","tech","sales"];
-const SECTION_ORDER = ["overview","dossiers","agenda","entretiens","diagnostics","commercial","documents","parrainages","connexions","client-preview"];
+const SECTION_ORDER = ["overview","dossiers","agenda","entretiens","diagnostics","commercial","documents","prestations","materiel","parrainages","connexions","client-preview"];
 
 const DEFAULT_ACCESS = {
-  admin:{overview:1, dossiers:2, agenda:2, entretiens:2, diagnostics:2, commercial:2, devis:2, factures:2, parrainages:2, connexions:2, "client-preview":1},
-  tech:{overview:1, dossiers:2, agenda:2, entretiens:0, diagnostics:2, commercial:0, devis:2, factures:2, parrainages:2, connexions:0, "client-preview":0},
-  sales:{overview:1, dossiers:2, agenda:2, entretiens:2, diagnostics:1, commercial:2, devis:2, factures:2, parrainages:2, connexions:0, "client-preview":0}
+  admin:{overview:1, dossiers:2, agenda:2, entretiens:2, diagnostics:2, commercial:2, devis:2, factures:2, prestations:2, materiel:2, parrainages:2, connexions:2, "client-preview":1},
+  tech:{overview:1, dossiers:2, agenda:2, entretiens:0, diagnostics:2, commercial:0, devis:2, factures:2, prestations:1, materiel:1, parrainages:2, connexions:0, "client-preview":0},
+  sales:{overview:1, dossiers:2, agenda:2, entretiens:2, diagnostics:1, commercial:2, devis:2, factures:2, prestations:1, materiel:1, parrainages:2, connexions:0, "client-preview":0}
 };
 
 const SETTINGS_KEY = "mt_settings_v1";
@@ -722,7 +724,8 @@ function currentUser(){ return SETTINGS.employees.find(e=>e.id===state.userId) |
 function currentName(){
   const u = currentUser();
   if(u) return u.nom;
-  return state.role==="client" ? "Marie Laurent" : authorLabel();
+  if(state.role==="client") return "Marie Laurent";
+  return ROLES[state.role] ? ROLES[state.role].label : "Équipe";
 }
 function authorLabel(){ return currentName(); }
 function activeStaff(role){ return SETTINGS.employees.filter(e=>e.statut==="actif" && (!role || e.role===role)).map(e=>e.nom); }
@@ -958,6 +961,13 @@ function actionLabelFor(pointName, decision){
   if(decision==="Surveiller") return "Surveiller — "+pointName;
   if(decision==="Contrôle complémentaire") return "Compléter le contrôle — "+pointName;
   return "Traiter — "+pointName;
+}
+
+function catalogFilter(input){
+  const q = input.value.trim().toLowerCase();
+  input.closest(".card").querySelectorAll(".cat-item").forEach(el=>{
+    el.style.display = !q || el.dataset.search.includes(q) ? "" : "none";
+  });
 }
 
 function showToast(msg){
@@ -2518,10 +2528,8 @@ function modalMailSend(m){
 }
 
 // Onglet Paramètres › E-mails
-const PARAM_EXTRA_TABS = [["prestations","Prestations"],["materiel","Matériel"],["perso","Personnalisation"],["donnees","Données"],["emails","E-mails"]];
+const PARAM_EXTRA_TABS = [["perso","Personnalisation"],["donnees","Données"],["emails","E-mails"]];
 function renderParamExtra(tab){
-  if(tab==="prestations") return renderParamPrestations();
-  if(tab==="materiel") return renderParamMateriel();
   if(tab==="perso") return renderParamPerso();
   if(tab==="donnees") return renderParamDonnees();
   if(tab!=="emails") return "";
@@ -3044,10 +3052,20 @@ async function srvSetupSubmit(){
   catch(e){ state.loginMsg = e.message; render(); }
 }
 
-function renderParamPrestations(){
+function catalogSearchRow(id){ return `<input type="search" id="${id}" class="cat-search" placeholder="Rechercher…" oninput="catalogFilter(this)">`; }
+function renderPrestationsSection(){
+  const canEdit = canEditMod("prestations");
   const tvas = [0,5.5,10,20];
+  if(!canEdit){
+    return `
+    <div class="page-header"><div><h1>Prestations</h1><p>Tarifs proposés dans vos devis. Pour modifier les prix, demandez à la direction.</p></div></div>
+    <div class="card">
+      ${catalogSearchRow("prestaSearch")}
+      ${SERVICE_CATALOG.map(s=>`<div class="row-item cat-item" data-search="${esc(s.label.toLowerCase())}"><div><div class="row-title">${esc(s.label)}</div><div class="row-sub">${esc(s.unite||"forfait")} · TVA ${s.tvaPct} %</div></div><div class="doc-row-amount">${fmtEuros(s.prixUnitaireCt)}</div></div>`).join("")}
+    </div>`;
+  }
   return `
-  <div class="page-header"><div><h1 style="font-size:20px">Prestations</h1><p>Le prix de vente apparaît sur les devis et les factures. Le prix d’achat (coût interne — matériel + main-d’œuvre) sert uniquement au calcul de votre marge, jamais montré au client.</p></div></div>
+  <div class="page-header"><div><h1>Prestations</h1><p>Le prix de vente apparaît sur les devis et les factures. Le prix d’achat (coût interne — matériel + main-d’œuvre) sert uniquement au calcul de votre marge, jamais montré au client.</p></div></div>
   <div class="card">
     <div class="pc-row-m pc-head"><span>Désignation</span><span>Achat HT</span><span>Vente HT</span><span>Marge</span><span>TVA</span><span>Unité</span><span></span></div>
     ${SERVICE_CATALOG.map((s,i)=>`
@@ -3071,10 +3089,19 @@ function renderParamPrestations(){
     </div>
   </div>`;
 }
-function renderParamMateriel(){
+function renderMaterielSection(){
+  const canEdit = canEditMod("materiel");
   const tvas = [0,5.5,10,20];
+  if(!canEdit){
+    return `
+    <div class="page-header"><div><h1>Matériel &amp; fournitures</h1><p>Tarifs proposés dans vos devis. Pour modifier les prix, demandez à la direction.</p></div></div>
+    <div class="card">
+      ${catalogSearchRow("matSearch")}
+      ${MATERIEL_CATALOG.map(m=>`<div class="row-item cat-item" data-search="${esc(m.label.toLowerCase())}"><div><div class="row-title">${esc(m.label)}</div><div class="row-sub">${esc(m.unite||"u")} · TVA ${m.tvaPct} %</div></div><div class="doc-row-amount">${fmtEuros(m.prixVenteCt||0)}</div></div>`).join("")}
+    </div>`;
+  }
   return `
-  <div class="page-header"><div><h1 style="font-size:20px">Matériel &amp; fournitures</h1><p>Le matériel se propose aussi dans les devis (à côté des prestations) : prix d’achat fournisseur, prix de revente au client, marge calculée automatiquement.</p></div></div>
+  <div class="page-header"><div><h1>Matériel &amp; fournitures</h1><p>Le matériel se propose aussi dans les devis (à côté des prestations) : prix d’achat fournisseur, prix de revente au client, marge calculée automatiquement.</p></div></div>
   <div class="card">
     <div class="pc-row-m pc-head"><span>Désignation</span><span>Achat HT</span><span>Vente HT</span><span>Marge</span><span>TVA</span><span>Unité</span><span></span></div>
     ${MATERIEL_CATALOG.map((m,i)=>`
@@ -3263,6 +3290,8 @@ const NAV_ICONS = {
   diagnostics:'<path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 13l2 2 4-4"/>',
   commercial:'<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
   documents:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
+  prestations:'<path d="M14.7 6.3a1 1 0 0 1 0 1.4l-6 6a1 1 0 0 1-1.4 0l-2.4-2.4a1 1 0 1 1 1.4-1.4L8 11.6l5.3-5.3a1 1 0 0 1 1.4 0z"/><path d="M21 12a9 9 0 1 1-9-9c1.9 0 3.6.6 5 1.7"/><path d="M21 4v5h-5"/>',
+  materiel:'<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>',
   parrainages:'<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5"/>',
   connexions:'<path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>',
   "client-preview":'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
@@ -3271,7 +3300,7 @@ const NAV_ICONS = {
   more:'<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>'
 };
 function navIcon(key){ return `<svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${NAV_ICONS[key]||NAV_ICONS.overview}</svg>`; }
-const SHORT_LABELS = {overview:"Accueil", dossiers:"Clients", agenda:"Agenda", entretiens:"Entretiens", diagnostics:"Diagnostics", commercial:"Suivi", documents:"Devis", parrainages:"Parrainage", connexions:"Liens", "client-preview":"Aperçu", client:"Mon espace", parametres:"Réglages"};
+const SHORT_LABELS = {overview:"Accueil", dossiers:"Clients", agenda:"Agenda", entretiens:"Entretiens", diagnostics:"Diagnostics", commercial:"Suivi", documents:"Devis", prestations:"Tarifs", materiel:"Matériel", parrainages:"Parrainage", connexions:"Liens", "client-preview":"Aperçu", client:"Mon espace", parametres:"Réglages"};
 function buildBottomNav(){
   const nav = navItems();
   const main = nav.slice(0, nav.length>5 ? 4 : nav.length);
@@ -3340,6 +3369,8 @@ function buildSection(){
     case "diagnostics": return renderDiagnosticsList();
     case "commercial": return renderCommercialKanban();
     case "documents": return renderDocuments();
+    case "prestations": return renderPrestationsSection();
+    case "materiel": return renderMaterielSection();
     case "parrainages": return renderParrainages();
     case "parametres": return state.role==="directeur" ? renderParametres() : renderOverview();
     case "connexions": return renderConnexions();
