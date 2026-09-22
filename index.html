@@ -683,6 +683,25 @@ a.btn-secondary{text-decoration:none;display:inline-flex;align-items:center}
 .pc-chip button{background:none;border:none;color:var(--muted);cursor:pointer;padding:0}
 @media (max-width:700px){.pc-row,.pc-anom{grid-template-columns:1fr 1fr}.pc-row input[type=text]:first-child{grid-column:1/-1}.pc-anom input:nth-child(3){grid-column:1/-1}}
 
+/* Prestations / Matériel : grille achat-vente-marge */
+.pc-row-m{display:grid;grid-template-columns:2fr 100px 100px 76px 74px 90px auto;gap:8px;align-items:center;margin-bottom:8px}
+.pc-row-m.pc-head{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted-dim);font-weight:700;margin-bottom:10px}
+.pc-row-m.pc-new{padding-top:10px;border-top:1px dashed var(--line);margin-top:4px}
+.pc-marge{text-align:center;padding:7px 4px;border-radius:8px;font-size:12.5px;font-weight:700}
+.pc-marge.green{color:var(--green);background:var(--green-bg)}
+.pc-marge.gold{color:var(--gold2);background:var(--gold-soft)}
+.pc-marge.red{color:var(--red);background:var(--red-bg)}
+.pc-marge.gray{color:var(--muted);background:var(--gray-bg)}
+@media (max-width:900px){
+  .pc-row-m{grid-template-columns:1fr 1fr 1fr;row-gap:6px}
+  .pc-row-m.pc-head{display:none}
+  .pc-row-m input[type=text]:first-child{grid-column:1/-1}
+  .pc-row-m .pc-marge{grid-column:span 1}
+}
+.marge-box{background:var(--gold-soft);border:1px solid var(--gold-line);border-radius:12px;padding:12px 14px;margin:14px 0}
+.marge-row{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13.5px;padding:3px 0}
+.marge-row b{font-size:15px}
+
 .pc-row input,.pc-row select,.inv-row input,.inv-row select,.pc-point input,.mat-input{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:9px;padding:10px 11px;font-size:13.5px;width:100%}
 .pc-row input:focus,.pc-row select:focus,.inv-row input:focus{outline:none;border-color:var(--gold-line)}
 </style>

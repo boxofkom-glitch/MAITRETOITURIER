@@ -416,17 +416,74 @@ const PARRAINAGES = [
 // ---------- Devis / Factures / Paiements (simulé, voir docs/erp/WORKFLOWS.md) ----------
 // Montants stockés en centimes (entiers) pour éviter le float naïf (spec §91).
 const SERVICE_CATALOG = [
-  { code:"COUV-TUILE", label:"Remplacement d’éléments de couverture", prixUnitaireCt:4500, tvaPct:10, unite:"u" },
-  { code:"COUV-FAIT", label:"Reprise de faîtage", prixUnitaireCt:38000, tvaPct:10, unite:"ml" },
-  { code:"ZING-GOUT", label:"Nettoyage et remise en état des gouttières", prixUnitaireCt:18000, tvaPct:10, unite:"forfait" },
-  { code:"ETAN-JOINT", label:"Reprise d’étanchéité (solin / noue)", prixUnitaireCt:32000, tvaPct:10, unite:"forfait" },
-  { code:"COUV-DEMOUSS", label:"Traitement anti-mousse de la couverture", prixUnitaireCt:22000, tvaPct:10, unite:"forfait" },
-  { code:"CHAR-REP", label:"Réparation localisée de charpente", prixUnitaireCt:65000, tvaPct:10, unite:"forfait" },
-  { code:"COUV-REFECTION", label:"Réfection complète de la couverture", prixUnitaireCt:850000, tvaPct:10, unite:"forfait" },
-  { code:"CONTROLE", label:"Visite de contrôle périodique", prixUnitaireCt:9000, tvaPct:20, unite:"forfait" }
+  { code:"COUV-TUILE", label:"Remplacement d’éléments de couverture", prixUnitaireCt:4500, prixAchatCt:1800, tvaPct:10, unite:"u" },
+  { code:"COUV-FAIT", label:"Reprise de faîtage", prixUnitaireCt:38000, prixAchatCt:16000, tvaPct:10, unite:"ml" },
+  { code:"ZING-GOUT", label:"Nettoyage et remise en état des gouttières", prixUnitaireCt:18000, prixAchatCt:7500, tvaPct:10, unite:"forfait" },
+  { code:"ETAN-JOINT", label:"Reprise d’étanchéité (solin / noue)", prixUnitaireCt:32000, prixAchatCt:14000, tvaPct:10, unite:"forfait" },
+  { code:"COUV-DEMOUSS", label:"Traitement anti-mousse de la couverture", prixUnitaireCt:22000, prixAchatCt:7000, tvaPct:10, unite:"forfait" },
+  { code:"CHAR-REP", label:"Réparation localisée de charpente", prixUnitaireCt:65000, prixAchatCt:32000, tvaPct:10, unite:"forfait" },
+  { code:"COUV-REFECTION", label:"Réfection complète de la couverture", prixUnitaireCt:850000, prixAchatCt:420000, tvaPct:10, unite:"forfait" },
+  { code:"CONTROLE", label:"Visite de contrôle périodique", prixUnitaireCt:9000, prixAchatCt:2500, tvaPct:20, unite:"forfait" },
+  { code:"VELUX-POSE", label:"Pose de fenêtre de toit (modèle standard)", prixUnitaireCt:120000, prixAchatCt:65000, tvaPct:10, unite:"u" },
+  { code:"VELUX-GM", label:"Pose de fenêtre de toit (grand modèle)", prixUnitaireCt:165000, prixAchatCt:95000, tvaPct:10, unite:"u" },
+  { code:"ISOL-COMBLES", label:"Isolation des combles perdus (soufflage)", prixUnitaireCt:4500, prixAchatCt:2200, tvaPct:5.5, unite:"m²" },
+  { code:"HYDROFUGE", label:"Traitement hydrofuge de la toiture", prixUnitaireCt:25000, prixAchatCt:9000, tvaPct:10, unite:"forfait" },
+  { code:"FUITE-REP", label:"Recherche et réparation de fuite ponctuelle", prixUnitaireCt:28000, prixAchatCt:9000, tvaPct:10, unite:"forfait" },
+  { code:"ECRAN-SST", label:"Pose d’écran de sous-toiture", prixUnitaireCt:4200, prixAchatCt:1900, tvaPct:10, unite:"m²" },
+  { code:"FAIT-VENT", label:"Pose de faîtière ventilée", prixUnitaireCt:42000, prixAchatCt:19000, tvaPct:10, unite:"ml" },
+  { code:"TRAPPE", label:"Création d’une trappe d’accès combles", prixUnitaireCt:32000, prixAchatCt:14000, tvaPct:10, unite:"u" },
+  { code:"ANTI-VOLA", label:"Pose de grille anti-volatiles", prixUnitaireCt:9000, prixAchatCt:3200, tvaPct:10, unite:"ml" },
+  { code:"ZING-REP", label:"Réparation ponctuelle de zinguerie", prixUnitaireCt:19000, prixAchatCt:7500, tvaPct:10, unite:"forfait" },
+  { code:"DEPLACEMENT", label:"Forfait déplacement / diagnostic d’urgence", prixUnitaireCt:9000, prixAchatCt:2000, tvaPct:20, unite:"forfait" },
+  { code:"MO-HEURE", label:"Main d’œuvre (heure supplémentaire)", prixUnitaireCt:6500, prixAchatCt:2800, tvaPct:10, unite:"h" },
+  { code:"RAMONAGE", label:"Entretien et ramonage de cheminée", prixUnitaireCt:8500, prixAchatCt:3000, tvaPct:10, unite:"u" }
 ];
+
+// Fournitures et matériaux : prix d’achat fournisseur, prix de revente au client, marge calculée automatiquement.
+const MATERIEL_CATALOG = [
+  { code:"MAT-TUILE-BETON", label:"Tuile béton (l’unité)", prixAchatCt:90, prixVenteCt:140, tvaPct:10, unite:"u" },
+  { code:"MAT-TUILE-TC", label:"Tuile terre cuite (l’unité)", prixAchatCt:130, prixVenteCt:195, tvaPct:10, unite:"u" },
+  { code:"MAT-ARDOISE-FIBRO", label:"Ardoise fibrociment (l’unité)", prixAchatCt:180, prixVenteCt:260, tvaPct:10, unite:"u" },
+  { code:"MAT-ARDOISE-NAT", label:"Ardoise naturelle (l’unité)", prixAchatCt:320, prixVenteCt:460, tvaPct:10, unite:"u" },
+  { code:"MAT-GOUT-PVC", label:"Gouttière PVC", prixAchatCt:850, prixVenteCt:1300, tvaPct:10, unite:"ml" },
+  { code:"MAT-GOUT-ZINC", label:"Gouttière zinc", prixAchatCt:2400, prixVenteCt:3600, tvaPct:10, unite:"ml" },
+  { code:"MAT-DESC-PVC", label:"Descente EP PVC", prixAchatCt:650, prixVenteCt:1000, tvaPct:10, unite:"ml" },
+  { code:"MAT-DESC-ZINC", label:"Descente EP zinc", prixAchatCt:1900, prixVenteCt:2900, tvaPct:10, unite:"ml" },
+  { code:"MAT-CHENEAU-ZINC", label:"Chéneau zinc", prixAchatCt:3800, prixVenteCt:5600, tvaPct:10, unite:"ml" },
+  { code:"MAT-CLOSOIR", label:"Closoir de faîtage", prixAchatCt:1200, prixVenteCt:1900, tvaPct:10, unite:"ml" },
+  { code:"MAT-FAITIERE", label:"Faîtière ventilée (l’unité)", prixAchatCt:1800, prixVenteCt:2800, tvaPct:10, unite:"u" },
+  { code:"MAT-ECRAN-HPV", label:"Écran de sous-toiture HPV", prixAchatCt:280, prixVenteCt:450, tvaPct:10, unite:"m²" },
+  { code:"MAT-EPDM", label:"Membrane EPDM", prixAchatCt:1400, prixVenteCt:2100, tvaPct:10, unite:"m²" },
+  { code:"MAT-BITUME", label:"Membrane bitumineuse", prixAchatCt:950, prixVenteCt:1500, tvaPct:10, unite:"m²" },
+  { code:"MAT-LAINE-VERRE", label:"Laine de verre (isolation combles)", prixAchatCt:450, prixVenteCt:750, tvaPct:5.5, unite:"m²" },
+  { code:"MAT-LAINE-ROCHE", label:"Laine de roche", prixAchatCt:520, prixVenteCt:850, tvaPct:5.5, unite:"m²" },
+  { code:"MAT-PARE-VAPEUR", label:"Pare-vapeur", prixAchatCt:180, prixVenteCt:290, tvaPct:10, unite:"m²" },
+  { code:"MAT-VELUX-STD", label:"Fenêtre de toit standard (78×98)", prixAchatCt:32000, prixVenteCt:45000, tvaPct:10, unite:"u" },
+  { code:"MAT-VELUX-GM", label:"Fenêtre de toit grand modèle (114×118)", prixAchatCt:48000, prixVenteCt:68000, tvaPct:10, unite:"u" },
+  { code:"MAT-CROCHET", label:"Crochets de tuile (lot de 100)", prixAchatCt:2200, prixVenteCt:3400, tvaPct:10, unite:"lot" },
+  { code:"MAT-VIS-CHARP", label:"Visserie charpente (la boîte)", prixAchatCt:1800, prixVenteCt:2800, tvaPct:10, unite:"boîte" },
+  { code:"MAT-CHEVRON", label:"Chevron traité", prixAchatCt:650, prixVenteCt:1050, tvaPct:10, unite:"ml" },
+  { code:"MAT-LITEAU", label:"Liteau traité", prixAchatCt:220, prixVenteCt:380, tvaPct:10, unite:"ml" },
+  { code:"MAT-PANNE", label:"Panne de charpente", prixAchatCt:1400, prixVenteCt:2200, tvaPct:10, unite:"ml" },
+  { code:"MAT-ANTIMOUSSE", label:"Produit anti-mousse (bidon 5 L)", prixAchatCt:2800, prixVenteCt:4500, tvaPct:10, unite:"bidon" },
+  { code:"MAT-HYDROFUGE", label:"Hydrofuge toiture (bidon 5 L)", prixAchatCt:3200, prixVenteCt:5200, tvaPct:10, unite:"bidon" },
+  { code:"MAT-GRILLE-VOLA", label:"Grille anti-volatiles", prixAchatCt:650, prixVenteCt:1050, tvaPct:10, unite:"ml" },
+  { code:"MAT-CRAPAUDINE", label:"Crapaudine PVC (l’unité)", prixAchatCt:450, prixVenteCt:750, tvaPct:10, unite:"u" },
+  { code:"MAT-MORTIER", label:"Mortier de faîtage (sac 25 kg)", prixAchatCt:1200, prixVenteCt:1900, tvaPct:10, unite:"sac" },
+  { code:"MAT-MASTIC", label:"Mastic silicone d’étanchéité (cartouche)", prixAchatCt:550, prixVenteCt:950, tvaPct:10, unite:"cartouche" }
+];
+// Un même code peut exister dans les deux catalogues : on cherche d’abord les prestations, puis le matériel.
+function catalogFind(code){ return SERVICE_CATALOG.find(x=>x.code===code) || MATERIEL_CATALOG.find(x=>x.code===code); }
+function catalogVenteCt(item){ return item.prixVenteCt!=null ? item.prixVenteCt : item.prixUnitaireCt; }
+function catalogLineFrom(item){ return freshDevisLine({designation:item.label, qte:1, prixUnitaireCt:catalogVenteCt(item), tvaPct:item.tvaPct, code:item.code, coutUnitaireCt:item.prixAchatCt||0}); }
+function catalogOptionsHtml(exclude){
+  const ex = exclude || [];
+  const opt = (c)=>`<option value="${c.code}">${esc(c.label)} — ${fmtEuros(catalogVenteCt(c))}</option>`;
+  return `<optgroup label="Prestations">${SERVICE_CATALOG.filter(c=>!ex.includes(c.code)).map(opt).join("")}</optgroup>`
+       + `<optgroup label="Matériel">${MATERIEL_CATALOG.filter(c=>!ex.includes(c.code)).map(opt).join("")}</optgroup>`;
+}
 function fmtEuros(ct){ return ((ct||0)/100).toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})+" €"; }
-function freshDevisLine(over){ return Object.assign({ designation:"", qte:1, prixUnitaireCt:0, tvaPct:10 }, over||{}); }
+function freshDevisLine(over){ return Object.assign({ designation:"", qte:1, prixUnitaireCt:0, tvaPct:10, coutUnitaireCt:0 }, over||{}); }
 function lineTotalHTct(l){ return Math.round((l.qte||0) * (l.prixUnitaireCt||0)); }
 function devisTotals(devis){
   let htCt=0, tvaCt=0;
@@ -436,6 +493,21 @@ function devisTotals(devis){
     tvaCt += Math.round(ht * (l.tvaPct||0) / 100);
   });
   return { htCt, tvaCt, ttcCt: htCt+tvaCt };
+}
+function devisCoutCt(dv){ return (dv&&dv.lignes||[]).reduce((s,l)=>s+Math.round((l.qte||0)*(l.coutUnitaireCt||0)),0); }
+function devisLignesSansCout(dv){ return (dv&&dv.lignes||[]).filter(l=>!l.coutUnitaireCt && l.prixUnitaireCt).length; }
+function devisMargeCt(dv){ return devisTotals(dv).htCt - devisCoutCt(dv); }
+function devisMargePct(dv){ const ht = devisTotals(dv).htCt; return ht>0 ? Math.round(devisMargeCt(dv)/ht*1000)/10 : null; }
+function canSeeMarge(){ return hasPermission("analytics.company.read"); }
+function margeBadgeCls(pct){ if(pct==null) return "gray"; if(pct>=40) return "green"; if(pct>=15) return "gold"; return "red"; }
+function devisMargeHtml(dv){
+  if(!canSeeMarge()) return "";
+  const pct = devisMargePct(dv), sans = devisLignesSansCout(dv);
+  return `<div class="marge-box">
+    <div class="marge-row"><span>Coût estimé (achat)</span><b>${fmtEuros(devisCoutCt(dv))}</b></div>
+    <div class="marge-row"><span>Marge prévisionnelle</span><b>${fmtEuros(devisMargeCt(dv))}</b> ${pct!=null?badge(pct+" %", margeBadgeCls(pct)):""}</div>
+    ${sans?`<p class="form-help" style="margin:6px 0 0">Estimation : ${sans} ligne(s) sans coût d’achat renseigné.</p>`:""}
+  </div>`;
 }
 function devisStatutCls(s){
   if(s==="Accepté") return "green";
@@ -1965,10 +2037,10 @@ function wzDevisStep(w, d){
   }
   if(w.step===2){
     const sugg = d ? diagSuggestions(d).filter(sg=>!x.lignes.some(l=>l.code===sg.code)) : [];
-    const catalogOptions = SERVICE_CATALOG.map(s=>`<option value="${s.code}">${esc(s.label)} — ${fmtEuros(s.prixUnitaireCt)}</option>`).join("");
-    return `<p class="wz-intro">Ajoutez les prestations : chaque ligne apparaîtra à l’identique sur le devis et sur les factures.</p>
+return `<p class="wz-intro">Ajoutez les prestations et le matériel : chaque ligne apparaîtra à l’identique sur le devis et sur les factures.</p>
       ${sugg.length ? `<div class="wz-sugg"><div class="wz-sugg-t">Suggéré d’après le diagnostic</div>${sugg.map(s=>{ const svc = SERVICE_CATALOG.find(c=>c.code===s.code); return `<button class="wz-chip" data-action="wz-add-sugg" data-code="${s.code}">+ ${esc(svc.label)} <small>${esc(s.reason)}</small></button>`; }).join("")}</div>` : ""}
-      <div class="wz-sugg"><div class="wz-sugg-t">Catalogue — touchez pour ajouter</div>${SERVICE_CATALOG.filter(c=>!x.lignes.some(l=>l.code===c.code)).map(c=>`<button class="wz-chip" data-action="wz-add-sugg" data-code="${c.code}">+ ${esc(c.label)} <small>${fmtEuros(c.prixUnitaireCt)}</small></button>`).join("")}</div>
+      <div class="wz-sugg"><div class="wz-sugg-t">Prestations — touchez pour ajouter</div>${SERVICE_CATALOG.filter(c=>!x.lignes.some(l=>l.code===c.code)).map(c=>`<button class="wz-chip" data-action="wz-add-sugg" data-code="${c.code}">+ ${esc(c.label)} <small>${fmtEuros(c.prixUnitaireCt)}</small></button>`).join("")}</div>
+      <div class="wz-sugg"><div class="wz-sugg-t">Matériel — touchez pour ajouter</div>${MATERIEL_CATALOG.filter(c=>!x.lignes.some(l=>l.code===c.code)).map(c=>`<button class="wz-chip" data-action="wz-add-sugg" data-code="${c.code}">+ ${esc(c.label)} <small>${fmtEuros(catalogVenteCt(c))}</small></button>`).join("")}</div>
       <div class="wz-lines">
         <div class="wz-line-head"><span>Désignation</span><span>Qté</span><span>PU HT €</span><span>TVA</span><span>Total HT</span><span></span></div>
         ${x.lignes.map((l,i)=>`<div class="wz-line-row">
@@ -1981,7 +2053,7 @@ function wzDevisStep(w, d){
         </div>`).join("")}
       </div>
       <div class="wz-addbar"><button class="btn-secondary btn-sm" data-action="wz-add-line">+ Ligne libre</button>
-        <select id="wzCatalog"><option value="">+ Ajouter depuis le catalogue…</option>${catalogOptions}</select></div>
+        <select id="wzCatalog"><option value="">+ Ajouter depuis le catalogue…</option>${catalogOptionsHtml(x.lignes.map(l=>l.code))}</select></div>
       <div class="wz-totals" id="wzTotals">${wzTotalsHtml(wzDevisFromData())}</div>`;
   }
   if(w.step===3){
@@ -2005,6 +2077,7 @@ function wzDevisStep(w, d){
       <div class="wz-recap-row"><span>Validité</span><b>${x.validite} jours</b></div>
     </div>
     <div class="wz-totals">${wzTotalsHtml(dvLike)}</div>
+    ${devisMargeHtml(dvLike)}
     <div class="wz-preview"><div class="wz-sugg-t">Conditions de règlement</div>${wzScheduleHtml(dvLike)}</div>`;
 }
 
@@ -2445,8 +2518,10 @@ function modalMailSend(m){
 }
 
 // Onglet Paramètres › E-mails
-const PARAM_EXTRA_TABS = [["perso","Personnalisation"],["donnees","Données"],["emails","E-mails"]];
+const PARAM_EXTRA_TABS = [["prestations","Prestations"],["materiel","Matériel"],["perso","Personnalisation"],["donnees","Données"],["emails","E-mails"]];
 function renderParamExtra(tab){
+  if(tab==="prestations") return renderParamPrestations();
+  if(tab==="materiel") return renderParamMateriel();
   if(tab==="perso") return renderParamPerso();
   if(tab==="donnees") return renderParamDonnees();
   if(tab!=="emails") return "";
@@ -2503,7 +2578,7 @@ async function loadPersisted(){
 
 // ---------- Personnalisation sans développeur (catalogue, paiements, diagnostic) ----------
 const CUSTOM_KEY = "mt_custom_v1";
-function customObj(){ return {catalogue:SERVICE_CATALOG, payModes:PAY_MODES, points:POINTS, pointAnoms:POINT_ANOMALIES, vocab:ANOMALY_VOCAB}; }
+function customObj(){ return {catalogue:SERVICE_CATALOG, materiel:MATERIEL_CATALOG, payModes:PAY_MODES, points:POINTS, pointAnoms:POINT_ANOMALIES, vocab:ANOMALY_VOCAB}; }
 function saveCustom(){
   try{ localStorage.setItem(CUSTOM_KEY, JSON.stringify(customObj())); }catch(e){}
   if(typeof SRV!=="undefined" && SRV.on) srvSettingsSoon();
@@ -2511,7 +2586,7 @@ function saveCustom(){
 function applyCustom(c){
   if(!c) return;
   const fill = (arr, src)=>{ if(Array.isArray(src) && src.length){ arr.length = 0; src.forEach(x=>arr.push(x)); } };
-  fill(SERVICE_CATALOG, c.catalogue); fill(PAY_MODES, c.payModes); fill(POINTS, c.points);
+  fill(SERVICE_CATALOG, c.catalogue); fill(MATERIEL_CATALOG, c.materiel); fill(PAY_MODES, c.payModes); fill(POINTS, c.points);
   if(c.pointAnoms){ Object.keys(POINT_ANOMALIES).forEach(k=>delete POINT_ANOMALIES[k]); Object.assign(POINT_ANOMALIES, c.pointAnoms); }
   if(c.vocab) Object.assign(ANOMALY_VOCAB, c.vocab);
 }
@@ -2527,41 +2602,36 @@ function ensurePoints(){
 function persoChange(el){
   const [kind, key, field] = el.dataset.pc.split("|");
   const v = el.value;
+  let rerender = false;
   if(kind==="cat"){
     const s = SERVICE_CATALOG[parseInt(key,10)]; if(!s) return;
     if(field==="label") s.label = v.trim() || s.label;
-    else if(field==="prix") s.prixUnitaireCt = Math.round((parseFloat(v)||0)*100);
+    else if(field==="vente"){ s.prixUnitaireCt = Math.round((parseFloat(v)||0)*100); rerender = true; }
+    else if(field==="achat"){ s.prixAchatCt = Math.round((parseFloat(v)||0)*100); rerender = true; }
     else if(field==="tva") s.tvaPct = parseFloat(v)||0;
     else if(field==="unite") s.unite = v.trim() || "forfait";
+  } else if(kind==="mat"){
+    const m = MATERIEL_CATALOG[parseInt(key,10)]; if(!m) return;
+    if(field==="label") m.label = v.trim() || m.label;
+    else if(field==="vente"){ m.prixVenteCt = Math.round((parseFloat(v)||0)*100); rerender = true; }
+    else if(field==="achat"){ m.prixAchatCt = Math.round((parseFloat(v)||0)*100); rerender = true; }
+    else if(field==="tva") m.tvaPct = parseFloat(v)||0;
+    else if(field==="unite") m.unite = v.trim() || "u";
   } else if(kind==="anom"){
     const a = ANOMALY_VOCAB[key]; if(!a) return;
     if(field==="label") a.label = v.trim() || a.label; else if(field==="icon") a.icon = v.trim() || a.icon; else if(field==="risk") a.risk = v.trim() || a.risk;
   }
-  saveCustom(); showToast("Enregistré.");
+  saveCustom();
+  if(rerender) render(); else showToast("Enregistré.");
+}
+function margeRow(achatCt, venteCt){
+  const pct = venteCt>0 ? Math.round((venteCt-achatCt)/venteCt*1000)/10 : null;
+  return `<div class="pc-marge ${margeBadgeCls(pct)}">${pct!=null ? pct+" %" : "—"}</div>`;
 }
 
 function renderParamPerso(){
   const tvas = [0,5.5,10,20];
   return `
-  <div class="card">
-    <div class="card-header"><h3>Catalogue produits et prestations</h3></div>
-    <p class="form-help" style="margin:0 0 12px">Ces lignes sont proposées dans les devis et les factures. Modifiez un prix ou un nom : c’est enregistré immédiatement (les devis déjà créés gardent leurs prix).</p>
-    ${SERVICE_CATALOG.map((s,i)=>`
-    <div class="pc-row">
-      <input type="text" value="${esc(s.label)}" data-pc="cat|${i}|label" aria-label="Nom">
-      <input type="number" step="0.01" min="0" value="${(s.prixUnitaireCt/100).toFixed(2)}" data-pc="cat|${i}|prix" aria-label="Prix HT">
-      <select data-pc="cat|${i}|tva" aria-label="TVA">${tvas.map(t=>`<option value="${t}" ${s.tvaPct===t?"selected":""}>${t} %</option>`).join("")}</select>
-      <input type="text" value="${esc(s.unite||"forfait")}" data-pc="cat|${i}|unite" aria-label="Unité" style="max-width:90px">
-      <button class="btn-ghost btn-sm" data-action="perso-del-cat" data-idx="${i}">✕</button>
-    </div>`).join("")}
-    <div class="pc-row pc-new">
-      <input type="text" id="pcNewLabel" placeholder="Nouveau produit ou prestation…">
-      <input type="number" step="0.01" min="0" id="pcNewPrix" placeholder="Prix HT €">
-      <select id="pcNewTva">${tvas.map(t=>`<option value="${t}" ${t===10?"selected":""}>${t} %</option>`).join("")}</select>
-      <input type="text" id="pcNewUnite" placeholder="Unité" value="forfait" style="max-width:90px">
-      <button class="btn-primary btn-sm" data-action="perso-add-cat">+ Ajouter</button>
-    </div>
-  </div>
   <div class="card">
     <div class="card-header"><h3>Moyens de paiement</h3></div>
     <div class="chip-list">${PAY_MODES.map((m,i)=>`<span class="pc-chip">${esc(m)} <button data-action="perso-del-pay" data-idx="${i}" aria-label="Retirer">✕</button></span>`).join("")}</div>
@@ -2974,6 +3044,60 @@ async function srvSetupSubmit(){
   catch(e){ state.loginMsg = e.message; render(); }
 }
 
+function renderParamPrestations(){
+  const tvas = [0,5.5,10,20];
+  return `
+  <div class="page-header"><div><h1 style="font-size:20px">Prestations</h1><p>Le prix de vente apparaît sur les devis et les factures. Le prix d’achat (coût interne — matériel + main-d’œuvre) sert uniquement au calcul de votre marge, jamais montré au client.</p></div></div>
+  <div class="card">
+    <div class="pc-row-m pc-head"><span>Désignation</span><span>Achat HT</span><span>Vente HT</span><span>Marge</span><span>TVA</span><span>Unité</span><span></span></div>
+    ${SERVICE_CATALOG.map((s,i)=>`
+    <div class="pc-row-m">
+      <input type="text" value="${esc(s.label)}" data-pc="cat|${i}|label" aria-label="Nom">
+      <input type="number" step="0.01" min="0" value="${((s.prixAchatCt||0)/100).toFixed(2)}" data-pc="cat|${i}|achat" aria-label="Prix d’achat HT">
+      <input type="number" step="0.01" min="0" value="${(s.prixUnitaireCt/100).toFixed(2)}" data-pc="cat|${i}|vente" aria-label="Prix de vente HT">
+      ${margeRow(s.prixAchatCt||0, s.prixUnitaireCt||0)}
+      <select data-pc="cat|${i}|tva" aria-label="TVA">${tvas.map(t=>`<option value="${t}" ${s.tvaPct===t?"selected":""}>${t} %</option>`).join("")}</select>
+      <input type="text" value="${esc(s.unite||"forfait")}" data-pc="cat|${i}|unite" aria-label="Unité">
+      <button class="btn-ghost btn-sm" data-action="perso-del-cat" data-idx="${i}">✕</button>
+    </div>`).join("")}
+    <div class="pc-row-m pc-new">
+      <input type="text" id="pcNewLabel" placeholder="Nouvelle prestation…">
+      <input type="number" step="0.01" min="0" id="pcNewAchat" placeholder="Achat €">
+      <input type="number" step="0.01" min="0" id="pcNewVente" placeholder="Vente €">
+      <span></span>
+      <select id="pcNewTva">${tvas.map(t=>`<option value="${t}" ${t===10?"selected":""}>${t} %</option>`).join("")}</select>
+      <input type="text" id="pcNewUnite" placeholder="Unité" value="forfait">
+      <button class="btn-primary btn-sm" data-action="perso-add-cat">+ Ajouter</button>
+    </div>
+  </div>`;
+}
+function renderParamMateriel(){
+  const tvas = [0,5.5,10,20];
+  return `
+  <div class="page-header"><div><h1 style="font-size:20px">Matériel &amp; fournitures</h1><p>Le matériel se propose aussi dans les devis (à côté des prestations) : prix d’achat fournisseur, prix de revente au client, marge calculée automatiquement.</p></div></div>
+  <div class="card">
+    <div class="pc-row-m pc-head"><span>Désignation</span><span>Achat HT</span><span>Vente HT</span><span>Marge</span><span>TVA</span><span>Unité</span><span></span></div>
+    ${MATERIEL_CATALOG.map((m,i)=>`
+    <div class="pc-row-m">
+      <input type="text" value="${esc(m.label)}" data-pc="mat|${i}|label" aria-label="Nom">
+      <input type="number" step="0.01" min="0" value="${((m.prixAchatCt||0)/100).toFixed(2)}" data-pc="mat|${i}|achat" aria-label="Prix d’achat HT">
+      <input type="number" step="0.01" min="0" value="${((m.prixVenteCt||0)/100).toFixed(2)}" data-pc="mat|${i}|vente" aria-label="Prix de vente HT">
+      ${margeRow(m.prixAchatCt||0, m.prixVenteCt||0)}
+      <select data-pc="mat|${i}|tva" aria-label="TVA">${tvas.map(t=>`<option value="${t}" ${m.tvaPct===t?"selected":""}>${t} %</option>`).join("")}</select>
+      <input type="text" value="${esc(m.unite||"u")}" data-pc="mat|${i}|unite" aria-label="Unité">
+      <button class="btn-ghost btn-sm" data-action="perso-del-mat" data-idx="${i}">✕</button>
+    </div>`).join("")}
+    <div class="pc-row-m pc-new">
+      <input type="text" id="matNewLabel" placeholder="Nouveau matériau ou fourniture…">
+      <input type="number" step="0.01" min="0" id="matNewAchat" placeholder="Achat €">
+      <input type="number" step="0.01" min="0" id="matNewVente" placeholder="Vente €">
+      <span></span>
+      <select id="matNewTva">${tvas.map(t=>`<option value="${t}" ${t===10?"selected":""}>${t} %</option>`).join("")}</select>
+      <input type="text" id="matNewUnite" placeholder="Unité" value="u">
+      <button class="btn-primary btn-sm" data-action="perso-add-mat">+ Ajouter</button>
+    </div>
+  </div>`;
+}
 function empStatutBadge(e){ return badge(e.statut==="actif"?"Actif":"Suspendu", e.statut==="actif"?"green":"gray"); }
 
 function paramEquipe(){
@@ -4347,8 +4471,6 @@ function renderFactureCard(d, f){
 function renderDossierDevis(d){
   const dv = latestDevis(d);
   const canEditDv = (!dv || dv.statut==="Brouillon") && hasPermission("quote.update");
-  const catalogOptions = SERVICE_CATALOG.map(s=>`<option value="${s.code}">${esc(s.label)} — ${fmtEuros(s.prixUnitaireCt)}</option>`).join("");
-
   let devisBlock;
   if(!dv){
     devisBlock = `
@@ -4384,13 +4506,14 @@ function renderDossierDevis(d){
         ${canEditDv?`
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0">
           <button class="btn-secondary btn-sm" data-action="devis-add-line" data-id="${d.id}">+ Ligne libre</button>
-          <select id="devisCatalogSel" data-id="${d.id}" style="max-width:300px"><option value="">+ Ajouter depuis le catalogue…</option>${catalogOptions}</select>
+          <select id="devisCatalogSel" data-id="${d.id}" style="max-width:300px"><option value="">+ Ajouter depuis le catalogue…</option>${catalogOptionsHtml(dv.lignes.map(l=>l.code))}</select>
         </div>`:""}
         <div class="devis-totals">
           <div>Total HT <b>${fmtEuros(totals.htCt)}</b></div>
           <div>TVA <b>${fmtEuros(totals.tvaCt)}</b></div>
           <div>Total TTC <b>${fmtEuros(totals.ttcCt)}</b></div>
         </div>
+        ${devisMargeHtml(dv)}
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
           ${canEditDv?`<button class="btn-primary btn-sm" data-action="devis-save" data-id="${d.id}">Enregistrer</button>`:""}
           ${dv.statut==="Brouillon" && hasPermission("quote.update")?`<button class="btn-secondary btn-sm" data-action="devis-send" data-id="${d.id}">Marquer comme envoyé</button>`:""}
@@ -5649,9 +5772,20 @@ document.addEventListener("DOMContentLoaded", ()=>{
     }
     if(action==="perso-add-cat"){
       const label = document.getElementById("pcNewLabel").value.trim();
-      if(!label){ showToast("Donnez un nom au produit ou à la prestation."); return; }
-      SERVICE_CATALOG.push({code:"CUS-"+Date.now().toString(36).toUpperCase(), label, prixUnitaireCt:Math.round((parseFloat(document.getElementById("pcNewPrix").value)||0)*100), tvaPct:parseFloat(document.getElementById("pcNewTva").value)||0, unite:document.getElementById("pcNewUnite").value.trim()||"forfait"});
-      saveCustom(); showToast("Ajouté au catalogue."); render(); return;
+      if(!label){ showToast("Donnez un nom à la prestation."); return; }
+      SERVICE_CATALOG.push({code:"CUS-"+Date.now().toString(36).toUpperCase(), label, prixAchatCt:Math.round((parseFloat(document.getElementById("pcNewAchat").value)||0)*100), prixUnitaireCt:Math.round((parseFloat(document.getElementById("pcNewVente").value)||0)*100), tvaPct:parseFloat(document.getElementById("pcNewTva").value)||0, unite:document.getElementById("pcNewUnite").value.trim()||"forfait"});
+      saveCustom(); showToast("Prestation ajoutée."); render(); return;
+    }
+    if(action==="perso-add-mat"){
+      const label = document.getElementById("matNewLabel").value.trim();
+      if(!label){ showToast("Donnez un nom au matériau ou à la fourniture."); return; }
+      MATERIEL_CATALOG.push({code:"CUSM-"+Date.now().toString(36).toUpperCase(), label, prixAchatCt:Math.round((parseFloat(document.getElementById("matNewAchat").value)||0)*100), prixVenteCt:Math.round((parseFloat(document.getElementById("matNewVente").value)||0)*100), tvaPct:parseFloat(document.getElementById("matNewTva").value)||0, unite:document.getElementById("matNewUnite").value.trim()||"u"});
+      saveCustom(); showToast("Matériel ajouté."); render(); return;
+    }
+    if(action==="perso-del-mat"){
+      const i = parseInt(t.dataset.idx,10), mv = MATERIEL_CATALOG[i];
+      askConfirm("Retirer ce matériel ?", "« "+mv.label+" » ne sera plus proposable dans les devis. Les devis déjà créés ne changent pas.", ()=>{ MATERIEL_CATALOG.splice(i,1); saveCustom(); });
+      return;
     }
     if(action==="perso-del-cat"){
       const i = parseInt(t.dataset.idx,10), sv = SERVICE_CATALOG[i];
@@ -5741,9 +5875,10 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(action==="wz-remove-line"){ wzFlush(); const ls = state.wizard.data.lignes; ls.splice(parseInt(t.dataset.idx,10),1); if(!ls.length) ls.push(freshDevisLine()); render(); return; }
     if(action==="wz-add-sugg"){
       wzFlush();
-      const svc = SERVICE_CATALOG.find(c=>c.code===t.dataset.code);
+      const svc = catalogFind(t.dataset.code);
+      if(!svc){ render(); return; }
       const ls = state.wizard.data.lignes;
-      const line = freshDevisLine({designation:svc.label, qte:1, prixUnitaireCt:svc.prixUnitaireCt, tvaPct:svc.tvaPct, code:svc.code});
+      const line = catalogLineFrom(svc);
       if(ls.length===1 && !ls[0].designation && !ls[0].prixUnitaireCt) ls[0] = line; else ls.push(line);
       render(); return;
     }
@@ -5865,10 +6000,10 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(e.target.classList && e.target.classList.contains("wz-line")){ wzFlush(); wzUpdateLive(); return; }
     if(e.target.id==="wzCatalog"){
       wzFlush();
-      const svc = SERVICE_CATALOG.find(c=>c.code===e.target.value);
+      const svc = catalogFind(e.target.value);
       if(svc){
         const ls = state.wizard.data.lignes;
-        const line = freshDevisLine({designation:svc.label, qte:1, prixUnitaireCt:svc.prixUnitaireCt, tvaPct:svc.tvaPct, code:svc.code});
+        const line = catalogLineFrom(svc);
         if(ls.length===1 && !ls[0].designation && !ls[0].prixUnitaireCt) ls[0] = line; else ls.push(line);
       }
       render(); return;
@@ -5877,8 +6012,8 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const code = e.target.value;
       if(code){
         const d = byId(e.target.dataset.id);
-        const svc = SERVICE_CATALOG.find(s=>s.code===code);
-        latestDevis(d).lignes.push(freshDevisLine({designation:svc.label, qte:1, prixUnitaireCt:svc.prixUnitaireCt, tvaPct:svc.tvaPct}));
+        const svc = catalogFind(code);
+        if(svc) latestDevis(d).lignes.push(catalogLineFrom(svc));
       }
       render();
     }
