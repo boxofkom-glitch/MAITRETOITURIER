@@ -7,14 +7,21 @@ module.exports = L.wrap(async (req, res)=>{
   const st = a.settings, isDir = a.user.role==="directeur";
   if(req.method==="GET") return L.send(res, 200, {settings:L.sanitizeSettings(st, a.user)});
   if(req.method!=="POST") return L.send(res, 405, {error:"Méthode non autorisée."});
-  if(!isDir) return L.send(res, 403, {error:"Réservé au directeur."});
   const b = L.body(req);
+  if(b.action==="materiel"){
+    if(!Array.isArray(b.lib)) return L.send(res, 400, {error:"Bibliothèque invalide."});
+    st.materielLib = b.lib.slice(0,60).map(l=>({id:String(l.id).slice(0,40), label:String(l.label).slice(0,80), items:(l.items||[]).slice(0,80).map(x=>String(x).slice(0,120))}));
+    await L.setJson("mt:settings", st);
+    return L.send(res, 200, {ok:true});
+  }
+  if(!isDir) return L.send(res, 403, {error:"Réservé au directeur."});
 
   if(b.action==="put"){
     const inc = b.settings || {};
     if(inc.access) st.access = inc.access;
     if(inc.company) st.company = inc.company;
     if(inc.materielLib) st.materielLib = inc.materielLib;
+    if(inc.custom) st.custom = inc.custom;
     if(inc.invitations) st.invitations = inc.invitations;
     if(inc.resets) st.resets = inc.resets;
     // équipe : modifier ou supprimer des comptes existants ; jamais en créer, jamais toucher aux mots de passe

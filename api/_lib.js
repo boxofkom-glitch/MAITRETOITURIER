@@ -73,7 +73,7 @@ function publicUser(e){ return {id:e.id, nom:e.nom, email:e.email, role:e.role, 
 function sanitizeSettings(st, user){
   const out = {
     employees: (st.employees||[]).map(e=>({id:e.id, nom:e.nom, email:e.email, telephone:e.telephone||"", poste:e.poste||"", role:e.role, statut:e.statut, ajoute:e.ajoute||""})),
-    access: st.access, company: st.company, materielLib: st.materielLib
+    access: st.access, company: st.company, materielLib: st.materielLib, custom: st.custom||null
   };
   if(user && user.role==="directeur"){
     out.requests = (st.requests||[]).map(r=>({id:r.id, nom:r.nom, email:r.email, telephone:r.telephone||"", poste:r.poste||"", date:r.date, statut:r.statut}));

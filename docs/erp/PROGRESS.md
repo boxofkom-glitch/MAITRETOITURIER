@@ -76,3 +76,32 @@ voir DECISIONS.md D1) · `[!]` BLOCKED_EXTERNAL
 - Personnalisation (catalogue, moyens de paiement, points de contrôle et réponses du diagnostic), persistance IndexedDB, sauvegarde/restauration JSON, import CSV, base vierge.
 - Blueprint produit complet dans docs/blueprint/ (7 parties, index 00_INDEX.md).
 - RBAC : voir Paramètres › Accès par rôle (matrice par niveau) — RBAC_MATRIX.md est obsolète.
+
+## Session du 2026-09-23 — serveur opérationnel (comptes réels, données partagées)
+- Ajout d'un vrai backend (`api/` : auth.js, data.js, settings.js, media.js, _lib.js) sur Vercel
+  Functions + Redis (Upstash/Vercel KV) : comptes avec mots de passe chiffrés (scrypt), sessions
+  signées, dossiers stockés par ID avec numéro de révision (contrôle de concurrence optimiste),
+  photos stockées à part et compressées à l'envoi, réglages (équipe, accès, entreprise,
+  personnalisation, bibliothèque matériel) synchronisés.
+- Client (`app.js`) : mode serveur détecté via `/api/health` ; si configuré, toute la démo
+  (dossiers fictifs, sélecteur de profil, bouton « réinitialiser ») disparaît automatiquement au
+  profit d'un vrai écran de connexion / première configuration. Chaque modification (diagnostic,
+  devis, facture, paiement, chantier, matériel...) est poussée au serveur ~900 ms après la
+  dernière frappe, sans bouton "Enregistrer" ; lecture au démarrage + sondage toutes les 20 s +
+  après chaque envoi. Conflits résolus par dossier (celui qui arrive après une modification
+  concurrente reçoit la version serveur + un message, jamais un écrasement silencieux).
+  Suppression réservée à directeur/admin.
+- `dev-server.js` : serveur de développement local avec un faux Redis en mémoire, pour tester tout
+  le flux serveur sans dépendance externe (`node dev-server.js`).
+- Correction : les e-mails de marque ne fabriquaient plus de faux domaine
+  (`@maitretoiturier.fr`) par défaut — n'affichent désormais que les coordonnées réellement
+  saisies dans Paramètres → Entreprise.
+- Testé de bout en bout en local (serveur de dev) : création du compte directeur, inscription
+  d'un technicien, acceptation avec rôle, permissions (technicien refusé sur les réglages),
+  modification d'un diagnostic/devis sans clic "Enregistrer", déconnexion puis reconnexion,
+  **rechargement complet de page** : toutes les données sont conservées. Conflit simulé entre deux
+  connexions : résolu proprement.
+- **Reste à faire pour que ce soit actif en production** : connecter une base Upstash Redis au
+  projet Vercel (2 clics dans leur tableau de bord — étapes dans
+  `docs/DEPLOIEMENT_SERVEUR.md`, hors de portée de cette session car cela demande un accès au
+  compte Vercel de l'utilisateur).

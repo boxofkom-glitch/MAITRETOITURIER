@@ -571,7 +571,7 @@ function loadSettings(){
     });
   }catch(e){}
 }
-function saveSettings(){ try{ localStorage.setItem(SETTINGS_KEY, JSON.stringify(SETTINGS)); }catch(e){} }
+function saveSettings(){ if(typeof SRV!=="undefined" && SRV.on){ srvSettingsSoon(); return; } try{ localStorage.setItem(SETTINGS_KEY, JSON.stringify(SETTINGS)); }catch(e){} }
 loadSettings();
 
 function accessLevel(role, mod){
@@ -673,6 +673,12 @@ function enterAs(userId){
 }
 
 async function doLogin(){
+  if(SRV.on){
+    const em = (document.getElementById("loginEmail").value||"").trim().toLowerCase(), pw = document.getElementById("loginPwd").value||"";
+    state.loginEmail = em;
+    try{ await srvAuthCall({action:"login", email:em, password:pw}); }catch(e){ state.loginMsg = e.message; render(); }
+    return;
+  }
   const email = (document.getElementById("loginEmail").value||"").trim().toLowerCase();
   const pwd = document.getElementById("loginPwd").value||"";
   state.loginEmail = email;
@@ -699,8 +705,13 @@ async function doSignup(){
   state.signup = {nom, email, tel, poste};
   if(!nom || !email){ state.signupMsg = "Indiquez votre nom et votre e-mail."; render(); return; }
   if(!/^\S+@\S+\.\S+$/.test(email)){ state.signupMsg = "Cette adresse e-mail n’est pas valide."; render(); return; }
-  if(pwd.length<6){ state.signupMsg = "Le mot de passe doit contenir au moins 6 caractères."; render(); return; }
+  if(pwd.length<8){ state.signupMsg = "Le mot de passe doit contenir au moins 8 caractères."; render(); return; }
   if(pwd!==pwd2){ state.signupMsg = "Les deux mots de passe ne correspondent pas."; render(); return; }
+  if(SRV.on){
+    try{ await srvApi("auth", "POST", {action:"signup", nom, email, tel, poste, password:pwd}); state.signupMsg = ""; state.appStage = "signup-done"; }
+    catch(e){ state.signupMsg = e.message; }
+    render(); return;
+  }
   if(SETTINGS.employees.some(e=>e.email.toLowerCase()===email) || SETTINGS.requests.some(r=>r.email.toLowerCase()===email && r.statut!=="refusé")){
     state.signupMsg = "Un accès existe déjà pour cette adresse e-mail."; render(); return;
   }
@@ -2182,6 +2193,7 @@ function buildSplash(){
 
 // ---------- Connexion, inscription salarié ----------
 function buildLogin(){
+  if(SRV.on) return buildLoginServer();
   const opts = SETTINGS.employees.filter(e=>e.statut==="actif").map(e=>`<option value="${e.id}" ${state.userId===e.id?"selected":""}>${esc(e.nom)} · ${esc(ROLES[e.role].label)}</option>`).join("") + `<option value="CLIENT">Marie Laurent · Client</option>`;
   return `
   <div class="login-screen">
@@ -2223,6 +2235,22 @@ function modalChgPwd(){
     <div class="form-field"><label>Nouveau mot de passe</label><input type="password" id="npPwd" autocomplete="new-password"></div>
     <div class="form-field"><label>Confirmer</label><input type="password" id="npPwd2" autocomplete="new-password"></div>
     <div class="modal-actions"><button class="btn-primary" data-action="chgpwd-save">Enregistrer</button></div>`);
+}
+function buildLoginServer(){
+  return `
+  <div class="login-screen">
+    <div class="login-card">
+      <img class="login-logo" src="assets/logo-full.png" alt="Maître Toiturier">
+      <h1>Connexion à votre espace</h1>
+      <p>Connectez-vous avec votre e-mail professionnel.</p>
+      <div class="form-field"><label>E-mail</label><input type="email" id="loginEmail" value="${esc(state.loginEmail||"")}" autocomplete="username" placeholder="prenom.nom@entreprise.fr"></div>
+      <div class="form-field"><label>Mot de passe</label><input type="password" id="loginPwd" autocomplete="current-password"></div>
+      ${state.loginMsg ? `<div class="login-msg">${esc(state.loginMsg)}</div>` : ""}
+      <button class="btn-primary login-submit" data-action="login-submit">Se connecter</button>
+      <button class="link-btn login-link" data-action="goto-forgot">Mot de passe oublié ?</button>
+      <button class="link-btn login-link" data-action="goto-signup">Nouveau salarié ? Créer mon accès</button>
+    </div>
+  </div>`;
 }
 function buildSignup(){
   const s = state.signup || {};
@@ -2282,7 +2310,7 @@ function renderParametres(){
 function siteBase(){ return location.origin + location.pathname.replace(/[^/]*$/, ""); }
 function mailBrand(){
   const c = SETTINGS.company || {};
-  return {nom:c.nom||"Maître Toiturier", tel:c.telephone||"", email:c.email||"contact@maitretoiturier.fr", site:c.site||"www.maitretoiturier.fr"};
+  return {nom:c.nom||"Maître Toiturier", tel:c.telephone||"", email:c.email||"", site:c.site||""};
 }
 function mailSign(){
   const b = mailBrand();
@@ -2384,12 +2412,12 @@ function buildEmail(id, vars){
     <p style="margin:0 0 26px;font-size:15px;font-weight:700;color:#111">${esc(mailSign())}</p>
   </td></tr>
   <tr><td style="background:#0b0b0b;padding:20px 32px;text-align:center;font-size:12px;line-height:1.7;color:#b7ae9c">
-    <span style="color:#d4af37;font-weight:700">${esc(b.nom)}</span><br>${b.tel?esc(b.tel)+" · ":""}${esc(b.email)}<br>${esc(b.site)}
+    <span style="color:#d4af37;font-weight:700">${esc(b.nom)}</span><br>${[b.tel,b.email,b.site].filter(Boolean).map(esc).join(" · ")}
   </td></tr>
 </table>
 <p style="margin:14px 0 0;font-size:11px;color:#9a9282">Cet e-mail vous a été envoyé par ${esc(b.nom)}.</p>
 </td></tr></table></body></html>`;
-  const text = [m.title, ""].concat(m.paras.map(p=> typeof p==="string" ? p : p.rows.map(([k,v])=>k+" : "+v).join("\n"))).concat(m.cta&&m.cta.url?["", m.cta.label+" : "+m.cta.url]:[]).concat(m.note?["", m.note]:[]).concat(["", "Cordialement,", mailSign(), b.nom+(b.tel?" · "+b.tel:"")+" · "+b.email]).join("\n");
+  const text = [m.title, ""].concat(m.paras.map(p=> typeof p==="string" ? p : p.rows.map(([k,v])=>k+" : "+v).join("\n"))).concat(m.cta&&m.cta.url?["", m.cta.label+" : "+m.cta.url]:[]).concat(m.note?["", m.note]:[]).concat(["", "Cordialement,", mailSign(), [b.nom,b.tel,b.email].filter(Boolean).join(" · ")]).join("\n");
   return {subject:m.subject, html, text};
 }
 
@@ -2454,6 +2482,7 @@ async function idbGet(k){
   return new Promise((res, rej)=>{ const tx = db.transaction("kv","readonly"); const q = tx.objectStore("kv").get(k); q.onsuccess = ()=>res(q.result); q.onerror = ()=>rej(q.error); });
 }
 function scheduleSave(){
+  if(typeof SRV!=="undefined" && SRV.on){ srvSchedule(); return; }
   if(!PERSIST_READY) return;
   clearTimeout(SAVE_TIMER);
   SAVE_TIMER = setTimeout(()=>{ idbSet("data", {v:DATA_VERSION, dossiers:DOSSIERS, contracts:CONTRACTS, parrainages:PARRAINAGES}).catch(()=>{}); }, 700);
@@ -2474,18 +2503,20 @@ async function loadPersisted(){
 
 // ---------- Personnalisation sans développeur (catalogue, paiements, diagnostic) ----------
 const CUSTOM_KEY = "mt_custom_v1";
+function customObj(){ return {catalogue:SERVICE_CATALOG, payModes:PAY_MODES, points:POINTS, pointAnoms:POINT_ANOMALIES, vocab:ANOMALY_VOCAB}; }
 function saveCustom(){
-  try{ localStorage.setItem(CUSTOM_KEY, JSON.stringify({catalogue:SERVICE_CATALOG, payModes:PAY_MODES, points:POINTS, pointAnoms:POINT_ANOMALIES, vocab:ANOMALY_VOCAB})); }catch(e){}
+  try{ localStorage.setItem(CUSTOM_KEY, JSON.stringify(customObj())); }catch(e){}
+  if(typeof SRV!=="undefined" && SRV.on) srvSettingsSoon();
+}
+function applyCustom(c){
+  if(!c) return;
+  const fill = (arr, src)=>{ if(Array.isArray(src) && src.length){ arr.length = 0; src.forEach(x=>arr.push(x)); } };
+  fill(SERVICE_CATALOG, c.catalogue); fill(PAY_MODES, c.payModes); fill(POINTS, c.points);
+  if(c.pointAnoms){ Object.keys(POINT_ANOMALIES).forEach(k=>delete POINT_ANOMALIES[k]); Object.assign(POINT_ANOMALIES, c.pointAnoms); }
+  if(c.vocab) Object.assign(ANOMALY_VOCAB, c.vocab);
 }
 function loadCustom(){
-  try{
-    const c = JSON.parse(localStorage.getItem(CUSTOM_KEY) || "null");
-    if(!c) return;
-    const fill = (arr, src)=>{ if(Array.isArray(src) && src.length){ arr.length = 0; src.forEach(x=>arr.push(x)); } };
-    fill(SERVICE_CATALOG, c.catalogue); fill(PAY_MODES, c.payModes); fill(POINTS, c.points);
-    if(c.pointAnoms){ Object.keys(POINT_ANOMALIES).forEach(k=>delete POINT_ANOMALIES[k]); Object.assign(POINT_ANOMALIES, c.pointAnoms); }
-    if(c.vocab) Object.assign(ANOMALY_VOCAB, c.vocab);
-  }catch(e){}
+  try{ applyCustom(JSON.parse(localStorage.getItem(CUSTOM_KEY) || "null")); }catch(e){}
 }
 function ensurePoints(){
   DOSSIERS.forEach(d=>{
@@ -2583,6 +2614,7 @@ function renderParamDonnees(){
     <div class="card-header"><h3>Repartir d’une base vierge</h3></div>
     <p class="form-help" style="margin:0 0 12px">Supprime tous les dossiers, contrats et parrainages de démonstration pour commencer avec vos vrais clients. Réglages, équipe et personnalisation sont conservés. Pensez à exporter une sauvegarde avant.</p>
     <button class="btn-danger" data-action="data-clear">Effacer les données de démonstration</button>
+    ${SRV.on ? `<button class="btn-secondary" style="margin-left:8px" data-action="demo-load">Charger des dossiers de démonstration</button>` : ""}
   </div>`;
 }
 function norm(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z]/g,""); }
@@ -2663,6 +2695,283 @@ function importBackupFile(file){
     }catch(e){ showToast("Ce fichier n’est pas une sauvegarde Maître Toiturier valide."); }
   };
   reader.readAsText(file, "utf-8");
+}
+
+// ---------- Mode serveur : comptes réels, données partagées par toute l'équipe ----------
+// Actif seulement si /api/health répond « configured ». Sinon l'application reste en mode démonstration local.
+const SRV = {on:false, token:null, user:null, snap:{}, revs:{}, since:0, lists:{contracts:0, parrainages:0}, listSnap:{}, dirty:false, pushing:false, timer:null, settingsTimer:null, needsSetup:false, poll:null, fetching:false, lastRender:0};
+const SRV_TOKEN_KEY = "mt_token";
+function srvSer(x){ return JSON.stringify(x, (k,v)=> k==="dataUrl" ? undefined : v); }
+
+async function srvApi(path, method, body){
+  const r = await fetch("/api/"+path, {method:method||"GET", headers:Object.assign({"Content-Type":"application/json"}, SRV.token ? {Authorization:"Bearer "+SRV.token} : {}), body: body ? JSON.stringify(body) : undefined});
+  let j = {}; try{ j = await r.json(); }catch(e){}
+  if(r.status===401 && SRV.token && !/^auth/.test(path)) srvLogout("Session expirée : reconnectez-vous.");
+  if(!r.ok) throw Object.assign(new Error(j.error || "Connexion au serveur impossible."), {status:r.status});
+  return j;
+}
+
+// ---- photos : envoyées à part (réduites), les dossiers ne contiennent que des références ----
+function srvWalk(o, fn, depth){
+  depth = depth||0;
+  if(!o || typeof o!=="object" || depth>8) return;
+  if(Array.isArray(o)){ o.forEach(x=>srvWalk(x, fn, depth+1)); return; }
+  if(typeof o.dataUrl==="string" || o.mediaId) fn(o);
+  Object.keys(o).forEach(k=>{ if(k!=="dataUrl") srvWalk(o[k], fn, depth+1); });
+}
+function srvShrink(dataUrl){
+  if(dataUrl.length<800000) return Promise.resolve(dataUrl);
+  return new Promise(res=>{
+    const im = new Image();
+    im.onload = ()=>{
+      let max = 1600, q = .82, out = dataUrl;
+      for(let i=0;i<6;i++){
+        const w = Math.min(max, im.naturalWidth), h = Math.round(im.naturalHeight*w/im.naturalWidth);
+        const c = document.createElement("canvas"); c.width = w; c.height = h;
+        c.getContext("2d").drawImage(im, 0, 0, w, h);
+        out = c.toDataURL("image/jpeg", q);
+        if(out.length<800000) break;
+        max = Math.round(max*.8); q = Math.max(.6, q-.05);
+      }
+      res(out);
+    };
+    im.onerror = ()=>res(dataUrl);
+    im.src = dataUrl;
+  });
+}
+async function srvUploadPhotos(d){
+  const todo = [];
+  srvWalk(d, o=>{ if(typeof o.dataUrl==="string" && !o.mediaId) todo.push(o); });
+  for(const o of todo){
+    const small = await srvShrink(o.dataUrl);
+    const r = await srvApi("media", "POST", {dataUrl:small});
+    o.mediaId = r.id;
+  }
+}
+async function srvFetchMedia(){
+  if(SRV.fetching) return;
+  SRV.fetching = true;
+  try{
+    const todo = [];
+    DOSSIERS.forEach(d=>srvWalk(d, o=>{ if(o.mediaId && !o.dataUrl) todo.push(o); }));
+    for(let i=0;i<todo.length;i+=3){
+      await Promise.all(todo.slice(i, i+3).map(async o=>{ try{ const r = await srvApi("media?id="+o.mediaId); o.dataUrl = r.dataUrl; }catch(e){} }));
+    }
+    if(todo.length && srvCanRender()) render();
+  }finally{ SRV.fetching = false; }
+}
+function srvCanRender(){
+  const a = document.activeElement;
+  return !state.modal && !state.wizard && !(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));
+}
+
+// ---- application des données reçues ----
+function srvPutDossier(it, force){
+  const i = DOSSIERS.findIndex(d=>d.id===it.id);
+  const local = i>=0 ? DOSSIERS[i] : null;
+  if(!force){
+    if(local && srvSer(local)!==SRV.snap[it.id]) return false;      // modifications locales en attente
+    if(local && (SRV.revs[it.id]||0) >= it.rev) return false;
+  }
+  const media = {};
+  if(local) srvWalk(local, o=>{ if(o.mediaId && o.dataUrl) media[o.mediaId] = o.dataUrl; });
+  const nd = JSON.parse(JSON.stringify(it.data));
+  srvWalk(nd, o=>{ if(o.mediaId && media[o.mediaId]) o.dataUrl = media[o.mediaId]; });
+  if(i>=0) DOSSIERS[i] = nd; else DOSSIERS.push(nd);
+  SRV.snap[it.id] = srvSer(it.data === undefined ? nd : it.data); SRV.revs[it.id] = it.rev;
+  return true;
+}
+function srvApplyData(res, full){
+  let changed = 0;
+  if(full){ DOSSIERS = []; SRV.snap = {}; SRV.revs = {}; }
+  res.dossiers.forEach(it=>{ if(srvPutDossier(it)) changed++; });
+  (res.deleted||[]).forEach(id=>{
+    const i = DOSSIERS.findIndex(d=>d.id===id);
+    if(i>=0 && srvSer(DOSSIERS[i])===SRV.snap[id]){ DOSSIERS.splice(i,1); changed++; }
+    delete SRV.snap[id]; delete SRV.revs[id];
+  });
+  ["contracts","parrainages"].forEach(n=>{
+    const arr = n==="contracts" ? CONTRACTS : PARRAINAGES, src = res[n];
+    if(!src) return;
+    if(full || (src.rev > SRV.lists[n] && srvSer(arr)===SRV.listSnap[n])){
+      arr.length = 0; (src.data||[]).forEach(x=>arr.push(x));
+      SRV.lists[n] = src.rev; SRV.listSnap[n] = srvSer(arr); changed++;
+    }
+  });
+  if(full) DOSSIERS.forEach(d=>{ SRV.snap[d.id] = SRV.snap[d.id] || srvSer(d); });
+  SRV.since = res.now;
+  return changed;
+}
+function srvApplySettings(s){
+  if(!s) return false;
+  const before = JSON.stringify([SETTINGS.employees, SETTINGS.requests, SETTINGS.access, SETTINGS.company, SETTINGS.materielLib, SETTINGS.invitations, SETTINGS.resets]);
+  const base = defaultSettings();
+  SETTINGS = Object.assign(base, {
+    employees: s.employees||[], requests: s.requests||[], invitations: s.invitations||[], resets: s.resets||[],
+    access: Object.assign({}, base.access, s.access||{}), company: Object.assign(base.company, s.company||{}), materielLib: s.materielLib || base.materielLib
+  });
+  CONFIG_ROLES.forEach(r=>{ SETTINGS.access[r] = Object.assign({}, DEFAULT_ACCESS[r], SETTINGS.access[r]||{}); });
+  if(s.custom){ applyCustom(s.custom); }
+  ensurePoints();
+  return before !== JSON.stringify([SETTINGS.employees, SETTINGS.requests, SETTINGS.access, SETTINGS.company, SETTINGS.materielLib, SETTINGS.invitations, SETTINGS.resets]);
+}
+async function srvLoad(full){
+  const res = await srvApi("data" + (full ? "" : "?since="+Math.max(1, SRV.since-3000)));
+  const n = srvApplyData(res, full);
+  const s = SRV.settingsTimer ? false : srvApplySettings(res.settings);
+  ensurePoints();
+  srvFetchMedia();
+  return n>0 || s;
+}
+
+// ---- envoi des modifications (par dossier, avec contrôle de révision) ----
+function srvSchedule(){
+  if(!SRV.on || !SRV.user) return;
+  clearTimeout(SRV.timer);
+  SRV.timer = setTimeout(srvPush, 900);
+}
+async function srvPush(){
+  if(!SRV.on || !SRV.user) return;
+  if(SRV.pushing){ SRV.dirty = true; return; }
+  SRV.pushing = true;
+  try{
+    const changed = [];
+    DOSSIERS.forEach(d=>{ if(SRV.snap[d.id]!==srvSer(d)) changed.push(d); });
+    const deletes = Object.keys(SRV.snap).filter(id=>!DOSSIERS.some(d=>d.id===id));
+    const lists = {};
+    ["contracts","parrainages"].forEach(n=>{
+      const arr = n==="contracts" ? CONTRACTS : PARRAINAGES, s = srvSer(arr);
+      if(SRV.listSnap[n]!==s) lists[n] = {baseRev:SRV.lists[n], data:JSON.parse(s), s};
+    });
+    if(!changed.length && !deletes.length && !Object.keys(lists).length) return;
+    for(const d of changed) await srvUploadPhotos(d);
+    const ser = {};
+    const items = changed.map(d=>{ const s = srvSer(d); ser[d.id] = s; return {id:d.id, baseRev:SRV.revs[d.id]||0, data:JSON.parse(s)}; });
+    const payload = {dossiers:items, deletes};
+    Object.keys(lists).forEach(n=>{ payload[n] = {baseRev:lists[n].baseRev, data:lists[n].data}; });
+    const res = await srvApi("data", "POST", payload);
+    let conflicts = 0, denied = false;
+    res.results.forEach(r=>{
+      if(r.conflict){
+        conflicts++;
+        if(r.data) srvPutDossier({id:r.id, rev:r.rev, data:r.data}, true);
+        else { const i = DOSSIERS.findIndex(d=>d.id===r.id); if(i>=0) DOSSIERS.splice(i,1); delete SRV.snap[r.id]; }
+      } else if(r.denied) denied = true;
+      else if(r.deleted){ delete SRV.snap[r.id]; delete SRV.revs[r.id]; }
+      else { SRV.revs[r.id] = r.rev; SRV.snap[r.id] = ser[r.id]; }
+    });
+    Object.keys(res.lists||{}).forEach(n=>{
+      const r = res.lists[n], arr = n==="contracts" ? CONTRACTS : PARRAINAGES;
+      if(r.conflict){ arr.length = 0; (r.data||[]).forEach(x=>arr.push(x)); conflicts++; SRV.lists[n] = r.rev; SRV.listSnap[n] = srvSer(arr); }
+      else { SRV.lists[n] = r.rev; SRV.listSnap[n] = lists[n].s; }
+    });
+    if(denied){ await srvLoad(true); showToast("Suppression réservée à la direction et à l’administration."); render(); }
+    else if(conflicts){ showToast("Un collègue a modifié "+(conflicts>1?"des éléments":"un élément")+" en même temps : version à jour rechargée."); render(); }
+  }catch(e){
+    if(e.status!==401) SRV.dirty = true;
+    if(e.status && e.status!==401) showToast("Enregistrement impossible : "+e.message);
+  }finally{
+    SRV.pushing = false;
+    if(SRV.dirty){ SRV.dirty = false; SRV.timer = setTimeout(srvPush, 4000); }
+  }
+}
+function srvSettingsSoon(){
+  if(!SRV.on || !SRV.user) return;
+  clearTimeout(SRV.settingsTimer);
+  SRV.settingsTimer = setTimeout(async ()=>{
+    SRV.settingsTimer = null;
+    try{
+      if(SRV.user.role==="directeur"){
+        await srvApi("settings", "POST", {action:"put", settings:{employees:SETTINGS.employees, access:SETTINGS.access, company:SETTINGS.company, materielLib:SETTINGS.materielLib, invitations:SETTINGS.invitations, resets:SETTINGS.resets, custom:customObj()}});
+      } else {
+        await srvApi("settings", "POST", {action:"materiel", lib:SETTINGS.materielLib});
+      }
+    }catch(e){ showToast(e.message); }
+  }, 500);
+}
+
+// ---- session ----
+async function srvPull(){
+  if(!SRV.on || !SRV.user || SRV.pushing || document.hidden) return;
+  try{
+    if(await srvLoad(false) && srvCanRender()) render();
+  }catch(e){}
+}
+function srvStartPolling(){
+  clearInterval(SRV.poll);
+  SRV.poll = setInterval(srvPull, 20000);
+  document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) srvPull(); });
+}
+async function srvEnter(user){
+  SRV.user = user;
+  await srvLoad(true);
+  state.userId = user.id; state.role = user.role;
+  state.dossierId = null; state.section = firstSection(); state.appStage = "app"; state.loginMsg = "";
+  if(user.mustChange) state.modal = {type:"chgpwd"};
+  render();
+  srvStartPolling();
+}
+function srvLogout(msg){
+  clearInterval(SRV.poll); clearTimeout(SRV.timer);
+  SRV.token = null; SRV.user = null; SRV.snap = {}; SRV.revs = {};
+  try{ localStorage.removeItem(SRV_TOKEN_KEY); }catch(e){}
+  DOSSIERS = []; CONTRACTS.length = 0; PARRAINAGES.length = 0;
+  state.appStage = "login"; state.loginMsg = msg||""; state.modal = null; state.dossierId = null;
+  render();
+}
+async function srvBoot(){
+  try{
+    const h = await fetch("/api/health").then(r=>r.json());
+    if(!h || !h.configured) return;
+    SRV.on = true; SRV.needsSetup = !!h.needsSetup;
+    DOSSIERS = []; CONTRACTS.length = 0; PARRAINAGES.length = 0;
+    SETTINGS.employees = []; SETTINGS.requests = [];
+    try{ SRV.token = localStorage.getItem(SRV_TOKEN_KEY); }catch(e){}
+    if(SRV.token){
+      try{
+        const m = await srvApi("auth", "POST", {action:"me"});
+        await srvEnter(m.user); return;
+      }catch(e){ SRV.token = null; try{ localStorage.removeItem(SRV_TOKEN_KEY); }catch(x){} }
+    }
+    if(state.appStage==="login") state.appStage = SRV.needsSetup ? "setup" : "login";
+    render();
+  }catch(e){}
+}
+async function srvAuthCall(body){
+  const r = await srvApi("auth", "POST", body);
+  SRV.token = r.token;
+  try{ localStorage.setItem(SRV_TOKEN_KEY, r.token); }catch(e){}
+  await srvEnter(r.user);
+}
+function buildSetup(){
+  const s = state.setup || {};
+  return `
+  <div class="login-screen">
+    <div class="login-card">
+      <img class="login-logo" src="assets/logo-full.png" alt="Maître Toiturier">
+      <h1>Bienvenue : créons votre espace</h1>
+      <p>Première ouverture : créez le compte du directeur. Vous inviterez ensuite votre équipe.</p>
+      <div class="form-field"><label>Nom de l’entreprise</label><input type="text" id="stCompany" value="${esc(s.company||"")}" placeholder="Ex. Martin Couverture"></div>
+      <div class="form-field"><label>Votre nom et prénom</label><input type="text" id="stNom" value="${esc(s.nom||"")}" autocomplete="name"></div>
+      <div class="form-field"><label>Votre e-mail</label><input type="email" id="stEmail" value="${esc(s.email||"")}" autocomplete="username"></div>
+      <div class="form-field"><label>Mot de passe (8 caractères minimum)</label><input type="password" id="stPwd" autocomplete="new-password"></div>
+      <div class="form-field"><label>Confirmer le mot de passe</label><input type="password" id="stPwd2" autocomplete="new-password"></div>
+      ${state.loginMsg ? `<div class="login-msg">${esc(state.loginMsg)}</div>` : ""}
+      <button class="btn-primary login-submit" data-action="setup-submit">Créer mon espace</button>
+    </div>
+  </div>`;
+}
+function buildLoading(){ return `<div class="splash"><div class="splash-body"><img class="splash-logo" src="assets/logo-full.png" alt="Maître Toiturier"><p style="color:var(--muted)">Chargement…</p></div></div>`; }
+async function srvSetupSubmit(){
+  const v = id=>(document.getElementById(id).value||"").trim();
+  const nom = v("stNom"), email = v("stEmail").toLowerCase(), company = v("stCompany");
+  const pwd = document.getElementById("stPwd").value, pwd2 = document.getElementById("stPwd2").value;
+  state.setup = {nom, email, company};
+  if(!nom || !/^\S+@\S+\.\S+$/.test(email)){ state.loginMsg = "Indiquez votre nom et une adresse e-mail valide."; render(); return; }
+  if(pwd.length<8){ state.loginMsg = "Le mot de passe doit contenir au moins 8 caractères."; render(); return; }
+  if(pwd!==pwd2){ state.loginMsg = "Les deux mots de passe ne correspondent pas."; render(); return; }
+  try{ await srvAuthCall({action:"setup", nom, email, password:pwd, company}); }
+  catch(e){ state.loginMsg = e.message; render(); }
 }
 
 function empStatutBadge(e){ return badge(e.statut==="actif"?"Actif":"Suspendu", e.statut==="actif"?"green":"gray"); }
@@ -2766,7 +3075,17 @@ function inviteMail(iv){
   const lien = siteBase()+"?inscription=1&email="+encodeURIComponent(iv.email)+(iv.nom?"&nom="+encodeURIComponent(iv.nom):"");
   openMailSend("invitation_salarie", {nom:iv.nom, role:ROLES[iv.role].label, inviteur:currentName(), lien}, iv.email, "");
 }
-function acceptRequest(rid){
+async function acceptRequest(rid){
+  if(SRV.on){
+    const r = SETTINGS.requests.find(x=>x.id===rid), role = document.getElementById("reqRole-"+rid).value;
+    try{
+      await srvApi("settings", "POST", {action:"accept", rid, role});
+      await srvLoad(true);
+      showToast(r.nom+" a maintenant accès en tant que "+ROLES[role].label.toLowerCase()+".");
+      openMailSend("acces_accepte", {nom:r.nom.split(" ")[0], role:ROLES[role].label, lien:siteBase()}, r.email, r.telephone);
+    }catch(e){ showToast(e.message); }
+    return;
+  }
   const r = SETTINGS.requests.find(x=>x.id===rid);
   const role = document.getElementById("reqRole-"+rid).value;
   const id = "E"+(SETTINGS.employees.reduce((m,e)=>Math.max(m, parseInt(e.id.slice(1),10)||0),0)+1);
@@ -2781,6 +3100,8 @@ function acceptRequest(rid){
 function buildApp(){
   if(state.appStage==="splash") return buildSplash();
   if(state.appStage==="login") return buildLogin();
+  if(state.appStage==="loading") return buildLoading();
+  if(state.appStage==="setup") return buildSetup();
   if(state.appStage==="signup") return buildSignup();
   if(state.appStage==="forgot") return buildForgot();
   if(state.appStage==="signup-done") return buildSignupDone();
@@ -2790,7 +3111,7 @@ function buildApp(){
       ${buildSidebar()}
       <div class="main">
         ${buildTopbar()}
-        <div class="disclaimer">Démo interactive · Données fictives, modifications conservées jusqu’au rechargement · Rôles simulés · Aucun e-mail envoyé</div>
+        <div class="disclaimer">${SRV.on ? "Espace de travail · données enregistrées sur le serveur, partagées avec votre équipe" : "Démo interactive · Données fictives, modifications conservées jusqu’au rechargement · Rôles simulés · Aucun e-mail envoyé"}</div>
         <div class="content">${renderClientPortal("Marie Laurent")}</div>
       </div>
       ${state.modal ? buildModal() : ""}
@@ -2801,7 +3122,7 @@ function buildApp(){
     ${buildSidebar()}
     <div class="main">
       ${buildTopbar()}
-      <div class="disclaimer">Démo interactive · Données fictives, modifications conservées jusqu’au rechargement · Rôles simulés · Aucun e-mail envoyé</div>
+      <div class="disclaimer">${SRV.on ? "Espace de travail · données enregistrées sur le serveur, partagées avec votre équipe" : "Démo interactive · Données fictives, modifications conservées jusqu’au rechargement · Rôles simulés · Aucun e-mail envoyé"}</div>
       <div class="content">${buildSection()}</div>
     </div>
     ${buildBottomNav()}
@@ -2858,7 +3179,7 @@ function buildSidebar(){
     <div class="sidebar-footer">
       <div>Maître Toiturier</div>
       <div>Démonstration métier</div>
-      <button class="reset-btn" data-action="reset-demo">Réinitialiser la démo</button>
+      ${SRV.on ? "" : `<button class="reset-btn" data-action="reset-demo">Réinitialiser la démo</button>`}
     </div>
   </div>`;
 }
@@ -2876,8 +3197,8 @@ function buildTopbar(){
       </div>
     </div>
     <div class="topbar-right">
-      <div class="demo-tag">Vue démo</div>
-      <select class="role-select" id="profileSelect">${roleOptions}</select>
+      ${SRV.on ? `<button class="btn-ghost btn-sm" data-action="logout">Déconnexion</button>` : `<div class="demo-tag">Vue démo</div>
+      <select class="role-select" id="profileSelect">${roleOptions}</select>`}
       <div class="avatar">${esc(initials(currentName()))}</div>
     </div>
   </div>`;
@@ -4880,7 +5201,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
   loadCustom();
   ensurePoints();
   render();
-  loadPersisted().then(()=>render());
+  srvBoot().then(()=>{ if(!SRV.on) loadPersisted().then(()=>render()); });
   window.addEventListener("resize", applyPdfScale);
 
   document.getElementById("app").addEventListener("click", (e)=>{
@@ -4895,12 +5216,27 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(action==="open-app"){
       state.splashExiting = true;
       render();
-      setTimeout(()=>{ state.appStage="login"; state.splashExiting=false; render(); }, 650);
+      setTimeout(()=>{ state.appStage = (SRV.on && SRV.needsSetup) ? "setup" : "login"; state.splashExiting=false; render(); }, 650);
+      return;
+    }
+    if(action==="setup-submit"){ srvSetupSubmit(); return; }
+    if(action==="logout"){ srvLogout(""); return; }
+    if(action==="demo-load"){
+      askConfirm("Charger les dossiers de démonstration ?", "Des dossiers fictifs seront ajoutés pour tester l’application. Vous pourrez les effacer ensuite (onglet Données).", ()=>{
+        seedDossiers().forEach(d=>{ if(!DOSSIERS.some(x=>x.id===d.id)) DOSSIERS.push(d); });
+      }, "Charger", "btn-primary");
       return;
     }
     if(action==="do-login"){ enterAs(document.getElementById("loginRole").value); render(); return; }
     if(action==="login-submit"){ doLogin(); return; }
     if(action==="goto-forgot"){ state.appStage="forgot"; state.loginMsg=""; render(); return; }
+    if(action==="forgot-submit" && SRV.on){
+      const em = (document.getElementById("fgEmail").value||"").trim().toLowerCase();
+      if(!/^\S+@\S+\.\S+$/.test(em)){ state.loginMsg = "Indiquez une adresse e-mail valide."; render(); return; }
+      state.loginEmail = em;
+      srvApi("auth", "POST", {action:"forgot", email:em}).catch(()=>{}).then(()=>{ state.loginMsg = "Demande enregistrée. Si cette adresse correspond à un compte, la direction vous enverra un mot de passe temporaire."; render(); });
+      return;
+    }
     if(action==="forgot-submit"){
       const em = (document.getElementById("fgEmail").value||"").trim().toLowerCase();
       if(!/^\S+@\S+\.\S+$/.test(em)){ state.loginMsg = "Indiquez une adresse e-mail valide."; render(); return; }
@@ -4923,6 +5259,11 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(action==="emp-reset"){
       const e = SETTINGS.employees.find(x=>x.id===t.dataset.eid);
       askConfirm("Réinitialiser le mot de passe ?", "Un mot de passe temporaire sera généré pour "+e.nom+" ; il devra en choisir un nouveau à sa prochaine connexion.", async ()=>{
+        if(SRV.on){
+          try{ const r = await srvApi("settings", "POST", {action:"resetpw", eid:e.id}); await srvLoad(true); openMailSend("reinit_mdp", {nom:e.nom.split(" ")[0], mdp:r.password, lien:siteBase()}, e.email, e.telephone); }
+          catch(x){ showToast(x.message); }
+          return;
+        }
         const tmp = Array.from(crypto.getRandomValues(new Uint8Array(8))).map(b=>"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"[b%54]).join("");
         e.pwdHash = await hashPwd(tmp); e.mustChange = true;
         (SETTINGS.resets||[]).forEach(r=>{ if(r.email.toLowerCase()===e.email.toLowerCase()) r.statut = "traité"; });
@@ -4933,8 +5274,9 @@ document.addEventListener("DOMContentLoaded", ()=>{
     }
     if(action==="chgpwd-save"){
       const a = document.getElementById("npPwd").value, b = document.getElementById("npPwd2").value;
-      if(a.length<6){ showToast("Au moins 6 caractères."); return; }
+      if(a.length<8){ showToast("Au moins 8 caractères."); return; }
       if(a!==b){ showToast("Les deux mots de passe ne correspondent pas."); return; }
+      if(SRV.on){ srvApi("auth", "POST", {action:"changepwd", password:a}).then(()=>{ state.modal = null; render(); showToast("Mot de passe enregistré."); }).catch(e=>showToast(e.message)); return; }
       const u = currentUser(); hashPwd(a).then(h=>{ u.pwdHash = h; u.mustChange = false; saveSettings(); state.modal = null; render(); showToast("Mot de passe enregistré."); });
       return;
     }
@@ -4960,7 +5302,9 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(action==="req-refuse"){
       const rid = t.dataset.rid;
       askConfirm("Refuser cette demande ?", "La personne ne pourra pas se connecter. Elle pourra refaire une demande.", ()=>{
-        const r = SETTINGS.requests.find(x=>x.id===rid); r.statut = "refusé"; saveSettings(); showToast("Demande refusée.");
+        const r = SETTINGS.requests.find(x=>x.id===rid); r.statut = "refusé";
+        if(SRV.on) srvApi("settings", "POST", {action:"refuse", rid}).catch(e=>showToast(e.message)); else saveSettings();
+        showToast("Demande refusée.");
       }, "Refuser");
       return;
     }
