@@ -27,7 +27,7 @@ process.env.KV_REST_API_URL = "http://localhost:"+PORT+"/__kv";
 process.env.KV_REST_API_TOKEN = "dev";
 
 const api = {};
-["health","auth","data","settings","media"].forEach(n=>{ api[n] = require("./api/"+n+".js"); });
+["health","auth","data","settings","media","mail"].forEach(n=>{ api[n] = require("./api/"+n+".js"); });
 const MIME = {".html":"text/html; charset=utf-8", ".js":"text/javascript; charset=utf-8", ".css":"text/css", ".png":"image/png", ".jpg":"image/jpeg", ".json":"application/json", ".svg":"image/svg+xml", ".ico":"image/x-icon", ".webmanifest":"application/manifest+json"};
 
 http.createServer((req, res)=>{

@@ -2514,17 +2514,23 @@ function modalMailSend(m){
   const label = EMAIL_TEMPLATES[m.tpl].label;
   const mailto = "mailto:"+encodeURIComponent(m.to||"")+"?subject="+encodeURIComponent(e.subject)+"&body="+encodeURIComponent(e.text);
   const wa = m.phone ? "https://wa.me/"+m.phone.replace(/\D/g,"").replace(/^0/,"33")+"?text="+encodeURIComponent(e.subject+"\n\n"+e.text) : "";
+  const canAuto = SRV.on && SRV.mail && !!m.to;
+  const footnote = canAuto
+    ? "L’e-mail part directement depuis notre serveur, à l’adresse indiquée ci-dessus."
+    : (SRV.on ? "Envoi automatique non configuré pour cette adresse (voir docs/EMAILS_AUTOMATIQUES.md) : le message s’ouvre prêt à partir dans votre messagerie." : "Aucun envoi automatique depuis cette démo : le message s’ouvre prêt à partir dans votre messagerie (version texte) ; le HTML de marque ci-dessus est copiable pour un service d’e-mail.");
   return modalWrap(label, `
     <p class="form-help" style="margin:0 0 10px">${m.to?"Destinataire : <b>"+esc(m.to)+"</b> · ":""}Objet : <b>${esc(e.subject)}</b></p>
     <iframe class="mail-frame" sandbox="" srcdoc="${esc(e.html)}"></iframe>
+    ${m.sent ? `<div class="mail-sent-ok">✓ E-mail envoyé à ${esc(m.to)}</div>` : ""}
     <div class="modal-actions" style="flex-wrap:wrap">
-      <a class="btn-primary btn-sm" href="${mailto}" style="text-decoration:none;display:inline-block">Ouvrir dans ma messagerie</a>
+      ${canAuto && !m.sent ? `<button class="btn-primary btn-sm" data-action="mail-send-auto" ${m.sending?"disabled":""}>${m.sending?"Envoi en cours…":"Envoyer par e-mail"}</button>` : ""}
+      <a class="${canAuto?"btn-secondary":"btn-primary"} btn-sm" href="${mailto}" style="text-decoration:none;display:inline-block">Ouvrir dans ma messagerie</a>
       ${wa?`<a class="btn-secondary btn-sm" href="${wa}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">WhatsApp</a>`:""}
       <button class="btn-secondary btn-sm" data-action="mail-copy-html">Copier le HTML</button>
       <button class="btn-secondary btn-sm" data-action="mail-download">Télécharger</button>
       <button class="btn-ghost btn-sm" data-action="modal-close">Fermer</button>
     </div>
-    <p class="form-help" style="margin-top:10px">Aucun envoi automatique depuis cette démo : le message s’ouvre prêt à partir dans votre messagerie (version texte) ; le HTML de marque ci-dessus est copiable pour un service d’e-mail.</p>`);
+    <p class="form-help" style="margin-top:10px">${footnote}</p>`);
 }
 
 // Onglet Paramètres › E-mails
@@ -2777,7 +2783,7 @@ function importBackupFile(file){
 
 // ---------- Mode serveur : comptes réels, données partagées par toute l'équipe ----------
 // Actif seulement si /api/health répond « configured ». Sinon l'application reste en mode démonstration local.
-const SRV = {on:false, token:null, user:null, snap:{}, revs:{}, since:0, lists:{contracts:0, parrainages:0}, listSnap:{}, dirty:false, pushing:false, timer:null, settingsTimer:null, needsSetup:false, poll:null, fetching:false, lastRender:0};
+const SRV = {on:false, token:null, user:null, snap:{}, revs:{}, since:0, lists:{contracts:0, parrainages:0}, listSnap:{}, dirty:false, pushing:false, timer:null, settingsTimer:null, needsSetup:false, mail:false, poll:null, fetching:false, lastRender:0};
 const SRV_TOKEN_KEY = "mt_token";
 function srvSer(x){ return JSON.stringify(x, (k,v)=> k==="dataUrl" ? undefined : v); }
 
@@ -3001,7 +3007,7 @@ async function srvBoot(){
   try{
     const h = await fetch("/api/health").then(r=>r.json());
     if(!h || !h.configured) return;
-    SRV.on = true; SRV.needsSetup = !!h.needsSetup;
+    SRV.on = true; SRV.needsSetup = !!h.needsSetup; SRV.mail = !!h.mail;
     DOSSIERS = []; CONTRACTS.length = 0; PARRAINAGES.length = 0;
     SETTINGS.employees = []; SETTINGS.requests = [];
     try{ SRV.token = localStorage.getItem(SRV_TOKEN_KEY); }catch(e){}
@@ -5446,6 +5452,15 @@ document.addEventListener("DOMContentLoaded", ()=>{
       return;
     }
     if(action==="mail-preview"){ const tp = t.dataset.tpl; openMailSend(tp, EMAIL_TEMPLATES[tp].sample, "", ""); return; }
+    if(action==="mail-send-auto"){
+      const m = state.modal;
+      const e = buildEmail(m.tpl, m.vars);
+      m.sending = true; render();
+      srvApi("mail","POST",{to:m.to, subject:e.subject, html:e.html, text:e.text})
+        .then(()=>{ m.sending=false; m.sent=true; render(); showToast("E-mail envoyé."); })
+        .catch(err=>{ m.sending=false; render(); showToast(err.message||"Envoi impossible."); });
+      return;
+    }
     if(action==="mail-copy-html"){
       const e = buildEmail(state.modal.tpl, state.modal.vars);
       (navigator.clipboard ? navigator.clipboard.writeText(e.html) : Promise.reject()).then(()=>showToast("HTML copié.")).catch(()=>showToast("Copie impossible : utilisez « Télécharger »."));

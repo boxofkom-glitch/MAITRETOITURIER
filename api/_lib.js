@@ -111,4 +111,20 @@ async function rateLimit(key, max, windowSec){
   return n<=max;
 }
 
-module.exports = {configured, kv, pipeline, getJson, setJson, hashPassword, checkPassword, randomPassword, sign, verify, loadSettings, publicUser, sanitizeSettings, authenticate, send, body, wrap, rateLimit};
+// ---- envoi d'e-mail réel (Resend). Facultatif : sans RESEND_API_KEY, l'appli reste en mode
+// « préparer le message » (le salarié l'envoie lui-même depuis sa messagerie). ----
+const mailConfigured = () => !!process.env.RESEND_API_KEY;
+async function sendMail({to, subject, html, text, replyTo}){
+  if(!mailConfigured()) throw new Error("Envoi automatique non configuré (RESEND_API_KEY absente).");
+  const from = process.env.MAIL_FROM || "Maître Toiturier <onboarding@resend.dev>";
+  const r = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + process.env.RESEND_API_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ from, to: [to], subject, html, text, reply_to: replyTo || undefined })
+  });
+  const j = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error((j && (j.message || j.error)) || "Envoi refusé par le service d'e-mail.");
+  return j;
+}
+
+module.exports = {configured, kv, pipeline, getJson, setJson, hashPassword, checkPassword, randomPassword, sign, verify, loadSettings, publicUser, sanitizeSettings, authenticate, send, body, wrap, rateLimit, mailConfigured, sendMail};
