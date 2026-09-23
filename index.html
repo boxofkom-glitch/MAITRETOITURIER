@@ -225,7 +225,8 @@ tr:last-child td{border-bottom:none}
 .wz-line-head,.wz-line-row{display:grid;grid-template-columns:minmax(0,1fr) 62px 92px 76px 96px 34px;gap:8px;align-items:center}
 .wz-line-head{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-dim);margin-bottom:6px}
 .wz-line-row{margin-bottom:8px}
-.wz-line-row input,.wz-line-row select{width:100%;padding:8px 9px;font-size:13px}
+.wz-line-row input,.wz-line-row select{width:100%;padding:8px 9px;font-size:13px;background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:8px}
+.wz-line-row input:focus,.wz-line-row select:focus{outline:none;border-color:var(--gold-line)}
 .wz-line-total{font-weight:600;text-align:right;font-size:13px;white-space:nowrap}
 .wz-addbar{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 12px}
 .wz-sugg{margin-bottom:14px;padding:12px;border:1px dashed var(--gold-line);border-radius:12px;background:var(--gold-soft)}
@@ -705,8 +706,9 @@ a.btn-secondary{text-decoration:none;display:inline-flex;align-items:center}
 .cat-search{width:100%;margin-bottom:14px;background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:11px 14px;font-size:14px}
 .cat-search:focus{outline:none;border-color:var(--gold-line)}
 
-.pc-row input,.pc-row select,.inv-row input,.inv-row select,.pc-point input,.mat-input{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:9px;padding:10px 11px;font-size:13.5px;width:100%}
-.pc-row input:focus,.pc-row select:focus,.inv-row input:focus{outline:none;border-color:var(--gold-line)}
+.pc-row input,.pc-row select,.inv-row input,.inv-row select,.pc-point input,.mat-input,.pc-row-m input,.pc-row-m select,.devis-line-input,.devis-table-wrap select{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:9px;padding:10px 11px;font-size:13.5px;width:100%}
+.pc-row input:focus,.pc-row select:focus,.inv-row input:focus,.pc-row-m input:focus,.pc-row-m select:focus,.devis-line-input:focus,.devis-table-wrap select:focus{outline:none;border-color:var(--gold-line)}
+.pc-row-m input[type=number],.devis-line-input[type=number]{padding:10px 8px}
 </style>
 </head>
 <body>

@@ -3,6 +3,9 @@
 const POINTS = [
   "Couverture et état des tuiles",
   "Éléments de finition et zinguerie",
+  "Zinguerie",
+  "Fenêtres de toit (Velux)",
+  "Cheminées et souches",
   "Étanchéité",
   "Charpente",
   "Isolation et ventilation",
@@ -75,7 +78,10 @@ function pickDidYouKnow(pt){
 
 const POINT_ANOMALIES = {
   "Couverture et état des tuiles": ["casse","fissure","deplace","souleve","manquant","malfixe","use","mousse","autre"],
-  "Éléments de finition et zinguerie": ["casse","deplace","manquant","mousse","eau","joint","corrode","autre"],
+  "Éléments de finition et zinguerie": ["casse","deplace","manquant","mousse","joint","autre"],
+  "Zinguerie": ["corrode","perce","deplace","malfixe","mousse","ruissellement","joint","autre"],
+  "Fenêtres de toit (Velux)": ["joint","fissure","eau","malfixe","corrode","autre"],
+  "Cheminées et souches": ["fissure","joint","corrode","eau","deplace","autre"],
   "Étanchéité": ["fissure","souleve","perce","corrode","eau","joint","recouvrement","autre"],
   "Charpente": ["bois_humide","moisissure","fissure","affaisse","insectes","autre"],
   "Isolation et ventilation": ["isolant","ventil","eau","manquant","autre"],
@@ -588,8 +594,8 @@ const MODULES = [
   {id:"entretiens", section:"entretiens", label:"Entretiens"},
   {id:"diagnostics", section:"diagnostics", label:"Diagnostics"},
   {id:"commercial", section:"commercial", label:"Suivi commercial"},
-  {id:"devis", section:"documents", label:"Devis"},
-  {id:"factures", section:"documents", label:"Factures"},
+  {id:"devis", section:"devis", label:"Devis"},
+  {id:"factures", section:"factures", label:"Factures"},
   {id:"prestations", section:"prestations", label:"Prestations"},
   {id:"materiel", section:"materiel", label:"Matériel"},
   {id:"parrainages", section:"parrainages", label:"Parrainages"},
@@ -597,7 +603,7 @@ const MODULES = [
   {id:"client-preview", section:"client-preview", label:"Aperçu espace client", readOnly:true}
 ];
 const CONFIG_ROLES = ["admin","tech","sales"];
-const SECTION_ORDER = ["overview","dossiers","agenda","entretiens","diagnostics","commercial","documents","prestations","materiel","parrainages","connexions","client-preview"];
+const SECTION_ORDER = ["overview","dossiers","agenda","entretiens","diagnostics","commercial","devis","factures","prestations","materiel","parrainages","connexions","client-preview"];
 
 const DEFAULT_ACCESS = {
   admin:{overview:1, dossiers:2, agenda:2, entretiens:2, diagnostics:2, commercial:2, devis:2, factures:2, prestations:2, materiel:2, parrainages:2, connexions:2, "client-preview":1},
@@ -673,10 +679,6 @@ function sectionReachable(section){
   return false;
 }
 function sectionLabel(section){
-  if(section==="documents"){
-    const d = canView("devis"), f = canView("factures");
-    return d && f ? "Devis & factures" : (d ? "Devis" : "Factures");
-  }
   const m = MODULES.find(x=>x.section===section);
   return m ? m.label : section;
 }
@@ -901,6 +903,9 @@ function badge(text, cls){ return `<span class="badge ${cls}">${esc(text)}</span
 const POINT_LAYER = {
   "Couverture et état des tuiles":1,
   "Éléments de finition et zinguerie":1,
+  "Zinguerie":1,
+  "Fenêtres de toit (Velux)":1,
+  "Cheminées et souches":1,
   "Étanchéité":2,
   "Charpente":3,
   "Isolation et ventilation":4,
@@ -1645,31 +1650,33 @@ function renderDocRow(kind, d, doc, hideOpen){
   </div>`;
 }
 
-function renderDocuments(){
+function renderDocuments(only){
   const {devis, factures} = allDocs();
   const attente = devis.filter(x=>x.dv.statut==="Envoyé").reduce((s,x)=>s+devisTotals(x.dv).ttcCt,0);
   const signe = devis.filter(x=>x.dv.statut==="Accepté").reduce((s,x)=>s+devisTotals(x.dv).ttcCt,0);
   const encaisse = factures.reduce((s,x)=>s+facturePaidCt(x.f),0);
   const aRegler = factures.filter(x=>x.f.statut!=="Brouillon").reduce((s,x)=>s+Math.max(0,x.f.montantTtcCt-facturePaidCt(x.f)),0);
+  const title = only==="devis" ? "Devis" : only==="factures" ? "Factures" : "Devis & factures";
+  const sub = only==="devis" ? "Tous les devis, en PDF, prêts à être envoyés." : only==="factures" ? "Toutes les factures et leurs règlements." : "Tous les documents commerciaux, en PDF, prêts à être envoyés.";
   return `
   <div class="page-header">
-    <div><h1>Devis & factures</h1><p>Tous les documents commerciaux, en PDF, prêts à être envoyés.</p></div>
+    <div><h1>${title}</h1><p>${sub}</p></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
-      ${hasPermission("quote.create") ? `<button class="btn-primary" data-action="wizard-devis">+ Créer un devis</button>` : ""}
-      ${hasPermission("invoice.create") ? `<button class="btn-secondary" data-action="wizard-facture">+ Créer une facture</button>` : ""}
+      ${only!=="factures" && hasPermission("quote.create") ? `<button class="btn-primary" data-action="wizard-devis">+ Créer un devis</button>` : ""}
+      ${only!=="devis" && hasPermission("invoice.create") ? `<button class="btn-secondary" data-action="wizard-facture">+ Créer une facture</button>` : ""}
     </div>
   </div>
   <div class="stat-grid">
-    ${stat("Devis en attente", fmtEuros(attente), devis.filter(x=>x.dv.statut==="Envoyé").length+" devis envoyé(s)")}
-    ${stat("Devis acceptés", fmtEuros(signe), "Montant TTC signé")}
-    ${stat("Encaissé", fmtEuros(encaisse), "Paiements confirmés")}
-    ${stat("Reste à encaisser", fmtEuros(aRegler), "Factures envoyées")}
+    ${only!=="factures" ? stat("Devis en attente", fmtEuros(attente), devis.filter(x=>x.dv.statut==="Envoyé").length+" devis envoyé(s)") : ""}
+    ${only!=="factures" ? stat("Devis acceptés", fmtEuros(signe), "Montant TTC signé") : ""}
+    ${only!=="devis" ? stat("Encaissé", fmtEuros(encaisse), "Paiements confirmés") : ""}
+    ${only!=="devis" ? stat("Reste à encaisser", fmtEuros(aRegler), "Factures envoyées") : ""}
   </div>
-  ${canView("devis") ? `<div class="card">
+  ${only!=="factures" && canView("devis") ? `<div class="card">
     <div class="card-header"><h3>Devis</h3><span class="badge gray">${devis.length}</span></div>
-    ${devis.length ? devis.map(x=>renderDocRow("devis", x.d, x.dv)).join("") : `<div class="empty-note">Aucun devis pour l’instant. Créez-en un depuis un dossier (onglet « Devis & factures »).</div>`}
+    ${devis.length ? devis.map(x=>renderDocRow("devis", x.d, x.dv)).join("") : `<div class="empty-note">Aucun devis pour l’instant. Créez-en un depuis un dossier.</div>`}
   </div>` : ""}
-  ${canView("factures") ? `<div class="card">
+  ${only!=="devis" && canView("factures") ? `<div class="card">
     <div class="card-header"><h3>Factures</h3><span class="badge gray">${factures.length}</span></div>
     ${factures.length ? factures.map(x=>renderDocRow("facture", x.d, x.f)).join("") : `<div class="empty-note">Aucune facture pour l’instant.</div>`}
   </div>` : ""}`;
@@ -2599,9 +2606,22 @@ function saveCustom(){
 }
 function applyCustom(c){
   if(!c) return;
-  const fill = (arr, src)=>{ if(Array.isArray(src) && src.length){ arr.length = 0; src.forEach(x=>arr.push(x)); } };
-  fill(SERVICE_CATALOG, c.catalogue); fill(MATERIEL_CATALOG, c.materiel); fill(PAY_MODES, c.payModes); fill(POINTS, c.points);
-  if(c.pointAnoms){ Object.keys(POINT_ANOMALIES).forEach(k=>delete POINT_ANOMALIES[k]); Object.assign(POINT_ANOMALIES, c.pointAnoms); }
+  // Fusionne les données sauvegardées (personnalisations de l'utilisateur) avec les valeurs par
+  // défaut actuelles du code, au lieu d'écraser : ainsi les nouveaux points/prestations ajoutés
+  // dans une mise à jour de l'appli apparaissent, sans perdre les personnalisations déjà faites.
+  const fillByKey = (arr, src, keyOf)=>{
+    if(!Array.isArray(src) || !src.length) return;
+    const defaults = arr.slice();
+    const savedKeys = new Set(src.map(keyOf));
+    const merged = src.slice();
+    defaults.forEach(x=>{ if(!savedKeys.has(keyOf(x))) merged.push(x); });
+    arr.length = 0; merged.forEach(x=>arr.push(x));
+  };
+  fillByKey(SERVICE_CATALOG, c.catalogue, x=>x.code);
+  fillByKey(MATERIEL_CATALOG, c.materiel, x=>x.code);
+  fillByKey(POINTS, c.points, x=>x);
+  if(Array.isArray(c.payModes) && c.payModes.length){ PAY_MODES.length = 0; c.payModes.forEach(x=>PAY_MODES.push(x)); }
+  if(c.pointAnoms) Object.assign(POINT_ANOMALIES, c.pointAnoms);
   if(c.vocab) Object.assign(ANOMALY_VOCAB, c.vocab);
 }
 function loadCustom(){
@@ -3305,7 +3325,8 @@ const NAV_ICONS = {
   entretiens:'<path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z"/><path d="M9 12l2 2 4-4"/>',
   diagnostics:'<path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 13l2 2 4-4"/>',
   commercial:'<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
-  documents:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
+  devis:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
+  factures:'<path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M14 2v5h5M9 12h6M9 16h4"/><path d="M8 8h1"/>',
   prestations:'<path d="M14.7 6.3a1 1 0 0 1 0 1.4l-6 6a1 1 0 0 1-1.4 0l-2.4-2.4a1 1 0 1 1 1.4-1.4L8 11.6l5.3-5.3a1 1 0 0 1 1.4 0z"/><path d="M21 12a9 9 0 1 1-9-9c1.9 0 3.6.6 5 1.7"/><path d="M21 4v5h-5"/>',
   materiel:'<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>',
   parrainages:'<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5"/>',
@@ -3316,7 +3337,7 @@ const NAV_ICONS = {
   more:'<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>'
 };
 function navIcon(key){ return `<svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${NAV_ICONS[key]||NAV_ICONS.overview}</svg>`; }
-const SHORT_LABELS = {overview:"Accueil", dossiers:"Clients", agenda:"Agenda", entretiens:"Entretiens", diagnostics:"Diagnostics", commercial:"Suivi", documents:"Devis", prestations:"Tarifs", materiel:"Matériel", parrainages:"Parrainage", connexions:"Liens", "client-preview":"Aperçu", client:"Mon espace", parametres:"Réglages"};
+const SHORT_LABELS = {overview:"Accueil", dossiers:"Clients", agenda:"Agenda", entretiens:"Entretiens", diagnostics:"Diagnostics", commercial:"Suivi", devis:"Devis", factures:"Factures", prestations:"Tarifs", materiel:"Matériel", parrainages:"Parrainage", connexions:"Liens", "client-preview":"Aperçu", client:"Mon espace", parametres:"Réglages"};
 function buildBottomNav(){
   const nav = navItems();
   const main = nav.slice(0, nav.length>5 ? 4 : nav.length);
@@ -3384,7 +3405,8 @@ function buildSection(){
     case "entretiens": return renderEntretiens();
     case "diagnostics": return renderDiagnosticsList();
     case "commercial": return renderCommercialKanban();
-    case "documents": return renderDocuments();
+    case "devis": return renderDocuments("devis");
+    case "factures": return renderDocuments("factures");
     case "prestations": return renderPrestationsSection();
     case "materiel": return renderMaterielSection();
     case "parrainages": return renderParrainages();
@@ -4234,7 +4256,10 @@ function ppShell(d, o){
 // Astuces neutres "tout va bien" par zone (affichées quand le contrôle est en bon état).
 const POINT_GOOD_TIP = {
   "Couverture et état des tuiles":"Un contrôle visuel régulier de la couverture permet de repérer tôt les petits désordres et de préserver son étanchéité dans le temps.",
-  "Éléments de finition et zinguerie":"La zinguerie assure l’étanchéité et l’évacuation de l’eau aux points singuliers de la toiture : un bon état de ces éléments protège l’ensemble.",
+  "Éléments de finition et zinguerie":"Rives, arêtiers, faîtage et solins assurent la continuité de la couverture aux points singuliers : leur bon état évite les infiltrations en périphérie de toiture.",
+  "Zinguerie":"Gouttières, chéneaux et noues assurent la collecte et l’évacuation des eaux pluviales : leur bon état évite débordements et infiltrations en pied de toiture.",
+  "Fenêtres de toit (Velux)":"Les fenêtres de toit sont un point sensible de l’étanchéité : un bon état de leur pourtour et de leurs solins évite les infiltrations au niveau de l’ouverture.",
+  "Cheminées et souches":"Les solins et mitrons de cheminée sont des points singuliers exposés : leur contrôle régulier permet de prévenir les infiltrations autour de la souche.",
   "Étanchéité":"Une étanchéité en bon état empêche l’eau de pénétrer sous la couverture, notamment autour des raccords et des pénétrations.",
   "Charpente":"La charpente porte toute la toiture : un contrôle périodique permet de s’assurer qu’elle reste saine et à l’abri de l’humidité.",
   "Isolation et ventilation":"Une bonne ventilation des combles limite l’humidité et contribue à la durabilité de la charpente comme de l’isolation.",
