@@ -2,7 +2,7 @@
 
 const POINTS = [
   "Couverture et état des tuiles",
-  "Éléments de finition et zinguerie",
+  "Éléments de finition",
   "Zinguerie",
   "Fenêtres de toit (Velux)",
   "Cheminées et souches",
@@ -78,7 +78,7 @@ function pickDidYouKnow(pt){
 
 const POINT_ANOMALIES = {
   "Couverture et état des tuiles": ["casse","fissure","deplace","souleve","manquant","malfixe","use","mousse","autre"],
-  "Éléments de finition et zinguerie": ["casse","deplace","manquant","mousse","joint","autre"],
+  "Éléments de finition": ["casse","deplace","manquant","mousse","joint","autre"],
   "Zinguerie": ["corrode","perce","deplace","malfixe","mousse","ruissellement","joint","autre"],
   "Fenêtres de toit (Velux)": ["joint","fissure","eau","malfixe","corrode","autre"],
   "Cheminées et souches": ["fissure","joint","corrode","eau","deplace","autre"],
@@ -902,7 +902,7 @@ function badge(text, cls){ return `<span class="badge ${cls}">${esc(text)}</span
 
 const POINT_LAYER = {
   "Couverture et état des tuiles":1,
-  "Éléments de finition et zinguerie":1,
+  "Éléments de finition":1,
   "Zinguerie":1,
   "Fenêtres de toit (Velux)":1,
   "Cheminées et souches":1,
@@ -2412,7 +2412,7 @@ const EMAIL_TEMPLATES = {
     label:"Invitation d’un salarié", group:"Équipe", desc:"Envoyée par la direction pour inviter un salarié à créer son accès.",
     sample:{nom:"Julien", role:"Technicien", inviteur:"la direction", lien:"https://app-maitretoiturier.fr/?inscription=1"},
     build:v=>({subject:"Vous êtes invité(e) à rejoindre "+mailBrand().nom, preheader:"Créez votre accès en 2 minutes.", title:"Bienvenue dans l’équipe",
-      paras:["Bonjour"+(v.nom?" "+v.nom:"")+",", esc0(v.inviteur||"La direction")+" vous invite à rejoindre l’espace de travail de "+mailBrand().nom+(v.role?" en tant que "+v.role.toLowerCase():"")+".", "Créez votre accès en quelques instants : renseignez vos coordonnées et choisissez votre mot de passe. La direction validera ensuite votre demande et activera votre profil."],
+      paras:["Bonjour"+(v.nom?" "+v.nom:"")+",", mailBrand().nom+" vous invite à rejoindre son espace de travail"+(v.role?" en tant que "+v.role.toLowerCase():"")+".", "Créez votre accès en quelques instants : renseignez vos coordonnées et choisissez votre mot de passe. La direction validera ensuite votre demande et activera votre profil."],
       cta:{label:"Créer mon accès", url:v.lien}, note:"Ce lien est personnel. Si vous n’attendiez pas cette invitation, vous pouvez ignorer ce message."})
   },
   invitation_client: {
@@ -4236,7 +4236,7 @@ function ppShell(d, o){
 // Astuces neutres "tout va bien" par zone (affichées quand le contrôle est en bon état).
 const POINT_GOOD_TIP = {
   "Couverture et état des tuiles":"Un contrôle visuel régulier de la couverture permet de repérer tôt les petits désordres et de préserver son étanchéité dans le temps.",
-  "Éléments de finition et zinguerie":"Rives, arêtiers, faîtage et solins assurent la continuité de la couverture aux points singuliers : leur bon état évite les infiltrations en périphérie de toiture.",
+  "Éléments de finition":"Rives, arêtiers, faîtage et solins assurent la continuité de la couverture aux points singuliers : leur bon état évite les infiltrations en périphérie de toiture.",
   "Zinguerie":"Gouttières, chéneaux et noues assurent la collecte et l’évacuation des eaux pluviales : leur bon état évite débordements et infiltrations en pied de toiture.",
   "Fenêtres de toit (Velux)":"Les fenêtres de toit sont un point sensible de l’étanchéité : un bon état de leur pourtour et de leurs solins évite les infiltrations au niveau de l’ouverture.",
   "Cheminées et souches":"Les solins et mitrons de cheminée sont des points singuliers exposés : leur contrôle régulier permet de prévenir les infiltrations autour de la souche.",
