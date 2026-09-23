@@ -3642,7 +3642,6 @@ function tabsForRole(d){
   if(canView("devis") || canView("factures")) tabs.push(["devis","Devis & factures"]);
   if(d && d.chantier && canReadJob()) tabs.push(["chantier","Chantier"]);
   if(state.role!=="client" && (canView("agenda")||canView("diagnostics"))) tabs.push(["materiel","Matériel"]);
-  tabs.push(["documents","Documents"]);
   return tabs;
 }
 
@@ -3661,7 +3660,6 @@ function renderDossierDetail(id){
   else if(state.dossierTab==="chantier") body = renderDossierChantier(d);
   else if(state.dossierTab==="materiel") body = renderDossierMateriel(d);
   else if(state.dossierTab==="activite") body = renderDossierActivite(d);
-  else if(state.dossierTab==="documents") body = renderDossierDocuments(d);
 
   if(state.dossierTab==="diagnostic" && diagEditable()){
     return `
@@ -3793,7 +3791,7 @@ function renderDossierInfo(d){
   </div>
 
   <div class="card">
-    <div class="card-header"><h3>Documents</h3><button class="link-btn" data-action="dossier-tab" data-tab="documents">Tous les documents</button></div>
+    <div class="card-header"><h3>Documents</h3>${canView("devis")||canView("factures")?`<button class="link-btn" data-action="dossier-tab" data-tab="devis">Tous les documents</button>`:""}</div>
     ${docs.length ? docs.map(x=>x.kind==="report" ? renderReportRow(d) : renderDocRow(x.kind, d, x.doc, true)).join("") : `<div class="empty-note">Aucun document pour l’instant : le rapport apparaît après le diagnostic, les devis et factures après leur création.</div>`}
   </div>
 
@@ -3859,24 +3857,6 @@ function renderDossierActivite(d){
   <div class="card">
     <div class="card-header"><h3>Historique du dossier</h3></div>
     ${d.historique.slice().reverse().map(h=>`<div class="row-item"><div><div class="row-sub">${esc(h.date)} · ${esc(h.auteur)}</div><div>${esc(h.texte)}</div></div></div>`).join("")}
-  </div>`;
-}
-
-function renderDossierDocuments(d){
-  const rows = [];
-  if(d.diagnostic.rapportPret) rows.push(renderReportRow(d));
-  (d.devis||[]).slice().reverse().forEach(dv=>rows.push(renderDocRow("devis", d, dv, true)));
-  (d.factures||[]).slice().reverse().forEach(f=>rows.push(renderDocRow("facture", d, f, true)));
-  return `
-  <div class="card">
-    <div class="card-header"><h3>Documents du dossier</h3>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        ${hasPermission("quote.create")?`<button class="btn-secondary btn-sm" data-action="wizard-devis" data-id="${d.id}">+ Devis</button>`:""}
-        ${hasPermission("invoice.create") && wzAcceptedDevis(d)?`<button class="btn-secondary btn-sm" data-action="wizard-facture" data-id="${d.id}">+ Facture</button>`:""}
-      </div>
-    </div>
-    <p class="form-help" style="margin:0 0 6px">Tous les PDF du dossier (rapport, devis, factures) : téléchargez-les ou envoyez-les au client par WhatsApp ou e-mail, avec un message prêt.</p>
-    ${rows.length ? rows.join("") : `<div class="empty-note">Aucun document pour l’instant.</div>`}
   </div>`;
 }
 
@@ -4601,7 +4581,7 @@ function renderDossierDevis(d){
       ${d.devis.length>1?`
       <div class="card">
         <h3 style="margin:0 0 10px;font-size:14.5px">Historique des versions</h3>
-        ${d.devis.slice(0,-1).reverse().map(v=>`<div class="row-item"><div><div class="row-title">${esc(v.numero)} · v${v.version}</div><div class="row-sub">${fmtEuros(devisTotals(v).ttcCt)}</div></div>${badge(v.statut, devisStatutCls(v.statut))}</div>`).join("")}
+        ${d.devis.slice(0,-1).reverse().map(v=>`<div class="row-item"><div><div class="row-title">${esc(v.numero)} · v${v.version}</div><div class="row-sub">${fmtEuros(devisTotals(v).ttcCt)}</div></div><div style="display:flex;align-items:center;gap:8px">${badge(v.statut, devisStatutCls(v.statut))}<button class="btn-ghost btn-sm" data-action="doc-pdf" data-id="${d.id}" data-kind="devis" data-doc="${v.id}">PDF</button></div></div>`).join("")}
       </div>`:""}`;
   }
 
