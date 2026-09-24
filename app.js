@@ -3776,14 +3776,18 @@ function renderDossierDetail(id){
 function canEditActivity(){ return state.role!=="client"; }
 function nextTaskId(d){ return "T"+(((d.taches||[]).reduce((m,t)=>Math.max(m, parseInt(t.id.slice(1),10)||0),0))+1); }
 
+// Mêmes chiffres que la carte "Processus de l'affaire" juste au-dessus (billingOf) : avant, ce
+// bloc excluait les factures encore en brouillon et affichait 0 € alors que la carte du dessus
+// montrait déjà un montant facturé — deux sources différentes pour la même information.
 function dossierKpis(d){
   const acc = wzAcceptedDevis(d);
   const dv = acc || latestDevis(d);
   const valeur = dv ? devisTotals(dv).ttcCt : 0;
-  const factures = (d.factures||[]).filter(f=>f.statut!=="Brouillon");
-  const facture = factures.reduce((s,f)=>s+f.montantTtcCt,0);
-  const encaisse = (d.factures||[]).reduce((s,f)=>s+facturePaidCt(f),0);
-  return {valeur, facture, encaisse, reste: Math.max(0, facture-encaisse), devisStatut: dv ? dv.statut : null};
+  const b = billingOf(d);
+  const facture = b ? b.invoiced : 0;
+  const encaisse = b ? b.paid : 0;
+  const reste = b ? b.due : 0;
+  return {valeur, facture, encaisse, reste, devisStatut: dv ? dv.statut : null};
 }
 
 function nextActionFor(d){
@@ -4638,7 +4642,7 @@ function renderDossierDevis(d){
         ${canEditDv?`
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0">
           <button class="btn-secondary btn-sm" data-action="devis-add-line" data-id="${d.id}">+ Ligne libre</button>
-          <select id="devisCatalogSel" data-id="${d.id}" style="max-width:300px"><option value="">+ Ajouter depuis le catalogue…</option>${catalogOptionsHtml(dv.lignes.map(l=>l.code))}</select>
+          <select id="devisCatalogSel" class="devis-line-input" data-id="${d.id}" style="max-width:300px"><option value="">+ Ajouter depuis le catalogue…</option>${catalogOptionsHtml(dv.lignes.map(l=>l.code))}</select>
         </div>`:""}
         <div class="devis-totals">
           <div>Total HT <b>${fmtEuros(totals.htCt)}</b></div>
@@ -4898,7 +4902,7 @@ function renderCalToolbar(){
       <button class="cal-nav-btn" data-action="cal-next" aria-label="Suivant">→</button>
     </div>
     <button class="btn-secondary btn-sm cal-today-btn" data-action="cal-today">Aujourd’hui</button>
-    <select id="agendaMemberSelect">
+    <select id="agendaMemberSelect" class="role-select">
       ${members.map(m=>`<option value="${m==="Toute l’équipe"?"all":m}" ${state.agendaMember===(m==="Toute l’équipe"?"all":m)?"selected":""}>${m}</option>`).join("")}
     </select>
   </div>
