@@ -254,8 +254,8 @@ tr:last-child td{border-bottom:none}
 .wz-recap{border:1px solid var(--line);border-radius:12px;padding:4px 14px;background:var(--panel2);margin-bottom:8px}
 .wz-recap-row{display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}
 .wz-recap-row:last-child{border-bottom:none}
-.wz-recap-row span{color:var(--muted)}
-.wz-recap-row b{text-align:right}
+.wz-recap-row span{color:var(--muted);flex-shrink:0;white-space:nowrap}
+.wz-recap-row b{text-align:right;min-width:0}
 .wz-nav{position:sticky;bottom:-24px;background:var(--panel3);padding:14px 0 4px;margin-top:6px}
 /* Échéancier de paiement (assistant devis, étape 3) — oublié lors de l'ajout de la fonctionnalité. */
 .wz-ech-head{display:grid;grid-template-columns:1fr 64px 96px;gap:8px;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted-dim);font-weight:700;margin:16px 0 8px}
@@ -275,7 +275,7 @@ tr:last-child td{border-bottom:none}
 }
 .btn-danger{background:#b3232a;color:#fff;border:none;padding:10px 16px;border-radius:9px;font-weight:600;cursor:pointer;font-size:13px}
 .btn-danger:hover{background:#c92c34}
-@media (max-width:700px){.wz-grid{grid-template-columns:1fr}.wz-line-head{display:none}.wz-line-row{grid-template-columns:1fr 1fr 1fr}.wz-line-row input:first-child{grid-column:1/-1}.wz-line-total{grid-column:1/3;text-align:left}.wz-step em{display:none}.wz-step{flex:0 0 auto;padding:8px 10px}.wz-steps{justify-content:center}}
+@media (max-width:700px){.wz-grid{grid-template-columns:1fr}.wz-line-head{display:none}.wz-line-row{grid-template-columns:1fr 1fr 1fr}.wz-line-row input:first-child{grid-column:1/-1}.wz-line-total{grid-column:1/3;text-align:left}.wz-step em{display:none}.wz-step{flex:0 0 auto;padding:8px 10px}.wz-steps{justify-content:center}.wz-nav{flex-wrap:wrap}.wz-nav button{flex:1 1 100%}}
 .crm-head-top{display:flex;gap:14px;align-items:center}
 .row-avatar.big{width:56px;height:56px;font-size:18px;flex-shrink:0}
 .crm-name{font-family:var(--font-display);font-size:22px;font-weight:700;line-height:1.2}
@@ -777,7 +777,8 @@ a.btn-secondary{text-decoration:none;display:inline-flex;align-items:center}
 }
 .marge-box{background:var(--gold-soft);border:1px solid var(--gold-line);border-radius:12px;padding:12px 14px;margin:14px 0}
 .marge-row{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13.5px;padding:3px 0}
-.marge-row b{font-size:15px}
+.marge-row span{min-width:0}
+.marge-row b{font-size:15px;white-space:nowrap;flex-shrink:0}
 .cat-search{width:100%;margin-bottom:14px;background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:11px 14px;font-size:14px}
 .cat-search:focus{outline:none;border-color:var(--gold-line)}
 
