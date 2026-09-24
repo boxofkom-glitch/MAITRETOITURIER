@@ -960,7 +960,9 @@ function iconSvg(name, size){
     globe:`<g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M12 2.5a14 14 0 0 0 0 19 14 14 0 0 0 0-19"/><path d="M2.5 12h19"/></g>`,
     camera:`<g fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3.2"/></g>`,
     idea:`<path d="M9 18.5h6M9.7 21h4.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M12 2.8a6 6 0 0 0-3.4 10.9c.6.45 1 1.15 1 1.95v.35h4.8v-.35c0-.8.4-1.5 1-1.95A6 6 0 0 0 12 2.8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>`,
-    calendar:`<g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="1.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/></g>`
+    calendar:`<g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="1.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/></g>`,
+    user:`<g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7.5" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></g>`,
+    team:`<g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M2.8 20c0-3.4 2.8-6.2 6.2-6.2S15.2 16.6 15.2 20"/><circle cx="17" cy="9" r="2.6"/><path d="M14.8 13.8c2.9.2 5.2 2.7 5.2 5.8"/></g>`
   };
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24">${inner[name]||""}</svg>`;
 }
@@ -1529,7 +1531,7 @@ function docFooter(idx, total){
   const b = SETTINGS.company;
   return `<div class="doc2-foot"><span>${esc([b.nom,b.site,b.telephone].filter(Boolean).join(" · "))}</span><span class="pdf-page-num"></span></div>`;
 }
-const DOC_TRUST_ITEMS = [["shield","Garantie décennale 10 ans"],["check","Matériaux de qualité certifiés"],["helmet","Équipe qualifiée et expérimentée"],["house","Chantier propre et sécurisé"]];
+const DOC_TRUST_ITEMS = [["shield","Garantie décennale 10 ans"],["check","Matériaux de qualité certifiés"],["team","Équipe qualifiée et expérimentée"],["house","Chantier propre et sécurisé"]];
 function docTrustFoot(d){
   const b = SETTINGS.company;
   return `<div class="doc2-trustfoot">
@@ -1548,12 +1550,12 @@ function docMetaCol(icon, label, body){
 function docPage(d, o, pg, idx, total){
   const meta = pg.first ? `<div class="doc2-watermark">${iconSvg("house",190)}</div>
     <div class="doc2-meta">
-      ${docMetaCol("wrench","Émis par", `<b>${esc(SETTINGS.company.nom||"Maître Toiturier")}</b>${[SETTINGS.company.adresse, [SETTINGS.company.siret?"SIRET "+SETTINGS.company.siret:"",SETTINGS.company.telephone].filter(Boolean).join(" · "), SETTINGS.company.email].filter(Boolean).map(l=>"<br>"+esc(l)).join("")}`)}
-      ${docMetaCol("house","Adressé à", `<b>${esc(d.client)}</b><br>${esc(d.adresse)}, ${esc(d.ville)}${d.telephone?"<br>"+esc(d.telephone):""}`)}
+      ${docMetaCol("user","Émis par", `<b>${esc(SETTINGS.company.nom||"Maître Toiturier")}</b>${[SETTINGS.company.adresse, [SETTINGS.company.siret?"SIRET "+SETTINGS.company.siret:"",SETTINGS.company.telephone].filter(Boolean).join(" · "), SETTINGS.company.email].filter(Boolean).map(l=>"<br>"+esc(l)).join("")}`)}
+      ${docMetaCol("pin","Adressé à", `<b>${esc(d.client)}</b><br>${esc(d.adresse)}, ${esc(d.ville)}${d.telephone?"<br>"+esc(d.telephone):""}`)}
       ${docMetaCol("calendar", o.validLabel?"Date · validité":"Date", `${o.dateLabel||""}${o.validLabel?"<br>"+o.validLabel:""}`)}
     </div>
-    ${o.objet?`<div class="doc2-objet">${iconSvg("clipboard",15)}<span><b>Objet</b> — ${esc(o.objet)}</span></div>`:""}` : "";
-  const conditions = pg.last && o.bannerText ? `<div class="doc2-conditions"><div class="doc2-cond-label">${iconSvg("shield",14)}${esc(o.bannerLabel||"Conditions")}</div><p>${o.bannerText}</p></div>` : "";
+    ${o.objet?`<div class="doc2-objet">${iconSvg("doc",15)}<span><b>Objet</b> — ${esc(o.objet)}</span></div>`:""}` : "";
+  const conditions = pg.last && o.bannerText ? `<div class="doc2-conditions"><div class="doc2-cond-label">${iconSvg("doc",14)}${esc(o.bannerLabel||"Conditions")}</div><p>${o.bannerText}</p></div>` : "";
   const bottom = pg.last ? `<div class="doc2-bottom">${conditions}<div class="doc2-totals">${o.totals}</div></div>` : "";
   return `<div class="pdf-page doc2-page">
     ${pg.first ? docCoverBand(d, o) : docSlimHead(d, o, idx, total)}
