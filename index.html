@@ -398,6 +398,45 @@ a.btn-secondary{text-decoration:none;display:inline-flex;align-items:center}
 
 .pdf-page-num{font-size:9.5px;color:#9c8f74;margin-left:10px;white-space:nowrap}
 
+/* ---- Devis / factures : document corporate graphique, distinct du rapport (bandeau photo, table sombre, encarts dorés) ---- */
+.doc2-page{background:#fdfbf6;display:flex;flex-direction:column;font-family:"Montserrat","Segoe UI",Arial,sans-serif;color:#1c1a16;position:relative}
+.doc2-band{position:relative;height:58mm;overflow:hidden;flex-shrink:0}
+.doc2-band-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 30%}
+.doc2-band-overlay{position:absolute;inset:0;background:linear-gradient(100deg,rgba(10,9,7,.93),rgba(10,9,7,.6) 55%,rgba(10,9,7,.82))}
+.doc2-band:after{content:'';position:absolute;left:0;right:0;bottom:0;height:4px;background:linear-gradient(90deg,#c9a53b,#e8c877 40%,#c9a53b 70%,transparent)}
+.doc2-band-row{position:relative;height:100%;display:flex;align-items:center;justify-content:space-between;padding:0 16mm}
+.doc2-band-logo{height:21mm;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))}
+.doc2-band-doc{text-align:right;color:#f3ead0}
+.doc2-band-type{font-family:"Playfair Display",Georgia,serif;font-size:30px;font-weight:700;letter-spacing:.4px;color:#e8c877;text-shadow:0 2px 10px rgba(0,0,0,.4)}
+.doc2-band-num{font-size:12.5px;letter-spacing:.5px;margin-top:4px;opacity:.95}
+.doc2-slimhead{display:flex;justify-content:space-between;align-items:center;padding:9mm 16mm 4mm;flex-shrink:0;font-size:10px;letter-spacing:.3px;text-transform:uppercase;color:#a4966f;border-bottom:2px solid #1c1a16}
+.doc2-body{padding:12mm 16mm;flex:1;display:flex;flex-direction:column;position:relative}
+.doc2-watermark{position:absolute;right:-6mm;top:2mm;color:#1c1a16;opacity:.035;z-index:0;pointer-events:none}
+.doc2-meta{position:relative;z-index:1;display:flex;gap:12mm;margin-bottom:7mm}
+.doc2-meta-col{flex:1;background:#fff;border:1px solid #ece4d0;border-radius:6px;padding:8px 11px}
+.doc2-meta-label{display:flex;align-items:center;gap:6px;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#a4802a;font-weight:700;margin-bottom:5px}
+.doc2-meta-label svg{flex-shrink:0}
+.doc2-meta-body{font-size:12px;line-height:1.5}
+.doc2-objet{position:relative;z-index:1;display:flex;align-items:flex-start;gap:8px;font-size:12.5px;margin:0 0 7mm;padding:8px 11px;background:#faf6ea;border-radius:6px;color:#5a5240}
+.doc2-objet svg{flex-shrink:0;margin-top:2px;color:#a4802a}
+.doc2-objet b{color:#1c1a16}
+.doc2-table{position:relative;z-index:1;width:100%;border-collapse:collapse;font-size:11.5px;border-radius:6px;overflow:hidden}
+.doc2-table thead th{text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:.5px;color:#e8c877;padding:9px 8px;background:#1c1a16;font-weight:700}
+.doc2-table th.r,.doc2-table td.r{text-align:right}
+.doc2-table td{padding:8px;border-bottom:1px solid #ece4d0}
+.doc2-table tbody tr:nth-child(even){background:#faf6ea}
+.doc2-subrow td{padding:12px 8px 7px;font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;color:#fff;background:#8a7f66!important;border-bottom:none}
+.doc2-totals{position:relative;z-index:1;margin:8mm 0 0 auto;width:100mm}
+.doc2-tot{display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:4px 10px;color:#5a5240}
+.doc2-tot span{flex:1;min-width:0}
+.doc2-tot b{white-space:nowrap}
+.doc2-tot-big{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:8px;padding:10px 12px;background:linear-gradient(100deg,#1c1a16,#302b21);border-radius:7px;box-shadow:0 4px 14px rgba(28,26,22,.25)}
+.doc2-tot-big span{color:#e8dcc4;font-size:11.5px;font-weight:600;letter-spacing:.2px}
+.doc2-tot-big b{color:#e8c877;font-size:17px;font-family:"Playfair Display",Georgia,serif;white-space:nowrap}
+.doc2-conditions{position:relative;z-index:1;margin-top:8mm;padding:7mm;background:#faf6ea;border-radius:7px;border-left:4px solid #c9a53b;font-size:11px;line-height:1.65}
+.doc2-cond-label{display:flex;align-items:center;gap:6px;font-weight:700;text-transform:uppercase;font-size:9.5px;letter-spacing:.4px;color:#a4802a;margin-bottom:5px}
+.doc2-foot{margin-top:auto;padding:6mm 16mm;display:flex;justify-content:space-between;font-size:9px;color:#a4966f;border-top:1px solid #e6ddc8;flex-shrink:0}
+
 /* ---- Page "point de contrôle" (une page A4 par contrôle) ---- */
 .pdf-pointpage{height:297mm;background:#f5f1e9}
 .pp-bg{position:absolute;left:0;top:0;width:100%;height:100%;z-index:0;display:block}
