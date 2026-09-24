@@ -2736,9 +2736,9 @@ function persoChange(el){
   saveCustom();
   if(rerender) render(); else showToast("Enregistré.");
 }
-function margeRow(achatCt, venteCt){
+function margeRow(achatCt, venteCt, label){
   const pct = venteCt>0 ? Math.round((venteCt-achatCt)/venteCt*1000)/10 : null;
-  return `<div class="pc-marge ${margeBadgeCls(pct)}">${pct!=null ? pct+" %" : "—"}</div>`;
+  return `<div class="pc-marge ${margeBadgeCls(pct)}"${label?` data-label="${esc(label)}"`:""}>${pct!=null ? pct+" %" : "—"}</div>`;
 }
 
 function renderParamPerso(){
@@ -3157,79 +3157,78 @@ async function srvSetupSubmit(){
 }
 
 function catalogSearchRow(id){ return `<input type="search" id="${id}" class="cat-search" placeholder="Rechercher…" oninput="catalogFilter(this)">`; }
+// Ligne compacte de liste (prestation ou matériau) : en lecture seule pour tout le monde, cliquable
+// pour ouvrir la fiche de détail (modale) si l'utilisateur a le droit de modifier les tarifs.
+function catalogListRow(kind, item, i, canEdit){
+  const vente = kind==="cat" ? item.prixUnitaireCt : (item.prixVenteCt||0);
+  const achat = item.prixAchatCt||0;
+  const pct = vente>0 ? Math.round((vente-achat)/vente*1000)/10 : null;
+  return `<div class="row-item cat-item" data-search="${esc(item.label.toLowerCase())}"${canEdit?` data-action="cat-edit-open" data-kind="${kind}" data-idx="${i}"`:""}>
+    <div style="min-width:0"><div class="row-title">${esc(item.label)}</div><div class="row-sub">${esc(item.unite||(kind==="cat"?"forfait":"u"))} · TVA ${item.tvaPct} %</div></div>
+    <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+      ${canEdit && pct!=null ? badge(pct+" %", margeBadgeCls(pct)) : ""}
+      <div class="doc-row-amount">${fmtEuros(vente)}</div>
+      ${canEdit ? `<span class="cat-chevron">›</span>` : ""}
+    </div>
+  </div>`;
+}
 function renderPrestationsSection(){
   const canEdit = canEditMod("prestations");
-  const tvas = [0,5.5,10,20];
-  if(!canEdit){
-    return `
-    <div class="page-header"><div><h1>Prestations</h1><p>Tarifs proposés dans vos devis. Pour modifier les prix, demandez à la direction.</p></div></div>
-    <div class="card">
-      ${catalogSearchRow("prestaSearch")}
-      ${SERVICE_CATALOG.map(s=>`<div class="row-item cat-item" data-search="${esc(s.label.toLowerCase())}"><div><div class="row-title">${esc(s.label)}</div><div class="row-sub">${esc(s.unite||"forfait")} · TVA ${s.tvaPct} %</div></div><div class="doc-row-amount">${fmtEuros(s.prixUnitaireCt)}</div></div>`).join("")}
-    </div>`;
-  }
   return `
-  <div class="page-header"><div><h1>Prestations</h1><p>Le prix de vente apparaît sur les devis et les factures. Le prix d’achat (coût interne — matériel + main-d’œuvre) sert uniquement au calcul de votre marge, jamais montré au client.</p></div></div>
+  <div class="page-header">
+    <div><h1>Prestations</h1><p>${canEdit?"Touchez une prestation pour voir et modifier son prix d’achat, son prix de vente et sa marge.":"Tarifs proposés dans vos devis. Pour modifier les prix, demandez à la direction."}</p></div>
+    ${canEdit?`<button class="btn-primary" data-action="cat-edit-open" data-kind="cat" data-idx="-1">+ Ajouter</button>`:""}
+  </div>
   <div class="card">
-    ${catalogSearchRow("prestaEditSearch")}
-    <div class="pc-row-m pc-head"><span>Désignation</span><span>Achat HT</span><span>Vente HT</span><span>Marge</span><span>TVA</span><span>Unité</span><span></span></div>
-    ${SERVICE_CATALOG.map((s,i)=>`
-    <div class="pc-row-m" data-search="${esc(s.label.toLowerCase())}">
-      <input type="text" value="${esc(s.label)}" data-pc="cat|${i}|label" aria-label="Nom">
-      <input type="number" step="0.01" min="0" value="${((s.prixAchatCt||0)/100).toFixed(2)}" data-pc="cat|${i}|achat" aria-label="Prix d’achat HT">
-      <input type="number" step="0.01" min="0" value="${(s.prixUnitaireCt/100).toFixed(2)}" data-pc="cat|${i}|vente" aria-label="Prix de vente HT">
-      ${margeRow(s.prixAchatCt||0, s.prixUnitaireCt||0)}
-      <select data-pc="cat|${i}|tva" aria-label="TVA">${tvas.map(t=>`<option value="${t}" ${s.tvaPct===t?"selected":""}>${t} %</option>`).join("")}</select>
-      <input type="text" value="${esc(s.unite||"forfait")}" data-pc="cat|${i}|unite" aria-label="Unité">
-      <button class="btn-ghost btn-sm" data-action="perso-del-cat" data-idx="${i}">✕</button>
-    </div>`).join("")}
-    <div class="pc-row-m pc-new">
-      <input type="text" id="pcNewLabel" placeholder="Nouvelle prestation…">
-      <input type="number" step="0.01" min="0" id="pcNewAchat" placeholder="Achat €">
-      <input type="number" step="0.01" min="0" id="pcNewVente" placeholder="Vente €">
-      <span></span>
-      <select id="pcNewTva">${tvas.map(t=>`<option value="${t}" ${t===10?"selected":""}>${t} %</option>`).join("")}</select>
-      <input type="text" id="pcNewUnite" placeholder="Unité" value="forfait">
-      <button class="btn-primary btn-sm" data-action="perso-add-cat">+ Ajouter</button>
-    </div>
+    ${catalogSearchRow("prestaSearch")}
+    ${SERVICE_CATALOG.map((s,i)=>catalogListRow("cat", s, i, canEdit)).join("")}
   </div>`;
 }
 function renderMaterielSection(){
   const canEdit = canEditMod("materiel");
-  const tvas = [0,5.5,10,20];
-  if(!canEdit){
-    return `
-    <div class="page-header"><div><h1>Matériel &amp; fournitures</h1><p>Tarifs proposés dans vos devis. Pour modifier les prix, demandez à la direction.</p></div></div>
-    <div class="card">
-      ${catalogSearchRow("matSearch")}
-      ${MATERIEL_CATALOG.map(m=>`<div class="row-item cat-item" data-search="${esc(m.label.toLowerCase())}"><div><div class="row-title">${esc(m.label)}</div><div class="row-sub">${esc(m.unite||"u")} · TVA ${m.tvaPct} %</div></div><div class="doc-row-amount">${fmtEuros(m.prixVenteCt||0)}</div></div>`).join("")}
-    </div>`;
-  }
   return `
-  <div class="page-header"><div><h1>Matériel &amp; fournitures</h1><p>Le matériel se propose aussi dans les devis (à côté des prestations) : prix d’achat fournisseur, prix de revente au client, marge calculée automatiquement.</p></div></div>
+  <div class="page-header">
+    <div><h1>Matériel &amp; fournitures</h1><p>${canEdit?"Touchez un matériau pour voir et modifier son prix d’achat fournisseur, son prix de revente et sa marge.":"Tarifs proposés dans vos devis. Pour modifier les prix, demandez à la direction."}</p></div>
+    ${canEdit?`<button class="btn-primary" data-action="cat-edit-open" data-kind="mat" data-idx="-1">+ Ajouter</button>`:""}
+  </div>
   <div class="card">
-    ${catalogSearchRow("matEditSearch")}
-    <div class="pc-row-m pc-head"><span>Désignation</span><span>Achat HT</span><span>Vente HT</span><span>Marge</span><span>TVA</span><span>Unité</span><span></span></div>
-    ${MATERIEL_CATALOG.map((m,i)=>`
-    <div class="pc-row-m" data-search="${esc(m.label.toLowerCase())}">
-      <input type="text" value="${esc(m.label)}" data-pc="mat|${i}|label" aria-label="Nom">
-      <input type="number" step="0.01" min="0" value="${((m.prixAchatCt||0)/100).toFixed(2)}" data-pc="mat|${i}|achat" aria-label="Prix d’achat HT">
-      <input type="number" step="0.01" min="0" value="${((m.prixVenteCt||0)/100).toFixed(2)}" data-pc="mat|${i}|vente" aria-label="Prix de vente HT">
-      ${margeRow(m.prixAchatCt||0, m.prixVenteCt||0)}
-      <select data-pc="mat|${i}|tva" aria-label="TVA">${tvas.map(t=>`<option value="${t}" ${m.tvaPct===t?"selected":""}>${t} %</option>`).join("")}</select>
-      <input type="text" value="${esc(m.unite||"u")}" data-pc="mat|${i}|unite" aria-label="Unité">
-      <button class="btn-ghost btn-sm" data-action="perso-del-mat" data-idx="${i}">✕</button>
-    </div>`).join("")}
-    <div class="pc-row-m pc-new">
-      <input type="text" id="matNewLabel" placeholder="Nouveau matériau ou fourniture…">
-      <input type="number" step="0.01" min="0" id="matNewAchat" placeholder="Achat €">
-      <input type="number" step="0.01" min="0" id="matNewVente" placeholder="Vente €">
-      <span></span>
-      <select id="matNewTva">${tvas.map(t=>`<option value="${t}" ${t===10?"selected":""}>${t} %</option>`).join("")}</select>
-      <input type="text" id="matNewUnite" placeholder="Unité" value="u">
-      <button class="btn-primary btn-sm" data-action="perso-add-mat">+ Ajouter</button>
-    </div>
+    ${catalogSearchRow("matSearch")}
+    ${MATERIEL_CATALOG.map((m,i)=>catalogListRow("mat", m, i, canEdit)).join("")}
   </div>`;
+}
+// Fiche de détail (sous-menu) d'une prestation/d'un matériau : ouverte au clic depuis la liste,
+// pour garder la liste épurée et éviter de tout afficher à l'écran en même temps sur mobile.
+function modalCatEdit(m){
+  const kind = m.kind, isNew = m.idx==null || m.idx<0;
+  const list = kind==="cat" ? SERVICE_CATALOG : MATERIEL_CATALOG;
+  const item = isNew ? {label:"", prixAchatCt:0, prixUnitaireCt:0, prixVenteCt:0, tvaPct:10, unite:kind==="cat"?"forfait":"u"} : list[m.idx];
+  const vente = kind==="cat" ? item.prixUnitaireCt : (item.prixVenteCt||0);
+  const achat = item.prixAchatCt||0;
+  const pct = vente>0 ? Math.round((vente-achat)/vente*1000)/10 : null;
+  const tvas = [0,5.5,10,20];
+  return modalWrap(isNew ? (kind==="cat"?"Nouvelle prestation":"Nouveau matériau") : item.label, `
+    <div class="form-field"><label>Désignation</label><input type="text" id="ceLabel" value="${esc(item.label)}"></div>
+    <div class="wz-grid">
+      <div class="form-field"><label>Prix d’achat HT (coût, interne)</label><input type="number" min="0" step="0.01" id="ceAchat" value="${(achat/100).toFixed(2)}" oninput="ceLive()"></div>
+      <div class="form-field"><label>Prix de vente HT</label><input type="number" min="0" step="0.01" id="ceVente" value="${(vente/100).toFixed(2)}" oninput="ceLive()"></div>
+    </div>
+    <div class="marge-box"><div class="marge-row"><span>Marge</span><b id="ceMargeVal">${pct!=null?pct+" %":"—"}</b></div></div>
+    <div class="wz-grid">
+      <div class="form-field"><label>TVA</label><select id="ceTva">${tvas.map(t=>`<option value="${t}" ${item.tvaPct===t?"selected":""}>${t} %</option>`).join("")}</select></div>
+      <div class="form-field"><label>Unité</label><input type="text" id="ceUnite" value="${esc(item.unite||"")}"></div>
+    </div>
+    <div class="modal-actions" style="flex-wrap:wrap">
+      <button class="btn-primary" data-action="catedit-save" data-kind="${kind}" data-idx="${isNew?-1:m.idx}">Enregistrer</button>
+      ${!isNew?`<button class="btn-ghost" data-action="catedit-del" data-kind="${kind}" data-idx="${m.idx}">Supprimer</button>`:""}
+      <button class="btn-secondary" data-action="modal-close">Annuler</button>
+    </div>`);
+}
+function ceLive(){
+  const a = parseFloat(document.getElementById("ceAchat").value)||0;
+  const v = parseFloat(document.getElementById("ceVente").value)||0;
+  const pct = v>0 ? Math.round((v-a)/v*1000)/10 : null;
+  const el = document.getElementById("ceMargeVal");
+  if(el) el.textContent = pct!=null ? pct+" %" : "—";
 }
 function empStatutBadge(e){ return badge(e.statut==="actif"?"Actif":"Suspendu", e.statut==="actif"?"green":"gray"); }
 
@@ -5325,6 +5324,7 @@ function buildModal(){
   if(m.type==="profile") return modalProfile(m);
   if(m.type==="matnew") return modalMatNew(m);
   if(m.type==="matlib") return modalMatLib();
+  if(m.type==="catedit") return modalCatEdit(m);
   return "";
 }
 
@@ -5924,26 +5924,38 @@ document.addEventListener("DOMContentLoaded", ()=>{
       }, "Tout effacer");
       return;
     }
-    if(action==="perso-add-cat"){
-      const label = document.getElementById("pcNewLabel").value.trim();
-      if(!label){ showToast("Donnez un nom à la prestation."); return; }
-      SERVICE_CATALOG.push({code:"CUS-"+Date.now().toString(36).toUpperCase(), label, prixAchatCt:Math.round((parseFloat(document.getElementById("pcNewAchat").value)||0)*100), prixUnitaireCt:Math.round((parseFloat(document.getElementById("pcNewVente").value)||0)*100), tvaPct:parseFloat(document.getElementById("pcNewTva").value)||0, unite:document.getElementById("pcNewUnite").value.trim()||"forfait"});
-      saveCustom(); showToast("Prestation ajoutée."); render(); return;
+    if(action==="cat-edit-open"){
+      const idx = parseInt(t.dataset.idx,10);
+      state.modal = {type:"catedit", kind:t.dataset.kind, idx: idx<0 ? null : idx};
+      render(); return;
     }
-    if(action==="perso-add-mat"){
-      const label = document.getElementById("matNewLabel").value.trim();
-      if(!label){ showToast("Donnez un nom au matériau ou à la fourniture."); return; }
-      MATERIEL_CATALOG.push({code:"CUSM-"+Date.now().toString(36).toUpperCase(), label, prixAchatCt:Math.round((parseFloat(document.getElementById("matNewAchat").value)||0)*100), prixVenteCt:Math.round((parseFloat(document.getElementById("matNewVente").value)||0)*100), tvaPct:parseFloat(document.getElementById("matNewTva").value)||0, unite:document.getElementById("matNewUnite").value.trim()||"u"});
-      saveCustom(); showToast("Matériel ajouté."); render(); return;
+    if(action==="catedit-save"){
+      const kind = t.dataset.kind, idx = parseInt(t.dataset.idx,10);
+      const label = document.getElementById("ceLabel").value.trim();
+      if(!label){ showToast("Indiquez une désignation."); return; }
+      const achatCt = Math.round((parseFloat(document.getElementById("ceAchat").value)||0)*100);
+      const venteCt = Math.round((parseFloat(document.getElementById("ceVente").value)||0)*100);
+      const tvaPct = parseFloat(document.getElementById("ceTva").value)||0;
+      const unite = document.getElementById("ceUnite").value.trim() || (kind==="cat"?"forfait":"u");
+      const list = kind==="cat" ? SERVICE_CATALOG : MATERIEL_CATALOG;
+      if(idx<0){
+        const code = (kind==="cat"?"CUS-":"CUSM-")+Date.now().toString(36).toUpperCase();
+        if(kind==="cat") list.push({code, label, prixAchatCt:achatCt, prixUnitaireCt:venteCt, tvaPct, unite});
+        else list.push({code, label, prixAchatCt:achatCt, prixVenteCt:venteCt, tvaPct, unite});
+      } else {
+        const item = list[idx];
+        item.label = label; item.prixAchatCt = achatCt; item.tvaPct = tvaPct; item.unite = unite;
+        if(kind==="cat") item.prixUnitaireCt = venteCt; else item.prixVenteCt = venteCt;
+      }
+      saveCustom(); state.modal = null; render(); showToast("Enregistré."); return;
     }
-    if(action==="perso-del-mat"){
-      const i = parseInt(t.dataset.idx,10), mv = MATERIEL_CATALOG[i];
-      askConfirm("Retirer ce matériel ?", "« "+mv.label+" » ne sera plus proposable dans les devis. Les devis déjà créés ne changent pas.", ()=>{ MATERIEL_CATALOG.splice(i,1); saveCustom(); });
-      return;
-    }
-    if(action==="perso-del-cat"){
-      const i = parseInt(t.dataset.idx,10), sv = SERVICE_CATALOG[i];
-      askConfirm("Retirer du catalogue ?", "« "+sv.label+" » ne sera plus proposé. Les devis déjà créés ne changent pas.", ()=>{ SERVICE_CATALOG.splice(i,1); saveCustom(); });
+    if(action==="catedit-del"){
+      const kind = t.dataset.kind, idx = parseInt(t.dataset.idx,10);
+      const list = kind==="cat" ? SERVICE_CATALOG : MATERIEL_CATALOG;
+      const it = list[idx];
+      askConfirm(kind==="cat"?"Retirer du catalogue ?":"Retirer ce matériel ?", "« "+it.label+" » ne sera plus proposé dans les devis. Les devis déjà créés ne changent pas.", ()=>{
+        list.splice(idx,1); saveCustom(); state.modal = null; render(); showToast("Supprimé.");
+      }, "Supprimer", "btn-danger");
       return;
     }
     if(action==="perso-add-pay"){
