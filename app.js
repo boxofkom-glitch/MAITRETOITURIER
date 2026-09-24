@@ -2097,6 +2097,27 @@ function wzClientCard(d){
   return `<div class="wz-client"><div class="row-avatar">${initials(d.client)}</div><div><div class="row-title">${esc(d.client)}</div><div class="row-sub">${esc(d.adresse)}, ${esc(d.ville)}</div><div class="row-sub">${esc(d.email||"")}${d.telephone?" · "+esc(d.telephone):""}</div></div></div>`;
 }
 
+// Sous-écran "catalogue" de l'étape Prestations : une seule liste (au lieu de deux pavés de
+// puces empilés, chacun avec son propre ascenseur), un seul scroll, on reste dessus pour ajouter
+// plusieurs lignes d'affilée puis "← Retour" pour revenir au récapitulatif des lignes ajoutées.
+function wzCatalogPicker(w, d, x){
+  const sugg = d ? diagSuggestions(d).filter(sg=>!x.lignes.some(l=>l.code===sg.code)) : [];
+  const items = [
+    ...SERVICE_CATALOG.filter(c=>!x.lignes.some(l=>l.code===c.code)).map(c=>({kind:"Prestation", code:c.code, label:c.label, prix:c.prixUnitaireCt})),
+    ...MATERIEL_CATALOG.filter(c=>!x.lignes.some(l=>l.code===c.code)).map(c=>({kind:"Matériel", code:c.code, label:c.label, prix:catalogVenteCt(c)}))
+  ];
+  const n = x.lignes.filter(l=>l.designation.trim()).length;
+  return `
+    <button class="btn-secondary btn-sm" data-action="wz-close-catalog" style="margin-bottom:14px">← Retour aux lignes${n?" ("+n+")":""}</button>
+    ${sugg.length ? `<div class="wz-sugg"><div class="wz-sugg-t">Suggéré d’après le diagnostic</div>${sugg.map(s=>{ const svc = SERVICE_CATALOG.find(c=>c.code===s.code); return `<button class="wz-chip" data-action="wz-add-sugg" data-code="${s.code}">+ ${esc(svc.label)} <small>${esc(s.reason)}</small></button>`; }).join("")}</div>` : ""}
+    <div class="card">
+      ${catalogSearchRow("wzCatSearch")}
+      ${items.map(it=>`<div class="row-item cat-item" data-search="${esc(it.label.toLowerCase())}" data-action="wz-add-sugg" data-code="${esc(it.code)}">
+        <div style="min-width:0"><div class="row-title">${esc(it.label)}</div><div class="row-sub">${it.kind}</div></div>
+        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0"><div class="doc-row-amount">${fmtEuros(it.prix)}</div><span class="cat-chevron">+</span></div>
+      </div>`).join("")}
+    </div>`;
+}
 function wzDevisStep(w, d){
   const x = w.data;
   if(w.step===1){
@@ -2108,12 +2129,11 @@ function wzDevisStep(w, d){
       <div class="form-field"><label>Validité du devis</label><select data-wz="validite">${[15,30,60,90].map(n=>`<option value="${n}" ${x.validite===n?"selected":""}>${n} jours</option>`).join("")}</select></div>`;
   }
   if(w.step===2){
+    if(w.showCatalog) return wzCatalogPicker(w, d, x);
     const sugg = d ? diagSuggestions(d).filter(sg=>!x.lignes.some(l=>l.code===sg.code)) : [];
 return `<p class="wz-intro">Ajoutez les prestations et le matériel : chaque ligne apparaîtra à l’identique sur le devis et sur les factures.</p>
       ${sugg.length ? `<div class="wz-sugg"><div class="wz-sugg-t">Suggéré d’après le diagnostic</div>${sugg.map(s=>{ const svc = SERVICE_CATALOG.find(c=>c.code===s.code); return `<button class="wz-chip" data-action="wz-add-sugg" data-code="${s.code}">+ ${esc(svc.label)} <small>${esc(s.reason)}</small></button>`; }).join("")}</div>` : ""}
-      <input type="search" class="cat-search" id="wzCatSearch" placeholder="Rechercher une prestation ou un matériau à ajouter…" oninput="wzCatFilter(this)">
-      <div class="wz-sugg wz-catlist" id="wzCatPresta"><div class="wz-sugg-t">Prestations — touchez pour ajouter</div>${SERVICE_CATALOG.filter(c=>!x.lignes.some(l=>l.code===c.code)).map(c=>`<button class="wz-chip" data-action="wz-add-sugg" data-code="${c.code}" data-search="${esc(c.label.toLowerCase())}">+ ${esc(c.label)} <small>${fmtEuros(c.prixUnitaireCt)}</small></button>`).join("")}</div>
-      <div class="wz-sugg wz-catlist" id="wzCatMat"><div class="wz-sugg-t">Matériel — touchez pour ajouter</div>${MATERIEL_CATALOG.filter(c=>!x.lignes.some(l=>l.code===c.code)).map(c=>`<button class="wz-chip" data-action="wz-add-sugg" data-code="${c.code}" data-search="${esc(c.label.toLowerCase())}">+ ${esc(c.label)} <small>${fmtEuros(catalogVenteCt(c))}</small></button>`).join("")}</div>
+      <button class="btn-primary" style="width:100%;margin-bottom:16px;white-space:normal" data-action="wz-open-catalog">+ Ajouter une prestation ou un matériau</button>
       <div class="wz-lines">
         <div class="wz-line-head"><span>Désignation</span><span>Qté</span><span>PU HT €</span><span>TVA</span><span>Total HT</span><span></span></div>
         ${x.lignes.map((l,i)=>`<div class="wz-line-row">
@@ -2125,8 +2145,7 @@ return `<p class="wz-intro">Ajoutez les prestations et le matériel : chaque lig
           <button class="btn-ghost btn-sm" data-action="wz-remove-line" data-idx="${i}" ${x.lignes.length<2?"disabled":""}>✕</button>
         </div>`).join("")}
       </div>
-      <div class="wz-addbar"><button class="btn-secondary btn-sm" data-action="wz-add-line">+ Ligne libre</button>
-        <select id="wzCatalog"><option value="">+ Ajouter depuis le catalogue…</option>${catalogOptionsHtml(x.lignes.map(l=>l.code))}</select></div>
+      <div class="wz-addbar"><button class="btn-secondary btn-sm" data-action="wz-add-line">+ Ligne libre</button></div>
       <div class="wz-totals" id="wzTotals">${wzTotalsHtml(wzDevisFromData())}</div>`;
   }
   if(w.step===3){
@@ -6038,6 +6057,8 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(action==="wz-prev"){ wzFlush(); state.wizard.step = Math.max(1, state.wizard.step-1); render(); return; }
     if(action==="wz-create"){ wzCreate(t.dataset.send==="1"); return; }
     if(action==="wz-add-line"){ wzFlush(); state.wizard.data.lignes.push(freshDevisLine()); render(); return; }
+    if(action==="wz-open-catalog"){ wzFlush(); state.wizard.showCatalog = true; render(); return; }
+    if(action==="wz-close-catalog"){ wzFlush(); state.wizard.showCatalog = false; render(); return; }
     if(action==="wz-remove-line"){ wzFlush(); const ls = state.wizard.data.lignes; ls.splice(parseInt(t.dataset.idx,10),1); if(!ls.length) ls.push(freshDevisLine()); render(); return; }
     if(action==="wz-add-sugg"){
       wzFlush();
