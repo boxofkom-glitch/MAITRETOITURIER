@@ -1511,6 +1511,7 @@ function docCoverBand(d, o){
   return `<div class="doc2-band">
     <div class="doc2-band-photo-wrap"><img class="doc2-band-photo" src="assets/cover-devis.jpg" alt=""></div>
     <div class="doc2-band-gold"></div>
+    <div class="doc2-band-sash"></div>
     <div class="doc2-band-ribbon"></div>
     <div class="doc2-band-row">
       <div>
