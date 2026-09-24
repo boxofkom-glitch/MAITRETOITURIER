@@ -4629,8 +4629,11 @@ function renderDossierCommercial(d){
 
 function renderFactureCard(d, f){
   f.statut = factureStatutFromPayments(f);
-  const editable = f.statut==="Brouillon";
   const paidCt = facturePaidCt(f);
+  // Modifiable (libellé, montant, échéance) tant qu'aucun paiement n'a encore été enregistré :
+  // une facture juste envoyée peut avoir besoin d'une correction. Dès qu'un paiement existe, on
+  // bascule sur le suivi des règlements plutôt que de permettre de changer le montant sous le nez.
+  const editable = paidCt===0 && hasPermission("invoice.create");
   const resteCt = Math.max(0, f.montantTtcCt - paidCt);
   return `
     <div class="card devis-sub-card">
@@ -4672,7 +4675,9 @@ function renderFactureCard(d, f){
 
 function renderDossierDevis(d){
   const dv = latestDevis(d);
-  const canEditDv = (!dv || dv.statut==="Brouillon") && hasPermission("quote.update");
+  // Modifiable tant que le devis n'est pas refusé : un devis envoyé ou déjà accepté peut avoir
+  // besoin d'une correction (erreur de prix, ligne oubliée) sans repartir sur une nouvelle version.
+  const canEditDv = (!dv || dv.statut!=="Refusé") && hasPermission("quote.update");
   let devisBlock;
   if(!dv){
     devisBlock = `
