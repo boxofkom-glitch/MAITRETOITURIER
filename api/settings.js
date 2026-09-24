@@ -4,7 +4,7 @@ const ROLES = ["admin","tech","sales"];
 module.exports = L.wrap(async (req, res)=>{
   const a = await L.authenticate(req);
   if(!a) return L.send(res, 401, {error:"Session expirée : reconnectez-vous."});
-  const st = a.settings, isDir = a.user.role==="directeur";
+  const st = a.settings, isDir = a.user.role==="directeur" || a.user.role==="admin";
   if(req.method==="GET") return L.send(res, 200, {settings:L.sanitizeSettings(st, a.user)});
   if(req.method!=="POST") return L.send(res, 405, {error:"Méthode non autorisée."});
   const b = L.body(req);

@@ -75,7 +75,7 @@ function sanitizeSettings(st, user){
     employees: (st.employees||[]).map(e=>({id:e.id, nom:e.nom, email:e.email, telephone:e.telephone||"", poste:e.poste||"", role:e.role, statut:e.statut, ajoute:e.ajoute||""})),
     access: st.access, company: st.company, materielLib: st.materielLib, custom: st.custom||null
   };
-  if(user && user.role==="directeur"){
+  if(user && (user.role==="directeur" || user.role==="admin")){
     out.requests = (st.requests||[]).map(r=>({id:r.id, nom:r.nom, email:r.email, telephone:r.telephone||"", poste:r.poste||"", date:r.date, statut:r.statut}));
     out.invitations = st.invitations||[]; out.resets = st.resets||[];
   }

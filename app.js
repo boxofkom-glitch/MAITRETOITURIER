@@ -273,7 +273,7 @@ function saveDevisLinesFromDOM(){
   const d = byId(state.dossierId);
   if(!d) return;
   const dv = latestDevis(d);
-  if(!dv || dv.statut!=="Brouillon") return;
+  if(!dv || dv.statut==="Refusé") return;
   const rows = document.querySelectorAll(".devis-line-input");
   if(!rows.length) return;
   rows.forEach(inp=>{
@@ -282,6 +282,7 @@ function saveDevisLinesFromDOM(){
     if(!line) return;
     if(inp.dataset.field==="designation") line.designation = inp.value;
     else if(inp.dataset.field==="qte") line.qte = parseFloat(inp.value)||0;
+    else if(inp.dataset.field==="unite") line.unite = inp.value;
     else if(inp.dataset.field==="prixUnitaire") line.prixUnitaireCt = Math.round((parseFloat(inp.value)||0)*100);
     else if(inp.dataset.field==="tva") line.tvaPct = parseFloat(inp.value)||0;
   });
@@ -481,7 +482,7 @@ const MATERIEL_CATALOG = [
 // Un même code peut exister dans les deux catalogues : on cherche d’abord les prestations, puis le matériel.
 function catalogFind(code){ return SERVICE_CATALOG.find(x=>x.code===code) || MATERIEL_CATALOG.find(x=>x.code===code); }
 function catalogVenteCt(item){ return item.prixVenteCt!=null ? item.prixVenteCt : item.prixUnitaireCt; }
-function catalogLineFrom(item){ return freshDevisLine({designation:item.label, qte:1, prixUnitaireCt:catalogVenteCt(item), tvaPct:item.tvaPct, code:item.code, coutUnitaireCt:item.prixAchatCt||0}); }
+function catalogLineFrom(item){ return freshDevisLine({designation:item.label, qte:1, prixUnitaireCt:catalogVenteCt(item), tvaPct:item.tvaPct, code:item.code, coutUnitaireCt:item.prixAchatCt||0, unite:item.unite||"forfait"}); }
 function catalogOptionsHtml(exclude){
   const ex = exclude || [];
   const opt = (c)=>`<option value="${c.code}">${esc(c.label)} — ${fmtEuros(catalogVenteCt(c))}</option>`;
@@ -489,7 +490,7 @@ function catalogOptionsHtml(exclude){
        + `<optgroup label="Matériel">${MATERIEL_CATALOG.filter(c=>!ex.includes(c.code)).map(opt).join("")}</optgroup>`;
 }
 function fmtEuros(ct){ return ((ct||0)/100).toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})+" €"; }
-function freshDevisLine(over){ return Object.assign({ designation:"", qte:1, prixUnitaireCt:0, tvaPct:10, coutUnitaireCt:0 }, over||{}); }
+function freshDevisLine(over){ return Object.assign({ designation:"", qte:1, unite:"forfait", prixUnitaireCt:0, tvaPct:10, coutUnitaireCt:0 }, over||{}); }
 function lineTotalHTct(l){ return Math.round((l.qte||0) * (l.prixUnitaireCt||0)); }
 function devisTotals(devis){
   let htCt=0, tvaCt=0;
@@ -669,7 +670,7 @@ function isManager(){ return state.role==="directeur" || state.role==="admin"; }
 
 function sectionInNav(section){
   if(state.role==="client") return section==="client";
-  if(section==="parametres") return state.role==="directeur";
+  if(section==="parametres") return isManager();
   return MODULES.some(m=>m.section===section && lvl(m.id)>=1);
 }
 // Une section reste atteignable si elle sert de porte d'entrée à un module autorisé (ex. fiche dossier depuis les devis).
@@ -685,7 +686,7 @@ function sectionLabel(section){
 function navItems(){
   if(state.role==="client") return [["client","Mon espace client"]];
   const items = SECTION_ORDER.filter(sectionInNav).map(s=>[s, sectionLabel(s)]);
-  if(state.role==="directeur") items.push(["parametres","Paramètres"]);
+  if(isManager()) items.push(["parametres","Paramètres"]);
   return items;
 }
 function firstSection(){ const n = navItems(); return n.length ? n[0][0] : "overview"; }
@@ -1137,6 +1138,13 @@ function factureTotals(d, f){
 
 // ---------- Conditions de règlement : échéancier personnalisable (1 à 3 étapes, % et libellé libres) ----------
 const PAY_MODES = ["Virement","Chèque","Carte bancaire","Espèces"];
+// Unités courantes du bâtiment, pour les prestations/matériel et les lignes de devis.
+const UNIT_OPTIONS = ["u","forfait","ml","m²","m³","kg","L","h","jour","lot","sac","rouleau"];
+function unitOptionsHtml(current){
+  const opts = UNIT_OPTIONS.includes(current) || !current ? UNIT_OPTIONS : [current, ...UNIT_OPTIONS];
+  return opts.map(u=>`<option value="${esc(u)}" ${current===u?"selected":""}>${esc(u)}</option>`).join("");
+}
+function unitSelectHtml(id, current){ return `<select id="${id}">${unitOptionsHtml(current)}</select>`; }
 const PAY_FOIS = [1,2,3];
 
 // Répartitions par défaut, ajustables ensuite ligne par ligne (libellé + %) dans l'assistant devis.
@@ -2011,6 +2019,7 @@ function wzFlush(){
       const f = inp.dataset.field;
       if(f==="designation") l.designation = inp.value;
       else if(f==="qte") l.qte = parseFloat(inp.value)||0;
+      else if(f==="unite") l.unite = inp.value;
       else if(f==="prixUnitaire") l.prixUnitaireCt = Math.round((parseFloat(inp.value)||0)*100);
       else if(f==="tva") l.tvaPct = parseFloat(inp.value)||0;
     });
@@ -2135,10 +2144,13 @@ return `<p class="wz-intro">Ajoutez les prestations et le matériel : chaque lig
       ${sugg.length ? `<div class="wz-sugg"><div class="wz-sugg-t">Suggéré d’après le diagnostic</div>${sugg.map(s=>{ const svc = SERVICE_CATALOG.find(c=>c.code===s.code); return `<button class="wz-chip" data-action="wz-add-sugg" data-code="${s.code}">+ ${esc(svc.label)} <small>${esc(s.reason)}</small></button>`; }).join("")}</div>` : ""}
       <button class="btn-primary" style="width:100%;margin-bottom:16px;white-space:normal" data-action="wz-open-catalog">+ Ajouter une prestation ou un matériau</button>
       <div class="wz-lines">
-        <div class="wz-line-head"><span>Désignation</span><span>Qté</span><span>PU HT €</span><span>TVA</span><span>Total HT</span><span></span></div>
+        <div class="wz-line-head"><span>Désignation</span><span>Qté / unité</span><span>PU HT €</span><span>TVA</span><span>Total HT</span><span></span></div>
         ${x.lignes.map((l,i)=>`<div class="wz-line-row">
           <input class="wz-line" data-idx="${i}" data-field="designation" value="${esc(l.designation)}" placeholder="Désignation">
-          <input class="wz-line" data-idx="${i}" data-field="qte" type="number" min="0" step="1" value="${l.qte}">
+          <div class="wz-qte-unit">
+            <input class="wz-line" data-idx="${i}" data-field="qte" type="number" min="0" step="1" value="${l.qte}">
+            <select class="wz-line" data-idx="${i}" data-field="unite">${unitOptionsHtml(l.unite)}</select>
+          </div>
           <input class="wz-line" data-idx="${i}" data-field="prixUnitaire" type="number" min="0" step="0.01" value="${(l.prixUnitaireCt/100).toFixed(2)}">
           <select class="wz-line" data-idx="${i}" data-field="tva">${[0,5.5,10,20].map(t=>`<option value="${t}" ${l.tvaPct===t?"selected":""}>${t} %</option>`).join("")}</select>
           <span class="wz-line-total">${fmtEuros(lineTotalHTct(l))}</span>
@@ -2473,7 +2485,7 @@ function renderParametres(){
   else if(state.paramTab==="entreprise") body = paramEntreprise();
   else if(typeof renderParamExtra==="function") body = renderParamExtra(state.paramTab);
   return `
-  <div class="page-header"><div><h1>Paramètres</h1><p>Réservé au directeur : équipe, accès, entreprise et personnalisation de l’application.</p></div></div>
+  <div class="page-header"><div><h1>Paramètres</h1><p>Réservé à la direction et aux administrateurs : équipe, accès, entreprise et personnalisation de l’application.</p></div></div>
   <div class="tabs">${tabs.map(([k,l])=>`<button class="tab-btn ${state.paramTab===k?"active":""}" data-action="param-tab" data-tab="${k}">${esc(l)}</button>`).join("")}</div>
   ${body}`;
 }
@@ -3082,7 +3094,7 @@ function srvSettingsSoon(){
   SRV.settingsTimer = setTimeout(async ()=>{
     SRV.settingsTimer = null;
     try{
-      if(SRV.user.role==="directeur"){
+      if(SRV.user.role==="directeur" || SRV.user.role==="admin"){
         await srvApi("settings", "POST", {action:"put", settings:{employees:SETTINGS.employees, access:SETTINGS.access, company:SETTINGS.company, materielLib:SETTINGS.materielLib, invitations:SETTINGS.invitations, resets:SETTINGS.resets, custom:customObj()}});
       } else {
         await srvApi("settings", "POST", {action:"materiel", lib:SETTINGS.materielLib});
@@ -3234,7 +3246,7 @@ function modalCatEdit(m){
     <div class="marge-box"><div class="marge-row"><span>Marge</span><b id="ceMargeVal">${pct!=null?pct+" %":"—"}</b></div></div>
     <div class="wz-grid">
       <div class="form-field"><label>TVA</label><select id="ceTva">${tvas.map(t=>`<option value="${t}" ${item.tvaPct===t?"selected":""}>${t} %</option>`).join("")}</select></div>
-      <div class="form-field"><label>Unité</label><input type="text" id="ceUnite" value="${esc(item.unite||"")}"></div>
+      <div class="form-field"><label>Unité</label>${unitSelectHtml("ceUnite", item.unite||"")}</div>
     </div>
     <div class="modal-actions" style="flex-wrap:wrap">
       <button class="btn-primary" data-action="catedit-save" data-kind="${kind}" data-idx="${isNew?-1:m.idx}">Enregistrer</button>
@@ -3556,7 +3568,7 @@ function buildSection(){
     case "prestations": return renderPrestationsSection();
     case "materiel": return renderMaterielSection();
     case "parrainages": return renderParrainages();
-    case "parametres": return state.role==="directeur" ? renderParametres() : renderOverview();
+    case "parametres": return isManager() ? renderParametres() : renderOverview();
     case "connexions": return renderConnexions();
     case "client-preview": return renderClientPortal("Marie Laurent");
     default: return renderOverview();
@@ -4696,12 +4708,13 @@ function renderDossierDevis(d){
         </div>
         <div class="devis-table-wrap">
           <table>
-            <thead><tr><th>Désignation</th><th>Qté</th><th>PU HT</th><th>TVA</th><th>Total HT</th><th></th></tr></thead>
+            <thead><tr><th>Désignation</th><th>Qté</th><th>Unité</th><th>PU HT</th><th>TVA</th><th>Total HT</th><th></th></tr></thead>
             <tbody>
             ${dv.lignes.map((l,i)=>`
               <tr>
                 <td data-label="Désignation">${canEditDv?`<input type="text" class="devis-line-input" data-idx="${i}" data-field="designation" value="${esc(l.designation)}" placeholder="Désignation">`:esc(l.designation)}</td>
                 <td data-label="Quantité" style="width:64px">${canEditDv?`<input type="number" min="0" step="1" class="devis-line-input" data-idx="${i}" data-field="qte" value="${l.qte}">`:l.qte}</td>
+                <td data-label="Unité" style="width:80px">${canEditDv?`<select class="devis-line-input" data-idx="${i}" data-field="unite">${unitOptionsHtml(l.unite)}</select>`:esc(l.unite||"")}</td>
                 <td data-label="Prix unitaire HT" style="width:100px">${canEditDv?`<input type="number" min="0" step="0.01" class="devis-line-input" data-idx="${i}" data-field="prixUnitaire" value="${(l.prixUnitaireCt/100).toFixed(2)}">`:fmtEuros(l.prixUnitaireCt)}</td>
                 <td data-label="TVA %" style="width:64px">${canEditDv?`<input type="number" min="0" step="1" class="devis-line-input" data-idx="${i}" data-field="tva" value="${l.tvaPct}">`:l.tvaPct+"%"}</td>
                 <td data-label="Total HT" style="white-space:nowrap">${fmtEuros(lineTotalHTct(l))}</td>
