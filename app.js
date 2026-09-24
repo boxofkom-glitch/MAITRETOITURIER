@@ -1328,6 +1328,22 @@ function winDevis(d){
   showToast(f ? "Gagné ! "+factureLabel(d,f)+" créée ("+fmtEuros(f.montantTtcCt)+") — client à encaisser." : "Devis gagné. Chantier préparé.");
   if(f) state.lastFacture = {id:d.id, fid:f.id};
 }
+// Corrige une erreur de manip : repasse le devis en « Envoyé » et retire les factures créées
+// automatiquement, à condition qu'aucun paiement n'ait encore été enregistré dessus.
+function revertDevis(d){
+  const b = billingOf(d);
+  if(!b || b.paid>0) return;
+  const dv = b.dv;
+  (b.fs||[]).forEach(f=>{
+    d.taches = (d.taches||[]).filter(t=>t.autoFacture!==f.id);
+  });
+  d.factures = (d.factures||[]).filter(f=>f.devisId!==dv.id);
+  dv.statut = "Envoyé";
+  delete dv.dateAcceptation;
+  d.commercialStage = "Devis envoyé";
+  stampHist(d, "Retour en arrière : devis "+dv.numero+" repassé en « Envoyé », facture(s) associée(s) retirée(s).");
+  showToast("Revenu au devis "+dv.numero+".");
+}
 function recordPayment(d, f, montantCt, mode, date, virementRecu){
   const pid = f.id+"-P"+((f.paiements||[]).length+1);
   f.paiements = f.paiements || [];
@@ -1377,6 +1393,9 @@ function processButtons(d){
     const label = nextIdx!=null ? devisPaiement(dv).echeancier[nextIdx].label : "suivante";
     out.push(A("Créer la facture « "+label+" »", `data-action="create-solde" data-id="${d.id}"`, "btn-primary"));
   }
+  // Erreur de manip : si aucun paiement n'a encore été enregistré, on peut revenir en arrière
+  // (redevient « Envoyé » et les factures créées automatiquement sont retirées).
+  if(b.paid===0 && hasPermission("quote.accept")) out.push(A("↩ Revenir au devis", `data-action="revert-devis" data-id="${d.id}"`, "btn-ghost"));
   return out;
 }
 function renderProcessCard(d){
@@ -1487,7 +1506,7 @@ function docCoverBand(d, o){
     <div class="doc2-band-overlay"></div>
     <div class="doc2-band-row">
       <img class="doc2-band-logo" src="assets/logo-lockup.png" alt="Maître Toiturier">
-      <div class="doc2-band-doc"><div class="doc2-band-type">${esc(o.topTitle)}</div><div class="doc2-band-num">${esc(o.topNum)}</div></div>
+      <div class="doc2-band-doc">${o.eyebrow?`<div class="doc2-band-eyebrow">${esc(o.eyebrow)}</div>`:""}<div class="doc2-band-type">${esc(o.topTitle)}</div><div class="doc2-band-num">${esc(o.topNum)}</div></div>
     </div>
   </div>`;
 }
@@ -1538,6 +1557,7 @@ function renderDevisDoc(d, dv){
   p.echeancier.forEach((e,i)=>totals.push([e.label+" ("+e.pct+" %)", fmtEuros(echeanceTtcCt(dv,i))]));
   return docPages(d, {
     topTitle: "Devis",
+    eyebrow: "Proposition commerciale",
     topNum: "N° "+dv.numero+(dv.version>1?" · v"+dv.version:""),
     dateLabel: esc(dv.dateEnvoi||dv.dateCreation||"12 sept."),
     validLabel: valid+" jours",
@@ -1586,6 +1606,7 @@ function renderFactureDoc(d, f){
 
   return docPages(d, {
     topTitle: "Facture",
+    eyebrow: "Document comptable",
     topNum: "N° "+f.numero,
     dateLabel: esc(f.date||"12 sept."),
     objet: (dv&&dv.objet)||d.motif,
@@ -5973,6 +5994,11 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const d = byId(t.dataset.id); const dv = acceptedDevis(d);
       if(dv){ const f = ensureInvoices(d, dv); syncProcess(d); showToast(f ? factureLabel(d,f)+" créée." : "La facture existe déjà."); }
       render(); return;
+    }
+    if(action==="revert-devis"){
+      const d = byId(t.dataset.id);
+      askConfirm("Revenir au devis ?", "Le devis repasse en « Envoyé » et la ou les facture(s) créée(s) automatiquement (aucun paiement enregistré dessus) sont retirées. Le chantier préparé n'est pas supprimé.", ()=>{ revertDevis(d); render(); }, "Revenir au devis", "btn-primary");
+      return;
     }
     if(action==="create-solde"){
       const d = byId(t.dataset.id); const dv = acceptedDevis(d);
