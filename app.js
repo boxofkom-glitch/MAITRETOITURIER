@@ -1507,7 +1507,7 @@ function docPaginate(n){
 // En-tête de couverture (page 1 uniquement) : photo d'équipe assombrie, logo, type + numéro de document.
 function docCoverBand(d, o){
   return `<div class="doc2-band">
-    <div class="doc2-band-photo-wrap"><img class="doc2-band-photo" src="assets/cover-team.jpg" alt=""></div>
+    <div class="doc2-band-photo-wrap"><img class="doc2-band-photo" src="assets/cover-devis.jpg" alt=""></div>
     <div class="doc2-band-gold"></div>
     <div class="doc2-band-row">
       <div>
