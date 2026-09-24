@@ -2161,7 +2161,7 @@ return `<p class="wz-intro">Ajoutez les prestations et le matériel : chaque lig
       ${x.echeancier.map((e,i)=>`
       <div class="wz-ech-row" data-idx="${i}">
         <input type="text" class="wz-ech" data-idx="${i}" data-field="label" value="${esc(e.label)}" placeholder="ex. Acompte à la signature">
-        <input type="number" class="wz-ech" data-idx="${i}" data-field="pct" min="0" max="100" step="1" value="${e.pct}">
+        <span class="wz-pct-wrap"><input type="number" class="wz-ech" data-idx="${i}" data-field="pct" min="0" max="100" step="1" value="${e.pct}"><i>%</i></span>
         <span class="wz-ech-amt" id="wzEchAmt-${i}">${fmtEuros(echeanceTtcCt(dvLike,i))}</span>
       </div>`).join("")}
       <p class="form-help" id="wzEchTotal" style="margin:8px 0 0${sumPct!==100?";color:var(--red)":""}">Total : ${sumPct} % ${sumPct!==100?"— doit faire 100 % au total":"✓"}</p>
