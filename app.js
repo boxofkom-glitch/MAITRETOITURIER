@@ -881,6 +881,9 @@ function isMine(d){
   const n = currentName();
   return d.technicien===n || d.commercial===n || (d.creePar && d.creePar.id===state.userId);
 }
+function otherChantiers(d){
+  return visibleDossiers().filter(x=>x.id!==d.id && x.client.trim().toLowerCase()===d.client.trim().toLowerCase());
+}
 function myDossiers(){
   if(state.role==="tech" || state.role==="sales") return visibleDossiers().filter(isMine);
   return visibleDossiers();
@@ -1033,8 +1036,9 @@ function loadScriptOnce(src){
     if(document.querySelector(`script[src="${src}"]`)){ resolve(); return; }
     const s = document.createElement("script");
     s.src = src;
-    s.onload = ()=>resolve();
-    s.onerror = ()=>reject(new Error("Échec de chargement : "+src));
+    const timer = setTimeout(()=>reject(new Error("Délai dépassé (connexion trop lente ou bloquée) : "+src)), 15000);
+    s.onload = ()=>{ clearTimeout(timer); resolve(); };
+    s.onerror = ()=>{ clearTimeout(timer); reject(new Error("Échec de chargement : "+src)); };
     document.head.appendChild(s);
   });
 }
@@ -1049,14 +1053,15 @@ async function buildPdfFromHtml(docHtmlString, onProgress){
   const iframe = document.createElement("iframe");
   iframe.style.cssText = "position:fixed;left:-99999px;top:0;width:794px;height:1123px;border:0";
   iframe.srcdoc = `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><base href="${location.href}">${styles}</head><body style="margin:0;background:#fff">${docHtmlString}</body></html>`;
+  const withTimeout = (p, ms, label)=>Promise.race([p, new Promise((_,rej)=>setTimeout(()=>rej(new Error("Délai dépassé : "+label)), ms))]);
   const loaded = new Promise(res=>{ iframe.onload = res; });
   document.body.appendChild(iframe);
   try{
-    await loaded;
+    await withTimeout(loaded, 15000, "chargement du document");
     const doc = iframe.contentDocument;
-    if(doc.fonts && doc.fonts.ready) await doc.fonts.ready;
+    if(doc.fonts && doc.fonts.ready) await withTimeout(doc.fonts.ready, 8000, "polices").catch(()=>{});
     const imgs = Array.from(doc.querySelectorAll("img"));
-    await Promise.all(imgs.map(img=>img.complete ? Promise.resolve() : new Promise(res=>{ img.onload=res; img.onerror=res; })));
+    await Promise.all(imgs.map(img=>img.complete ? Promise.resolve() : new Promise(res=>{ img.onload=res; img.onerror=res; setTimeout(res, 10000); })));
 
     fitPointPages(doc);
     numberPdfPages(doc);
@@ -3935,8 +3940,14 @@ function renderDossierInfo(d){
       ${canQuote?`<button class="btn-primary btn-sm" data-action="wizard-devis" data-id="${d.id}">+ Devis</button>`:""}
       ${d.email?`<button class="btn-secondary btn-sm" data-action="client-invite" data-id="${d.id}">Inviter (espace client)</button>`:""}
       ${sendReport?`<button class="btn-primary btn-sm" data-action="modal-send" data-id="${d.id}">Envoyer le rapport</button>`:""}
+      ${canCreateDemande()?`<button class="btn-secondary btn-sm" data-action="modal-new-chantier" data-id="${d.id}">+ Nouveau chantier pour ce client</button>`:""}
     </div>
   </div>
+
+  ${otherChantiers(d).length ? `<div class="card">
+    <div class="card-header"><h3>Autres chantiers de ${esc(d.client)}</h3></div>
+    ${otherChantiers(d).map(x=>`<div class="row-item"><div><div class="row-title">${esc(x.id)} · ${esc(x.motif)}</div><div class="row-sub">${esc(x.adresse)}, ${esc(x.ville)}</div></div>${badge(x.statut, statutBadgeClass(x.statut))}<button class="link-btn" data-action="open-dossier" data-id="${x.id}">Ouvrir</button></div>`).join("")}
+  </div>` : ""}
 
   ${renderProcessCard(d)}
 
@@ -5457,6 +5468,7 @@ function knownClients(){
 }
 function modalNewDemande(){
   const m = state.modal || {};
+  const pf = m.prefillId ? byId(m.prefillId) : null;
   const role = state.role;
   const needTech = role==="sales", needCom = role==="tech";
   const techOpts = activeStaff("tech").map(n=>`<option>${esc(n)}</option>`).join("");
@@ -5467,23 +5479,24 @@ function modalNewDemande(){
     ? `<div class="form-field"><label>Commercial à affecter <span class="req">obligatoire</span></label><select id="fCommercial"><option value="">— Choisir un commercial —</option>${comOpts}</select><div class="form-help">Vous êtes automatiquement le technicien de ce client.</div></div>`
     : `<div class="form-field"><label>Technicien</label><select id="fTech"><option value="">À affecter</option>${techOpts}</select></div>
        <div class="form-field"><label>Commercial</label><select id="fCommercial"><option value="">À affecter</option>${comOpts}</select></div>`;
-  return modalWrap(m.toDiagnostic ? "Créer un diagnostic" : "Créer un client", `
-    ${m.toDiagnostic ? `<div class="form-field"><label>Client déjà enregistré ? Recherchez-le</label>
-      <input type="search" id="fExisting" list="knownClients" placeholder="Tapez un nom ou une ville…" autocomplete="off">
+  return modalWrap(pf ? "Nouveau chantier pour "+pf.client : (m.toDiagnostic ? "Créer un diagnostic" : "Créer un client"), `
+    ${pf ? `<p class="form-help" style="margin:0 0 12px">Ce dossier est indépendant : il aura son propre diagnostic, devis, factures et suivi de chantier, séparé de ${esc(pf.client)} (${esc(pf.id)}).</p>` : ""}
+    <div class="form-field"><label>Client déjà enregistré ? Recherchez-le</label>
+      <input type="search" id="fExisting" list="knownClients" placeholder="Tapez un nom ou une ville…" autocomplete="off" value="${pf?esc(pf.client+" · "+pf.ville):""}">
       <datalist id="knownClients">${knownClients().map(d=>`<option value="${esc(d.client)} · ${esc(d.ville)}"></option>`).join("")}</datalist>
-      <div class="form-help" id="fExistingNote">Choisissez un client existant pour préremplir sa fiche, ou saisissez un nouveau client ci-dessous.</div>
-    </div>` : ""}
-    <div class="form-field"><label>Nom du client</label><input type="text" id="fName"></div>
-    <div class="form-field"><label>Téléphone</label><input type="tel" id="fPhone" value="06 00 00 00 00"></div>
-    <div class="form-field"><label>E-mail</label><input type="email" id="fEmail"></div>
-    <div class="form-field"><label>Ville</label><input type="text" id="fVille"></div>
-    <div class="form-field"><label>Type de bâtiment</label><select id="fType">${["Maison individuelle","Immeuble collectif","Bâtiment professionnel","Dépendance","Autre"].map(o=>`<option>${o}</option>`).join("")}</select></div>
-    <div class="form-field"><label>Adresse</label><input type="text" id="fAdresse" value="12 rue des Tilleuls"></div>
-    <div class="form-field"><label>Informations sur le bâtiment</label><textarea id="fInfos"></textarea></div>
-    <div class="form-field"><label>Objet de la demande</label><textarea id="fMotif"></textarea></div>
+      <div class="form-help" id="fExistingNote">Choisissez un client existant pour lui ouvrir un nouveau chantier (dossier séparé, avec son propre suivi devis/factures/chantier), ou saisissez un nouveau client ci-dessous.</div>
+    </div>
+    <div class="form-field"><label>Nom du client</label><input type="text" id="fName" value="${pf?esc(pf.client):""}"></div>
+    <div class="form-field"><label>Téléphone</label><input type="tel" id="fPhone" value="${pf?esc(pf.telephone||""):"06 00 00 00 00"}"></div>
+    <div class="form-field"><label>E-mail</label><input type="email" id="fEmail" value="${pf?esc(pf.email||""):""}"></div>
+    <div class="form-field"><label>Ville</label><input type="text" id="fVille" value="${pf?esc(pf.ville||""):""}"></div>
+    <div class="form-field"><label>Type de bâtiment</label><select id="fType">${["Maison individuelle","Immeuble collectif","Bâtiment professionnel","Dépendance","Autre"].map(o=>`<option ${pf&&pf.typeBatiment===o?"selected":""}>${o}</option>`).join("")}</select></div>
+    <div class="form-field"><label>Adresse</label><input type="text" id="fAdresse" value="${pf?esc(pf.adresse||""):"12 rue des Tilleuls"}"></div>
+    <div class="form-field"><label>Informations sur le bâtiment</label><textarea id="fInfos">${pf?esc(pf.infosGenerales||""):""}</textarea></div>
+    <div class="form-field"><label>Objet de la demande</label><textarea id="fMotif" placeholder="${pf?"Ex. réfection de la toiture du garage…":""}"></textarea></div>
     <div class="form-field"><label>Priorité</label><select id="fPriorite"><option>Normale</option><option>Urgente</option><option>Infiltration signalée</option></select></div>
     ${assign}
-    <div class="modal-actions"><button class="btn-primary" data-action="submit-new">${m.toDiagnostic?"Créer et démarrer le diagnostic":"Créer le client"}</button><button class="btn-secondary" data-action="modal-close">Annuler</button></div>
+    <div class="modal-actions"><button class="btn-primary" data-action="submit-new">${pf?"Créer ce chantier":(m.toDiagnostic?"Créer et démarrer le diagnostic":"Créer le client")}</button><button class="btn-secondary" data-action="modal-close">Annuler</button></div>
   `);
 }
 function prefillExistingClient(val){
@@ -5724,6 +5737,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(action==="open-dossier"){ state.section="dossiers"; state.dossierId=t.dataset.id; state.dossierTab=t.dataset.tab||"info"; state.diagStep=1; render(); scrollContentTop(); return; }
     if(action==="dossier-tab"){ state.dossierTab=t.dataset.tab; state.diagStep=1; render(); scrollContentTop(); return; }
     if(action==="modal-new"){ state.modal={type:"new"}; render(); return; }
+    if(action==="modal-new-chantier"){ state.modal={type:"new", prefillId:t.dataset.id}; render(); return; }
     if(action==="modal-new-diag"){ state.modal={type:"new", toDiagnostic:true}; render(); return; }
     if(action==="modal-edit"){ state.modal={type:"edit", id:t.dataset.id}; render(); return; }
     if(action==="modal-affect"){ state.modal={type:"affect", id:t.dataset.id}; render(); return; }
