@@ -2328,6 +2328,12 @@ function wzCreate(send){
   if(!send) showToast("Facture créée en brouillon.");
 }
 
+// Ouvre Gmail (webmail) avec destinataire, objet et message déjà remplis — plutôt que mailto: (qui
+// dépend du client mail par défaut de l'appareil, pas toujours Gmail alors que c'est ce qu'utilise l'équipe).
+function gmailComposeUrl(to, subject, body){
+  return "https://mail.google.com/mail/?view=cm&fs=1&to="+encodeURIComponent(to||"")+"&su="+encodeURIComponent(subject||"")+"&body="+encodeURIComponent(body||"");
+}
+
 async function prepareSend(d, channel){
   const cur = state.modal || {};
   const kind = cur.kind || "report", docId = cur.docId || null;
@@ -2376,7 +2382,7 @@ function sendNow(d){
       const phone = (d.telephone||"").replace(/\D/g,"").replace(/^0/,"33");
       window.open(`https://wa.me/${phone}?text=${encodeURIComponent(m.text)}`, "_blank");
     } else {
-      window.location.href = `mailto:${encodeURIComponent(d.email||"")}?subject=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(m.text)}`;
+      window.open(gmailComposeUrl(d.email, m.subject, m.text), "_blank");
     }
     finishSend(d, channel, "PDF téléchargé");
   };
@@ -2671,7 +2677,7 @@ function sendMailAuto(){
 function modalMailSend(m){
   const e = buildEmail(m.tpl, m.vars);
   const label = EMAIL_TEMPLATES[m.tpl].label;
-  const mailto = "mailto:"+encodeURIComponent(m.to||"")+"?subject="+encodeURIComponent(e.subject)+"&body="+encodeURIComponent(e.text);
+  const mailto = gmailComposeUrl(m.to, e.subject, e.text);
   const wa = m.phone ? "https://wa.me/"+m.phone.replace(/\D/g,"").replace(/^0/,"33")+"?text="+encodeURIComponent(e.subject+"\n\n"+e.text) : "";
   const canAuto = SRV.on && SRV.mail && !!m.to;
   const footnote = canAuto
@@ -2683,7 +2689,7 @@ function modalMailSend(m){
     ${m.sent ? `<div class="mail-sent-ok">✓ E-mail envoyé à ${esc(m.to)}</div>` : ""}
     <div class="modal-actions" style="flex-wrap:wrap">
       ${canAuto && !m.sent ? `<button class="btn-primary btn-sm" data-action="mail-send-auto" ${m.sending?"disabled":""}>${m.sending?"Envoi en cours…":"Envoyer par e-mail"}</button>` : ""}
-      <a class="${canAuto?"btn-secondary":"btn-primary"} btn-sm" href="${mailto}" style="text-decoration:none;display:inline-block">Ouvrir dans ma messagerie</a>
+      <a class="${canAuto?"btn-secondary":"btn-primary"} btn-sm" href="${mailto}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">Ouvrir dans Gmail</a>
       ${wa?`<a class="btn-secondary btn-sm" href="${wa}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">WhatsApp</a>`:""}
       <button class="btn-secondary btn-sm" data-action="mail-copy-html">Copier le HTML</button>
       <button class="btn-secondary btn-sm" data-action="mail-download">Télécharger</button>
@@ -3950,7 +3956,7 @@ function renderDossierInfo(d){
     </div>
     <div class="crm-actions">
       ${phone?`<a class="btn-secondary btn-sm" href="tel:${phone}">Appeler</a><a class="btn-secondary btn-sm" href="https://wa.me/${wa}" target="_blank" rel="noopener">WhatsApp</a>`:""}
-      ${d.email?`<a class="btn-secondary btn-sm" href="mailto:${esc(d.email)}">E-mail</a>`:""}
+      ${d.email?`<a class="btn-secondary btn-sm" href="${gmailComposeUrl(d.email)}" target="_blank" rel="noopener">E-mail</a>`:""}
       ${canEditActivity()?`<button class="btn-secondary btn-sm" data-action="form-open" data-form="task" data-id="${d.id}">+ Tâche</button><button class="btn-secondary btn-sm" data-action="dossier-tab" data-tab="activite">+ Note</button>`:""}
       ${canQuote?`<button class="btn-primary btn-sm" data-action="wizard-devis" data-id="${d.id}">+ Devis</button>`:""}
       ${d.email?`<button class="btn-secondary btn-sm" data-action="client-invite" data-id="${d.id}">Inviter (espace client)</button>`:""}
