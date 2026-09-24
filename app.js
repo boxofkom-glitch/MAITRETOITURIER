@@ -1506,7 +1506,9 @@ function docCoverBand(d, o){
     <div class="doc2-band-overlay"></div>
     <div class="doc2-band-row">
       <img class="doc2-band-logo" src="assets/logo-lockup.png" alt="Maître Toiturier">
-      <div class="doc2-band-doc">${o.eyebrow?`<div class="doc2-band-eyebrow">${esc(o.eyebrow)}</div>`:""}<div class="doc2-band-type">${esc(o.topTitle)}</div><div class="doc2-band-num">${esc(o.topNum)}</div></div>
+      <div class="doc2-band-doc">${o.eyebrow?`<div class="doc2-band-eyebrow">${esc(o.eyebrow)}</div>`:""}<div class="doc2-band-type">${esc(o.topTitle)}</div><div class="doc2-band-num">${esc(o.topNum)}</div>
+        ${o.pill?`<div class="doc2-pill ${o.pill.cls}"><span class="doc2-pill-ic">${o.pill.mark==="check"?iconSvg("check",11):"!"}</span>${esc(o.pill.label)}</div>`:""}
+      </div>
     </div>
   </div>`;
 }
