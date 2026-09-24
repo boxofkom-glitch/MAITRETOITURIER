@@ -423,16 +423,21 @@ a.btn-secondary{text-decoration:none;display:inline-flex;align-items:center}
 
 /* ---- Devis / factures : document corporate graphique, distinct du rapport (bandeau photo, table sombre, encarts dorés) ---- */
 .doc2-page{background:#fdfbf6;display:flex;flex-direction:column;font-family:"Montserrat","Segoe UI",Arial,sans-serif;color:#1c1a16;position:relative}
-.doc2-band{position:relative;height:58mm;overflow:hidden;flex-shrink:0}
-.doc2-band-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 30%}
-.doc2-band-overlay{position:absolute;inset:0;background:linear-gradient(100deg,rgba(10,9,7,.93),rgba(10,9,7,.6) 55%,rgba(10,9,7,.82))}
-.doc2-band:after{content:'';position:absolute;left:0;right:0;bottom:0;height:4px;background:linear-gradient(90deg,#c9a53b,#e8c877 40%,#c9a53b 70%,transparent)}
-.doc2-band-row{position:relative;height:100%;display:flex;align-items:center;justify-content:space-between;padding:0 16mm}
-.doc2-band-logo{height:21mm;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))}
-.doc2-band-doc{text-align:right;color:#f3ead0}
-.doc2-band-eyebrow{font-size:10px;text-transform:uppercase;letter-spacing:2px;color:#e8c877;opacity:.9;margin-bottom:2px}
-.doc2-band-type{font-family:"Playfair Display",Georgia,serif;font-size:30px;font-weight:700;letter-spacing:.4px;color:#e8c877;text-shadow:0 2px 10px rgba(0,0,0,.4)}
-.doc2-band-num{font-size:12.5px;letter-spacing:.5px;margin-top:4px;opacity:.95}
+.doc2-band{position:relative;height:66mm;overflow:hidden;flex-shrink:0;background:linear-gradient(135deg,#0c0b09,#1c1a16 65%)}
+.doc2-band-photo-wrap{position:absolute;top:0;right:0;bottom:0;width:56%;clip-path:polygon(16% 0,100% 0,100% 100%,0 100%);overflow:hidden}
+.doc2-band-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 40%}
+.doc2-band-photo-wrap:after{content:'';position:absolute;inset:0;background:linear-gradient(100deg,rgba(10,9,7,.4),rgba(10,9,7,0) 30%)}
+.doc2-band-gold{position:absolute;top:0;bottom:0;left:calc(44% - 2.5mm);width:5mm;background:linear-gradient(180deg,#c9a53b,#e8c877 50%,#c9a53b);clip-path:polygon(55% 0,100% 0,45% 100%,0 100%);z-index:2}
+.doc2-band:after{content:'';position:absolute;left:0;right:0;bottom:0;height:4px;background:linear-gradient(90deg,#c9a53b,#e8c877 40%,#c9a53b 70%,transparent);z-index:2}
+.doc2-band-row{position:relative;z-index:2;height:100%;display:flex;flex-direction:column;padding:8mm 12mm}
+.doc2-band-logo{height:16mm;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))}
+.doc2-band-services{margin-top:5mm;font-size:9px;line-height:1.5;letter-spacing:1px;text-transform:uppercase;color:#e8c877}
+.doc2-band-tagline{margin-top:5mm;font-family:"Playfair Display",Georgia,serif;font-style:italic;font-size:11.5px;line-height:1.35;color:#f3ead0}
+.doc2-band-doc{position:absolute;top:8mm;right:12mm;text-align:right;color:#f3ead0;z-index:2;background:rgba(10,9,7,.32);padding:6px 10px;border-radius:6px;backdrop-filter:blur(1px)}
+.doc2-band-eyebrow{font-size:10px;text-transform:uppercase;letter-spacing:2px;color:#e8c877;opacity:.9;margin-bottom:2px;text-shadow:0 1px 4px rgba(0,0,0,.6)}
+.doc2-band-type{font-family:"Playfair Display",Georgia,serif;font-size:30px;font-weight:700;letter-spacing:.4px;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.7)}
+.doc2-band-num{font-size:12.5px;letter-spacing:.5px;margin-top:4px;opacity:.95;text-shadow:0 1px 4px rgba(0,0,0,.6)}
+.doc2-band-meta2{font-size:10px;margin-top:6px;opacity:.9;line-height:1.5;text-shadow:0 1px 4px rgba(0,0,0,.6)}
 .doc2-pill{position:relative;z-index:1;display:inline-flex;align-items:center;gap:8px;margin-top:12px;padding:6px 14px 6px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.3px}
 .doc2-pill-ic{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px}
 .doc2-pill.ok{background:rgba(60,150,90,.18);color:#8fd6a8;border:1px solid rgba(120,200,150,.35)}
@@ -446,8 +451,9 @@ a.btn-secondary{text-decoration:none;display:inline-flex;align-items:center}
 .doc2-slimhead{display:flex;justify-content:space-between;align-items:center;padding:9mm 16mm 4mm;flex-shrink:0;font-size:10px;letter-spacing:.3px;text-transform:uppercase;color:#a4966f;border-bottom:2px solid #1c1a16}
 .doc2-body{padding:12mm 16mm;flex:1;display:flex;flex-direction:column;position:relative}
 .doc2-watermark{position:absolute;right:-6mm;top:2mm;color:#1c1a16;opacity:.035;z-index:0;pointer-events:none}
-.doc2-meta{position:relative;z-index:1;display:flex;gap:12mm;margin-bottom:7mm}
-.doc2-meta-col{flex:1;background:#fff;border:1px solid #ece4d0;border-radius:6px;padding:8px 11px}
+.doc2-meta{position:relative;z-index:1;display:flex;margin-bottom:7mm;background:#fff;border:1px solid #ece4d0;border-radius:8px;overflow:hidden}
+.doc2-meta-col{flex:1;padding:9px 12px;border-left:1px solid #ece4d0}
+.doc2-meta-col:first-child{border-left:none}
 .doc2-meta-label{display:flex;align-items:center;gap:6px;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#a4802a;font-weight:700;margin-bottom:5px}
 .doc2-meta-label svg{flex-shrink:0}
 .doc2-meta-body{font-size:12px;line-height:1.5}
@@ -465,16 +471,27 @@ a.btn-secondary{text-decoration:none;display:inline-flex;align-items:center}
 .doc2-table td{padding:8px;border-bottom:1px solid #ece4d0;overflow-wrap:break-word}
 .doc2-table tbody tr:nth-child(even){background:#faf6ea}
 .doc2-subrow td{padding:12px 8px 7px;font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;color:#fff;background:#8a7f66!important;border-bottom:none}
-.doc2-totals{position:relative;z-index:1;margin:8mm 0 0 auto;width:100mm}
-.doc2-tot{display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:4px 10px;color:#5a5240}
+.doc2-bottom{position:relative;z-index:1;display:flex;gap:10mm;margin-top:8mm;align-items:flex-start}
+.doc2-totals{width:78mm;flex-shrink:0;margin-left:auto}
+.doc2-tot{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;padding:3px 2px;color:#5a5240}
 .doc2-tot span{flex:1;min-width:0}
 .doc2-tot b{white-space:nowrap}
 .doc2-tot-big{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:8px;padding:10px 12px;background:linear-gradient(100deg,#1c1a16,#302b21);border-radius:7px;box-shadow:0 4px 14px rgba(28,26,22,.25)}
 .doc2-tot-big span{color:#e8dcc4;font-size:11.5px;font-weight:600;letter-spacing:.2px}
 .doc2-tot-big b{color:#e8c877;font-size:17px;font-family:"Playfair Display",Georgia,serif;white-space:nowrap}
-.doc2-conditions{position:relative;z-index:1;margin-top:8mm;padding:7mm;background:#faf6ea;border-radius:7px;border-left:4px solid #c9a53b;font-size:11px;line-height:1.65}
+.doc2-conditions{flex:1;min-width:0;padding:7mm;background:#faf6ea;border-radius:7px;border-left:4px solid #c9a53b;font-size:10.5px;line-height:1.6}
 .doc2-cond-label{display:flex;align-items:center;gap:6px;font-weight:700;text-transform:uppercase;font-size:9.5px;letter-spacing:.4px;color:#a4802a;margin-bottom:5px}
 .doc2-foot{margin-top:auto;padding:6mm 16mm;display:flex;justify-content:space-between;font-size:9px;color:#a4966f;border-top:1px solid #e6ddc8;flex-shrink:0}
+.doc2-trustfoot{margin-top:auto;flex-shrink:0;background:linear-gradient(100deg,#0c0b09,#1c1a16);padding:6mm 12mm;position:relative;overflow:hidden}
+.doc2-trust-row{display:flex;gap:8mm;position:relative;z-index:1}
+.doc2-trust-item{flex:1;display:flex;align-items:center;gap:7px;color:#e8dcc4;min-width:0}
+.doc2-trust-item svg{flex-shrink:0;color:#c9a53b}
+.doc2-trust-item span{font-size:8.5px;line-height:1.3;text-transform:uppercase;letter-spacing:.3px}
+.doc2-trust-bottom{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:5mm;padding-top:4mm;border-top:1px solid rgba(255,255,255,.12);position:relative;z-index:1}
+.doc2-trust-loc{display:flex;gap:14px;color:#a4966f;font-size:9px}
+.doc2-trust-loc span{display:flex;align-items:center;gap:5px}
+.doc2-trust-loc svg{color:#c9a53b}
+.doc2-trust-quote{font-family:"Playfair Display",Georgia,serif;font-style:italic;font-size:10.5px;color:#e8dcc4;text-align:right;max-width:70mm}
 
 /* ---- Page "point de contrôle" (une page A4 par contrôle) ---- */
 .pdf-pointpage{height:297mm;background:#f5f1e9}

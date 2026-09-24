@@ -1507,13 +1507,17 @@ function docPaginate(n){
 // En-tête de couverture (page 1 uniquement) : photo d'équipe assombrie, logo, type + numéro de document.
 function docCoverBand(d, o){
   return `<div class="doc2-band">
-    <img class="doc2-band-photo" src="assets/cover-team.jpg" alt="">
-    <div class="doc2-band-overlay"></div>
+    <div class="doc2-band-photo-wrap"><img class="doc2-band-photo" src="assets/cover-team.jpg" alt=""></div>
+    <div class="doc2-band-gold"></div>
     <div class="doc2-band-row">
-      <img class="doc2-band-logo" src="assets/logo-lockup.png" alt="Maître Toiturier">
-      <div class="doc2-band-doc">${o.eyebrow?`<div class="doc2-band-eyebrow">${esc(o.eyebrow)}</div>`:""}<div class="doc2-band-type">${esc(o.topTitle)}</div><div class="doc2-band-num">${esc(o.topNum)}</div>
-        ${o.pill?`<div class="doc2-pill ${o.pill.cls}"><span class="doc2-pill-ic">${o.pill.mark==="check"?iconSvg("check",11):"!"}</span>${esc(o.pill.label)}</div>`:""}
+      <div>
+        <img class="doc2-band-logo" src="assets/logo-lockup.png" alt="Maître Toiturier">
+        <div class="doc2-band-services">Couverture<br>Zinguerie<br>Rénovation<br>Entretien</div>
       </div>
+      <div class="doc2-band-tagline">Votre toit,<br>notre expertise<br>durable.</div>
+    </div>
+    <div class="doc2-band-doc">${o.eyebrow?`<div class="doc2-band-eyebrow">${esc(o.eyebrow)}</div>`:""}<div class="doc2-band-type">${esc(o.topTitle)}</div><div class="doc2-band-num">${esc(o.topNum)}</div>
+      <div class="doc2-band-meta2">${esc(o.dateLabel||"")}${o.validLabel?"<br>Valable "+esc(o.validLabel):""}</div>
     </div>
   </div>`;
 }
@@ -1524,6 +1528,18 @@ function docSlimHead(d, o, idx, total){
 function docFooter(idx, total){
   const b = SETTINGS.company;
   return `<div class="doc2-foot"><span>${esc([b.nom,b.site,b.telephone].filter(Boolean).join(" · "))}</span><span class="pdf-page-num"></span></div>`;
+}
+const DOC_TRUST_ITEMS = [["shield","Garantie décennale 10 ans"],["check","Matériaux de qualité certifiés"],["helmet","Équipe qualifiée et expérimentée"],["house","Chantier propre et sécurisé"]];
+function docTrustFoot(d){
+  const b = SETTINGS.company;
+  return `<div class="doc2-trustfoot">
+    <div class="doc2-trust-row">${DOC_TRUST_ITEMS.map(([ic,l])=>`<div class="doc2-trust-item">${iconSvg(ic,20)}<span>${esc(l)}</span></div>`).join("")}</div>
+    <div class="doc2-trust-bottom">
+      <div class="doc2-trust-loc">${b.adresse?`<span>${iconSvg("pin",13)}${esc(b.adresse)}</span>`:""}${b.site?`<span>${iconSvg("globe",13)}${esc(b.site)}</span>`:""}</div>
+      <div class="doc2-trust-quote">“ Un toit bien entretenu aujourd’hui, c’est un patrimoine préservé demain. ”</div>
+    </div>
+    <span class="pdf-page-num" style="position:absolute;right:12mm;bottom:2mm;color:#7c7563;font-size:8px"></span>
+  </div>`;
 }
 
 function docMetaCol(icon, label, body){
@@ -1538,16 +1554,15 @@ function docPage(d, o, pg, idx, total){
     </div>
     ${o.objet?`<div class="doc2-objet">${iconSvg("clipboard",15)}<span><b>Objet</b> — ${esc(o.objet)}</span></div>`:""}` : "";
   const conditions = pg.last && o.bannerText ? `<div class="doc2-conditions"><div class="doc2-cond-label">${iconSvg("shield",14)}${esc(o.bannerLabel||"Conditions")}</div><p>${o.bannerText}</p></div>` : "";
-  const totalsBlock = pg.last ? o.totals : "";
+  const bottom = pg.last ? `<div class="doc2-bottom">${conditions}<div class="doc2-totals">${o.totals}</div></div>` : "";
   return `<div class="pdf-page doc2-page">
     ${pg.first ? docCoverBand(d, o) : docSlimHead(d, o, idx, total)}
     <div class="doc2-body">
       ${meta}
       ${docTable(o.rows.slice(pg.from, pg.to).join(""))}
-      ${totalsBlock}
-      ${conditions}
+      ${bottom}
     </div>
-    ${docFooter(idx, total)}
+    ${pg.last ? docTrustFoot(d) : docFooter(idx, total)}
   </div>`;
 }
 
