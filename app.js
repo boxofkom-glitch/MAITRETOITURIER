@@ -3249,6 +3249,54 @@ function ceLive(){
   const el = document.getElementById("ceMargeVal");
   if(el) el.textContent = pct!=null ? pct+" %" : "—";
 }
+// Modifier les conditions de paiement d'un devis déjà créé (brouillon), sans devoir le recréer —
+// utile pour les devis migrés depuis l'ancien format acompte/solde qui n'avaient pas d'échéancier.
+// Montant d'une étape à partir d'un échéancier "brouillon" (pas forcément celui déjà enregistré
+// sur le devis) : mêmes règles d'arrondi que echeanceTtcCt (la dernière étape absorbe l'écart).
+function draftEcheanceTtcCt(ttcCt, echeancier, idx){
+  if(!echeancier[idx]) return 0;
+  if(idx < echeancier.length-1) return Math.round(ttcCt * echeancier[idx].pct / 100);
+  const before = echeancier.slice(0, idx).reduce((s,e,i)=>s+draftEcheanceTtcCt(ttcCt, echeancier, i), 0);
+  return Math.max(0, ttcCt - before);
+}
+function modalEchEdit(m){
+  const d = byId(m.id), dv = latestDevis(d);
+  const ttc = devisTotals(dv).ttcCt;
+  const echeancier = m.echeancier || devisPaiement(dv).echeancier.map(e=>Object.assign({},e));
+  const mode = m.mode || devisPaiement(dv).mode;
+  const sumPct = echeancier.reduce((s,e)=>s+(e.pct||0),0);
+  return modalWrap("Conditions de paiement", `
+    <div class="wz-grid">
+      <div class="form-field"><label>Nombre de paiements</label><select id="echFois" data-action-change="ech-fois-change">${PAY_FOIS.map(n=>`<option value="${n}" ${echeancier.length===n?"selected":""}>${n===1?"1 fois (paiement unique)":n+" fois"}</option>`).join("")}</select></div>
+      <div class="form-field"><label>Mode de règlement</label><select id="echMode">${PAY_MODES.map(mm=>`<option ${mode===mm?"selected":""}>${mm}</option>`).join("")}</select></div>
+    </div>
+    <div class="wz-ech-head"><span>Libellé (visible sur la facture)</span><span>%</span><span>Montant</span></div>
+    ${echeancier.map((e,i)=>`
+    <div class="wz-ech-row" data-idx="${i}">
+      <input type="text" class="ech-field" data-idx="${i}" data-field="label" value="${esc(e.label)}" placeholder="ex. Paiement mi-chantier">
+      <span class="wz-pct-wrap"><input type="number" class="ech-field" data-idx="${i}" data-field="pct" min="0" max="100" step="1" value="${e.pct}"><i>%</i></span>
+      <span class="wz-ech-amt" id="echAmt-${i}">${fmtEuros(draftEcheanceTtcCt(ttc, echeancier, i))}</span>
+    </div>`).join("")}
+    <p class="form-help" id="echTotalMsg" style="margin:8px 0 0${sumPct!==100?";color:var(--red)":""}">Total : ${sumPct} % ${sumPct!==100?"— doit faire 100 % au total":"✓"}</p>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="btn-primary" data-action="ech-save" data-id="${d.id}">Enregistrer</button>
+      <button class="btn-secondary" data-action="modal-close">Annuler</button>
+    </div>`);
+}
+function echLive(){
+  const dv = latestDevis(byId(state.modal.id));
+  document.querySelectorAll(".wz-ech-row").forEach(row=>{
+    const i = parseInt(row.dataset.idx,10);
+    const label = row.querySelector('[data-field="label"]').value;
+    const pct = parseInt(row.querySelector('[data-field="pct"]').value,10)||0;
+    const amt = document.getElementById("echAmt-"+i);
+    if(amt) amt.textContent = fmtEuros(Math.round(devisTotals(dv).ttcCt*pct/100));
+  });
+  let sum = 0;
+  document.querySelectorAll('.ech-field[data-field="pct"]').forEach(el=>sum += parseInt(el.value,10)||0);
+  const msg = document.getElementById("echTotalMsg");
+  if(msg){ msg.textContent = "Total : "+sum+" % "+(sum!==100?"— doit faire 100 % au total":"✓"); msg.style.color = sum!==100 ? "var(--red)" : ""; }
+}
 function empStatutBadge(e){ return badge(e.statut==="actif"?"Actif":"Suspendu", e.statut==="actif"?"green":"gray"); }
 
 function modalProfile(m){
@@ -4677,7 +4725,7 @@ function renderDossierDevis(d){
           ${hasPermission("quote.send")?`<button class="btn-secondary btn-sm" data-action="modal-send-doc" data-id="${d.id}" data-kind="devis" data-doc="${dv.id}">Envoyer au client</button>`:""}
           ${dv.statut==="Brouillon" && hasPermission("quote.create")?`<button class="btn-ghost btn-sm" data-action="ask-delete" data-what="devis" data-id="${d.id}" data-doc="${dv.id}">Supprimer</button>`:""}
         </div>
-        <p class="form-help" style="margin-top:10px">${esc(paiementSummary(dv))}</p>
+        <p class="form-help" style="margin-top:10px">${esc(paiementSummary(dv))} ${canEditDv?`<button class="link-btn" data-action="ech-edit-open" data-id="${d.id}">Modifier</button>`:""}</p>
         ${dv.dateEnvoi?`<p class="form-help" style="margin-top:8px">Envoyé le ${esc(dv.dateEnvoi)}</p>`:""}
       </div>
       ${d.devis.length>1?`
@@ -5344,6 +5392,7 @@ function buildModal(){
   if(m.type==="matnew") return modalMatNew(m);
   if(m.type==="matlib") return modalMatLib();
   if(m.type==="catedit") return modalCatEdit(m);
+  if(m.type==="echedit") return modalEchEdit(m);
   return "";
 }
 
@@ -5948,6 +5997,24 @@ document.addEventListener("DOMContentLoaded", ()=>{
       state.modal = {type:"catedit", kind:t.dataset.kind, idx: idx<0 ? null : idx};
       render(); return;
     }
+    if(action==="ech-edit-open"){
+      state.modal = {type:"echedit", id:t.dataset.id};
+      render(); return;
+    }
+    if(action==="ech-save"){
+      const d = byId(t.dataset.id), dv = latestDevis(d);
+      const rows = Array.from(document.querySelectorAll(".wz-ech-row")).map(row=>({
+        label: row.querySelector('[data-field="label"]').value.trim() || "Paiement",
+        pct: parseInt(row.querySelector('[data-field="pct"]').value,10)||0
+      }));
+      const sum = rows.reduce((s,r)=>s+r.pct,0);
+      if(sum!==100){ showToast("Le total des paiements doit faire 100 % (actuellement "+sum+" %)."); return; }
+      dv.paiement = {echeancier: rows, mode: document.getElementById("echMode").value};
+      stampHist(d, "Conditions de paiement du devis "+dv.numero+" modifiées.");
+      state.modal = null; render();
+      showToast("Conditions de paiement enregistrées.");
+      return;
+    }
     if(action==="catedit-save"){
       const kind = t.dataset.kind, idx = parseInt(t.dataset.idx,10);
       const label = document.getElementById("ceLabel").value.trim();
@@ -6124,9 +6191,10 @@ document.addEventListener("DOMContentLoaded", ()=>{
       c.consignes = document.getElementById("chConsignes").value;
       let msg = "Chantier mis à jour.";
       const bb = billingOf(d);
-      if(["Terminé","À réceptionner","Clôturé"].includes(c.statut) && bb && bb.count>0 && bb.remaining>1 && hasPermission("invoice.create")){
-        const fs = createFacture(d, bb.dv, "Solde"); addFactureTask(d, fs); syncProcess(d);
-        msg = "Chantier terminé : facture de solde de "+fmtEuros(fs.montantTtcCt)+" créée automatiquement.";
+      const nextIdx = bb ? nextEcheancierStep(d, bb.dv) : null;
+      if(["Terminé","À réceptionner","Clôturé"].includes(c.statut) && bb && bb.count>0 && bb.remaining>1 && nextIdx!=null && hasPermission("invoice.create")){
+        const fs = createFacture(d, bb.dv, nextIdx); addFactureTask(d, fs); syncProcess(d);
+        msg = "Chantier terminé : facture « "+fs.type+" » de "+fmtEuros(fs.montantTtcCt)+" créée automatiquement.";
       }
       showToast(msg);
       render();
@@ -6166,6 +6234,11 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(e.target.id==="importCsv"){ const f = e.target.files[0]; e.target.value = ""; if(f) importCsvFile(f); return; }
     if(e.target.id==="importJson"){ const f = e.target.files[0]; e.target.value = ""; if(f) importBackupFile(f); return; }
     if(e.target.id==="fExisting"){ prefillExistingClient(e.target.value); return; }
+    if(e.target.id==="echFois"){
+      state.modal.echeancier = defaultEcheancier(parseInt(e.target.value,10));
+      render(); return;
+    }
+    if(e.target.classList && e.target.classList.contains("ech-field")){ echLive(); return; }
     if(e.target.dataset && e.target.dataset.dl){
       const f = dossierListState(); f.page = 1;
       f[e.target.dataset.dl] = e.target.value;
