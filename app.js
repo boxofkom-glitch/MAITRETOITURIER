@@ -975,6 +975,19 @@ function catalogFilter(input){
     el.style.display = !q || el.dataset.search.includes(q) ? "" : "none";
   });
 }
+// Filtre les puces prestations/matériel de l'assistant devis, et masque les groupes vides.
+function wzCatFilter(input){
+  const q = input.value.trim().toLowerCase();
+  document.querySelectorAll(".wz-catlist").forEach(list=>{
+    let any = false;
+    list.querySelectorAll(".wz-chip[data-search]").forEach(chip=>{
+      const show = !q || chip.dataset.search.includes(q);
+      chip.style.display = show ? "" : "none";
+      if(show) any = true;
+    });
+    list.style.display = (q && !any) ? "none" : "";
+  });
+}
 
 function showToast(msg){
   state.toast = msg;
@@ -2098,8 +2111,9 @@ function wzDevisStep(w, d){
     const sugg = d ? diagSuggestions(d).filter(sg=>!x.lignes.some(l=>l.code===sg.code)) : [];
 return `<p class="wz-intro">Ajoutez les prestations et le matériel : chaque ligne apparaîtra à l’identique sur le devis et sur les factures.</p>
       ${sugg.length ? `<div class="wz-sugg"><div class="wz-sugg-t">Suggéré d’après le diagnostic</div>${sugg.map(s=>{ const svc = SERVICE_CATALOG.find(c=>c.code===s.code); return `<button class="wz-chip" data-action="wz-add-sugg" data-code="${s.code}">+ ${esc(svc.label)} <small>${esc(s.reason)}</small></button>`; }).join("")}</div>` : ""}
-      <div class="wz-sugg"><div class="wz-sugg-t">Prestations — touchez pour ajouter</div>${SERVICE_CATALOG.filter(c=>!x.lignes.some(l=>l.code===c.code)).map(c=>`<button class="wz-chip" data-action="wz-add-sugg" data-code="${c.code}">+ ${esc(c.label)} <small>${fmtEuros(c.prixUnitaireCt)}</small></button>`).join("")}</div>
-      <div class="wz-sugg"><div class="wz-sugg-t">Matériel — touchez pour ajouter</div>${MATERIEL_CATALOG.filter(c=>!x.lignes.some(l=>l.code===c.code)).map(c=>`<button class="wz-chip" data-action="wz-add-sugg" data-code="${c.code}">+ ${esc(c.label)} <small>${fmtEuros(catalogVenteCt(c))}</small></button>`).join("")}</div>
+      <input type="search" class="cat-search" id="wzCatSearch" placeholder="Rechercher une prestation ou un matériau à ajouter…" oninput="wzCatFilter(this)">
+      <div class="wz-sugg wz-catlist" id="wzCatPresta"><div class="wz-sugg-t">Prestations — touchez pour ajouter</div>${SERVICE_CATALOG.filter(c=>!x.lignes.some(l=>l.code===c.code)).map(c=>`<button class="wz-chip" data-action="wz-add-sugg" data-code="${c.code}" data-search="${esc(c.label.toLowerCase())}">+ ${esc(c.label)} <small>${fmtEuros(c.prixUnitaireCt)}</small></button>`).join("")}</div>
+      <div class="wz-sugg wz-catlist" id="wzCatMat"><div class="wz-sugg-t">Matériel — touchez pour ajouter</div>${MATERIEL_CATALOG.filter(c=>!x.lignes.some(l=>l.code===c.code)).map(c=>`<button class="wz-chip" data-action="wz-add-sugg" data-code="${c.code}" data-search="${esc(c.label.toLowerCase())}">+ ${esc(c.label)} <small>${fmtEuros(catalogVenteCt(c))}</small></button>`).join("")}</div>
       <div class="wz-lines">
         <div class="wz-line-head"><span>Désignation</span><span>Qté</span><span>PU HT €</span><span>TVA</span><span>Total HT</span><span></span></div>
         ${x.lignes.map((l,i)=>`<div class="wz-line-row">
