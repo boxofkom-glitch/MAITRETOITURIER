@@ -1,18 +1,32 @@
 /* ToitPilot / Maître Toiturier — CRM demo clone. Static, in-memory, no backend. */
 
+// Points de contrôle du diagnostic, tels que définis par le gérant (le 12e, « Synthèse, niveau d’urgence
+// et préconisations », est l’étape finale de synthèse du diagnostic).
 const POINTS = [
-  "Couverture et état des tuiles",
-  "Éléments de finition",
-  "Zinguerie",
-  "Fenêtres de toit (Velux)",
-  "Cheminées et souches",
-  "Étanchéité",
+  "Couverture et état général des tuiles",
+  "Faîtage et arêtiers",
+  "Rives",
+  "Conduits et abergements de cheminée",
+  "Fenêtre de toit et raccord d’étanchéité",
+  "Zinguerie et points singuliers",
+  "Gouttières et descentes d’eaux pluviales",
+  "Présence d’écran sous toiture",
+  "Isolation des combles et rampants",
   "Charpente",
-  "Isolation et ventilation",
-  "Humidité et infiltrations",
-  "État général et sécurité",
-  "Entretien, mousses et lichens"
+  "Entretien et état sanitaire de la toiture"
 ];
+const SYNTHESE_STEP_LABEL = "Synthèse, niveau d’urgence et préconisations";
+// Anciens noms par défaut → nouveaux : les diagnostics déjà saisis gardent leurs constats (rien n’est supprimé).
+const POINT_RENAMES = {
+  "Couverture et état des tuiles":"Couverture et état général des tuiles",
+  "Éléments de finition":"Faîtage et arêtiers",
+  "Cheminées et souches":"Conduits et abergements de cheminée",
+  "Fenêtres de toit (Velux)":"Fenêtre de toit et raccord d’étanchéité",
+  "Zinguerie":"Zinguerie et points singuliers",
+  "Isolation et ventilation":"Isolation des combles et rampants",
+  "Entretien, mousses et lichens":"Entretien et état sanitaire de la toiture"
+};
+const LEGACY_POINT_NAMES = ["Couverture et état des tuiles","Éléments de finition","Zinguerie","Fenêtres de toit (Velux)","Cheminées et souches","Étanchéité","Isolation et ventilation","Humidité et infiltrations","État général et sécurité","Entretien, mousses et lichens"];
 
 const CONSERVER_JUSTIF = "Le contrôle visuel renseigné indique un bon état. Aucun remplacement n’est justifié par les constats de cette visite, sous réserve des limites d’accès.";
 
@@ -77,17 +91,17 @@ function pickDidYouKnow(pt){
 }
 
 const POINT_ANOMALIES = {
-  "Couverture et état des tuiles": ["casse","fissure","deplace","souleve","manquant","malfixe","use","mousse","autre"],
-  "Éléments de finition": ["casse","deplace","manquant","mousse","joint","autre"],
-  "Zinguerie": ["corrode","perce","deplace","malfixe","mousse","ruissellement","joint","autre"],
-  "Fenêtres de toit (Velux)": ["joint","fissure","eau","malfixe","corrode","autre"],
-  "Cheminées et souches": ["fissure","joint","corrode","eau","deplace","autre"],
-  "Étanchéité": ["fissure","souleve","perce","corrode","eau","joint","recouvrement","autre"],
+  "Couverture et état général des tuiles": ["casse","fissure","deplace","souleve","manquant","malfixe","use","mousse","autre"],
+  "Faîtage et arêtiers": ["casse","deplace","manquant","malfixe","mousse","joint","autre"],
+  "Rives": ["casse","deplace","manquant","malfixe","mousse","joint","autre"],
+  "Conduits et abergements de cheminée": ["fissure","joint","corrode","eau","deplace","autre"],
+  "Fenêtre de toit et raccord d’étanchéité": ["joint","fissure","eau","malfixe","corrode","autre"],
+  "Zinguerie et points singuliers": ["corrode","perce","deplace","malfixe","joint","eau","autre"],
+  "Gouttières et descentes d’eaux pluviales": ["corrode","perce","deplace","malfixe","mousse","ruissellement","joint","autre"],
+  "Présence d’écran sous toiture": ["manquant","perce","recouvrement","souleve","eau","autre"],
+  "Isolation des combles et rampants": ["isolant","ventil","eau","manquant","moisissure","autre"],
   "Charpente": ["bois_humide","moisissure","fissure","affaisse","insectes","autre"],
-  "Isolation et ventilation": ["isolant","ventil","eau","manquant","autre"],
-  "Humidité et infiltrations": ["eau","moisissure","ruissellement","affaisse","autre"],
-  "État général et sécurité": ["instable","secu","affaisse","autre"],
-  "Entretien, mousses et lichens": ["mousse","use","autre"]
+  "Entretien et état sanitaire de la toiture": ["mousse","use","moisissure","autre"]
 };
 
 const EXTENT_OPTIONS = [
@@ -280,12 +294,15 @@ function saveDevisLinesFromDOM(){
     const idx = parseInt(inp.dataset.idx,10);
     const line = dv.lignes[idx];
     if(!line) return;
-    if(inp.dataset.field==="designation") line.designation = inp.value;
+    if(inp.dataset.field==="titre") line.titre = inp.value;
+    else if(inp.dataset.field==="designation") line.designation = inp.value;
     else if(inp.dataset.field==="qte") line.qte = parseFloat(inp.value)||0;
     else if(inp.dataset.field==="unite") line.unite = inp.value;
     else if(inp.dataset.field==="prixUnitaire") line.prixUnitaireCt = Math.round((parseFloat(inp.value)||0)*100);
     else if(inp.dataset.field==="tva") line.tvaPct = parseFloat(inp.value)||0;
   });
+  const rsv = document.getElementById("devisReserves");
+  if(rsv) dv.reserves = rsv.value;
 }
 
 function saveSynthFieldsFromDOM(){
@@ -325,7 +342,7 @@ function freshDiagnostic(){
 
 function claireDiagnostic(){
   const d = freshDiagnostic();
-  d.points["Couverture et état des tuiles"] = {
+  d.points["Couverture et état général des tuiles"] = {
     etat:"Défaut constaté",
     problems:["fissure"],
     observation:"Exemple fictif : trois éléments de couverture fissurés sont signalés sur une zone localisée.",
@@ -335,7 +352,7 @@ function claireDiagnostic(){
     risque:"Une tuile fissurée non traitée laisse progressivement passer l’eau vers la charpente et les combles, avec un risque d’infiltration qui s’aggrave à chaque épisode de pluie ou de gel.",
     photos:[{name:"photo-1.jpg"},{name:"photo-2.jpg"}]
   };
-  d.points["Étanchéité"] = {
+  d.points["Fenêtre de toit et raccord d’étanchéité"] = {
     etat:"Défaut constaté",
     problems:["joint"],
     observation:"Exemple fictif : raccord d’étanchéité à vérifier au droit d’une pénétration.",
@@ -346,7 +363,7 @@ function claireDiagnostic(){
     photos:[{name:"photo-1.jpg"}]
   };
   POINTS.forEach(p=>{
-    if(p==="Couverture et état des tuiles"||p==="Étanchéité") return;
+    if(p==="Couverture et état général des tuiles"||p==="Fenêtre de toit et raccord d’étanchéité") return;
     d.points[p] = { etat:"Bon état", observation:"", decision:"Conserver", pourquoi:CONSERVER_JUSTIF, travaux:"", risque:"Aucun risque identifié à ce jour, sous réserve du maintien d’un entretien courant.", photos:[] };
   });
   d.synthese = {
@@ -482,7 +499,11 @@ const MATERIEL_CATALOG = [
 // Un même code peut exister dans les deux catalogues : on cherche d’abord les prestations, puis le matériel.
 function catalogFind(code){ return SERVICE_CATALOG.find(x=>x.code===code) || MATERIEL_CATALOG.find(x=>x.code===code); }
 function catalogVenteCt(item){ return item.prixVenteCt!=null ? item.prixVenteCt : item.prixUnitaireCt; }
-function catalogLineFrom(item){ return freshDevisLine({designation:item.label, qte:1, prixUnitaireCt:catalogVenteCt(item), tvaPct:item.tvaPct, code:item.code, coutUnitaireCt:item.prixAchatCt||0, unite:item.unite||"forfait"}); }
+// Une prestation du catalogue donne le titre de la ligne ; son éventuelle description (champ « Description »
+// de la fiche) devient la désignation affichée dessous. Une même prestation peut être ajoutée plusieurs fois.
+function catalogLineFrom(item){ return freshDevisLine({titre:item.label, designation:item.desc||"", qte:1, prixUnitaireCt:catalogVenteCt(item), tvaPct:item.tvaPct, code:item.code, coutUnitaireCt:item.prixAchatCt||0, unite:item.unite||"forfait"}); }
+function lineIsBlank(l){ return !l.titre && !l.designation && !l.prixUnitaireCt; }
+function lineLabel(l){ return ((l.titre||"")+" "+(l.designation||"")).trim(); }
 function catalogOptionsHtml(exclude){
   const ex = exclude || [];
   const opt = (c)=>`<option value="${c.code}">${esc(c.label)} — ${fmtEuros(catalogVenteCt(c))}</option>`;
@@ -490,7 +511,7 @@ function catalogOptionsHtml(exclude){
        + `<optgroup label="Matériel">${MATERIEL_CATALOG.filter(c=>!ex.includes(c.code)).map(opt).join("")}</optgroup>`;
 }
 function fmtEuros(ct){ return ((ct||0)/100).toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})+" €"; }
-function freshDevisLine(over){ return Object.assign({ designation:"", qte:1, unite:"forfait", prixUnitaireCt:0, tvaPct:10, coutUnitaireCt:0 }, over||{}); }
+function freshDevisLine(over){ return Object.assign({ titre:"", designation:"", qte:1, unite:"forfait", prixUnitaireCt:0, tvaPct:10, coutUnitaireCt:0 }, over||{}); }
 function lineTotalHTct(l){ return Math.round((l.qte||0) * (l.prixUnitaireCt||0)); }
 function devisTotals(devis){
   let htCt=0, tvaCt=0;
@@ -631,7 +652,7 @@ const DEFAULT_MATERIEL_LIB = [
 function defaultSettings(){
   return {
     access: JSON.parse(JSON.stringify(DEFAULT_ACCESS)),
-    company: {nom:"Maître Toiturier", telephone:"", email:"", site:"www.maitretoiturier.fr", adresse:"", siret:"", iban:"", devisValidite:30, acomptePct:30},
+    company: {nom:"Maître Toiturier", telephone:"", email:"", site:"www.maitretoiturier.fr", adresse:"", siret:"", iban:"", bic:"", titulaire:"", tvaIntra:"", decennaleNumero:"", decennaleAssureur:"", cgv:"", reservesDefaut:"", devisValidite:30, acomptePct:30},
     employees: seedEmployees(),
     requests: [],
     invitations: [],
@@ -905,17 +926,17 @@ function stat(label, value, sub){
 function badge(text, cls){ return `<span class="badge ${cls}">${esc(text)}</span>`; }
 
 const POINT_LAYER = {
-  "Couverture et état des tuiles":1,
-  "Éléments de finition":1,
-  "Zinguerie":1,
-  "Fenêtres de toit (Velux)":1,
-  "Cheminées et souches":1,
-  "Étanchéité":2,
+  "Couverture et état général des tuiles":1,
+  "Faîtage et arêtiers":1,
+  "Rives":1,
+  "Conduits et abergements de cheminée":1,
+  "Fenêtre de toit et raccord d’étanchéité":1,
+  "Zinguerie et points singuliers":1,
+  "Gouttières et descentes d’eaux pluviales":1,
+  "Présence d’écran sous toiture":2,
+  "Isolation des combles et rampants":4,
   "Charpente":3,
-  "Isolation et ventilation":4,
-  "Humidité et infiltrations":5,
-  "État général et sécurité":1,
-  "Entretien, mousses et lichens":1
+  "Entretien et état sanitaire de la toiture":1
 };
 const DIAGRAM_LAYERS = [
   {n:1, label:"Couverture", color:"#a8681f"},
@@ -1062,6 +1083,12 @@ async function buildPdfFromHtml(docHtmlString, onProgress){
     await withTimeout(loaded, 15000, "chargement du document");
     const doc = iframe.contentDocument;
     if(doc.fonts && doc.fonts.ready) await withTimeout(doc.fonts.ready, 8000, "polices").catch(()=>{});
+    // Devis / factures : pagination d’après les hauteurs réelles (images chargées d’abord, pour des mesures justes).
+    if(doc.querySelector('.pdf-doc[data-reflow]')){
+      await Promise.all(Array.from(doc.querySelectorAll("img")).map(img=>img.complete ? Promise.resolve() : new Promise(res=>{ img.onload=res; img.onerror=res; setTimeout(res, 10000); })));
+      try{ reflowDocPages(doc); }catch(e){ console.warn("reflowDocPages", e); }
+      if(doc.fonts && doc.fonts.ready) await withTimeout(doc.fonts.ready, 4000, "polices").catch(()=>{});
+    }
     const imgs = Array.from(doc.querySelectorAll("img"));
     await Promise.all(imgs.map(img=>img.complete ? Promise.resolve() : new Promise(res=>{ img.onload=res; img.onerror=res; setTimeout(res, 10000); })));
 
@@ -1481,8 +1508,14 @@ function docTotalsHtml(lines){
   </div>`;
 }
 
+// Ligne du PDF : le titre en gras, la désignation (détail) en dessous.
+function docLineCell(l){
+  const t = l.titre ? `<b class="doc2-rt">${esc(l.titre)}</b>` : "";
+  const dsg = l.designation ? `<div class="${l.titre?"doc2-rd":"doc2-rd0"}">${esc(l.designation)}</div>` : "";
+  return (t||dsg) ? t+dsg : "—";
+}
 function docRowsFromDevis(dv){
-  return dv.lignes.map(l=>`<tr><td>${esc(l.designation||"—")}</td><td class="r">${l.qte}</td><td class="r">${fmtEuros(l.prixUnitaireCt)}</td><td class="r">${l.tvaPct} %</td><td class="r">${fmtEuros(lineTotalHTct(l))}</td></tr>`);
+  return dv.lignes.map(l=>`<tr><td>${docLineCell(l)}</td><td class="r">${l.qte}</td><td class="r">${fmtEuros(l.prixUnitaireCt)}</td><td class="r">${l.tvaPct} %</td><td class="r">${fmtEuros(lineTotalHTct(l))}</td></tr>`);
 }
 
 function docSubRow(text){
@@ -1509,9 +1542,8 @@ function docPaginate(n){
 // En-tête de couverture (page 1 uniquement) : photo d'équipe assombrie, logo, type + numéro de document.
 function docCoverBand(d, o){
   return `<div class="doc2-band">
-    <div class="doc2-band-photo-wrap"><img class="doc2-band-photo" src="assets/cover-devis.jpg" alt=""></div>
+    <div class="doc2-band-photo-wrap"><img class="doc2-band-photo" src="assets/cover-team.jpg" alt=""></div>
     <div class="doc2-band-gold"></div>
-    <div class="doc2-band-sash"></div>
     <div class="doc2-band-ribbon"></div>
     <div class="doc2-band-row">
       <div>
@@ -1521,13 +1553,12 @@ function docCoverBand(d, o){
       <div class="doc2-band-tagline">Votre toit,<br>notre expertise<br>durable.</div>
     </div>
     <div class="doc2-band-doc">${o.eyebrow?`<div class="doc2-band-eyebrow">${esc(o.eyebrow)}</div>`:""}<div class="doc2-band-type">${esc(o.topTitle)}</div><div class="doc2-band-num">${esc(o.topNum)}</div>
-      <div class="doc2-band-meta2">${esc(o.dateLabel||"")}${o.validLabel?"<br>Valable "+esc(o.validLabel):""}</div>
     </div>
   </div>`;
 }
 // En-tête sobre des pages de continuation : pas de photo, juste le repère du document.
 function docSlimHead(d, o, idx, total){
-  return `<div class="doc2-slimhead"><span>${esc(SETTINGS.company.nom||"Maître Toiturier")}</span><span>${esc(o.topTitle)} ${esc(o.topNum)} — ${esc(d.client)}</span><span>Page ${idx+1} / ${total}</span></div>`;
+  return `<div class="doc2-slimhead"><span>${esc(SETTINGS.company.nom||"Maître Toiturier")}</span><span>${esc(o.topTitle)} ${esc(o.topNum)} — ${esc(d.client)}</span><span></span></div>`;
 }
 function docFooter(idx, total){
   const b = SETTINGS.company;
@@ -1536,8 +1567,9 @@ function docFooter(idx, total){
 const DOC_TRUST_ITEMS = [["shield","Garantie décennale 10 ans"],["check","Matériaux de qualité certifiés"],["team","Équipe qualifiée et expérimentée"],["house","Chantier propre et sécurisé"]];
 function docTrustFoot(d){
   const b = SETTINGS.company;
+  const extra = (ic)=> ic==="shield" && b.decennaleNumero ? "<br>n° "+esc(b.decennaleNumero) : "";
   return `<div class="doc2-trustfoot">
-    <div class="doc2-trust-row">${DOC_TRUST_ITEMS.map(([ic,l])=>`<div class="doc2-trust-item">${iconSvg(ic,20)}<span>${esc(l)}</span></div>`).join("")}</div>
+    <div class="doc2-trust-row">${DOC_TRUST_ITEMS.map(([ic,l])=>`<div class="doc2-trust-item">${iconSvg(ic,20)}<span>${esc(l)}${extra(ic)}</span></div>`).join("")}</div>
     <div class="doc2-trust-bottom">
       <div class="doc2-trust-loc">${b.adresse?`<span>${iconSvg("pin",13)}${esc(b.adresse)}</span>`:""}${b.site?`<span>${iconSvg("globe",13)}${esc(b.site)}</span>`:""}</div>
       <div class="doc2-trust-quote">“ Un toit bien entretenu aujourd’hui, c’est un patrimoine préservé demain. ”</div>
@@ -1549,30 +1581,122 @@ function docTrustFoot(d){
 function docMetaCol(icon, label, body){
   return `<div class="doc2-meta-col"><div class="doc2-meta-label">${iconSvg(icon,13)}<span>${esc(label)}</span></div><div class="doc2-meta-body">${body}</div></div>`;
 }
-function docPage(d, o, pg, idx, total){
-  const meta = pg.first ? `<div class="doc2-watermark">${iconSvg("house",190)}</div>
+// Bloc « Émis par / Adressé à / Date » + objet (haut de la 1re page).
+function docMetaHtml(d, o){
+  const co = SETTINGS.company;
+  const emis = [co.adresse,
+    [co.siret?"SIRET "+co.siret:"", co.tvaIntra?"TVA "+co.tvaIntra:""].filter(Boolean).join(" · "),
+    co.decennaleNumero ? "Décennale n° "+co.decennaleNumero+(co.decennaleAssureur?" ("+co.decennaleAssureur+")":"") : "",
+    [co.telephone, co.email].filter(Boolean).join(" · ")].filter(Boolean);
+  return `<div class="doc2-watermark">${iconSvg("house",190)}</div>
     <div class="doc2-meta">
-      ${docMetaCol("user","Émis par", `<b>${esc(SETTINGS.company.nom||"Maître Toiturier")}</b>${[SETTINGS.company.adresse, [SETTINGS.company.siret?"SIRET "+SETTINGS.company.siret:"",SETTINGS.company.telephone].filter(Boolean).join(" · "), SETTINGS.company.email].filter(Boolean).map(l=>"<br>"+esc(l)).join("")}`)}
+      ${docMetaCol("user","Émis par", `<b>${esc(co.nom||"Maître Toiturier")}</b>${emis.map(l=>"<br>"+esc(l)).join("")}`)}
       ${docMetaCol("pin","Adressé à", `<b>${esc(d.client)}</b><br>${esc(d.adresse)}, ${esc(d.ville)}${d.telephone?"<br>"+esc(d.telephone):""}`)}
       ${docMetaCol("calendar", o.validLabel?"Date · validité":"Date", `${o.dateLabel||""}${o.validLabel?"<br>"+o.validLabel:""}`)}
     </div>
-    ${o.objet?`<div class="doc2-objet">${iconSvg("doc",15)}<span><b>Objet</b> — ${esc(o.objet)}</span></div>`:""}` : "";
-  const conditions = pg.last && o.bannerText ? `<div class="doc2-conditions"><div class="doc2-cond-label">${iconSvg("doc",14)}${esc(o.bannerLabel||"Conditions")}</div><p>${o.bannerText}</p></div>` : "";
-  const bottom = pg.last ? `<div class="doc2-bottom">${conditions}<div class="doc2-totals">${o.totals}</div></div>` : "";
+    ${o.objet?`<div class="doc2-objet">${iconSvg("doc",15)}<span><b>Objet</b> — ${esc(o.objet)}</span></div>`:""}`;
+}
+// Bas du document : conditions de règlement + RIB, totaux, puis réserves / conditions particulières.
+function docEndHtml(o){
+  const co = SETTINGS.company;
+  const rib = co.iban ? `<div class="doc2-rib"><b>Règlement par virement</b><br>IBAN : ${esc(co.iban)}${co.bic?" · BIC : "+esc(co.bic):""}${co.titulaire?"<br>Titulaire : "+esc(co.titulaire):""}</div>` : "";
+  const conditions = o.bannerText ? `<div class="doc2-conditions"><div class="doc2-cond-label">${iconSvg("doc",14)}${esc(o.bannerLabel||"Conditions")}</div><p>${o.bannerText}</p>${rib}</div>` : "";
+  const reserves = (o.reserves||"").trim() ? `<div class="doc2-reserves"><div class="doc2-cond-label">${iconSvg("doc",14)}Conditions particulières / réserves</div><p>${esc(o.reserves.trim()).replace(/\n/g,"<br>")}</p></div>` : "";
+  return `<div class="doc2-end"><div class="doc2-bottom">${conditions}<div class="doc2-totals">${o.totals}</div></div>${reserves}</div>`;
+}
+function docCgvParas(cgv){
+  return String(cgv||"").split(/\r?\n/).map(s=>s.trim()).filter(Boolean)
+    .map(s=>`<p class="${/^(article|art\.|chapitre|titre|\d+[\.\)]\s)/i.test(s) || (s.length<70 && s===s.toUpperCase()) ? "doc2-cgv-t" : "doc2-cgv-p"}">${esc(s)}</p>`);
+}
+function docPage(d, o, pg, idx, total){
   return `<div class="pdf-page doc2-page">
     ${pg.first ? docCoverBand(d, o) : docSlimHead(d, o, idx, total)}
     <div class="doc2-body">
-      ${meta}
+      ${pg.first ? docMetaHtml(d, o) : ""}
       ${docTable(o.rows.slice(pg.from, pg.to).join(""))}
-      ${bottom}
+      ${pg.last ? docEndHtml(o) : ""}
     </div>
     ${pg.last ? docTrustFoot(d) : docFooter(idx, total)}
   </div>`;
 }
 
+// Les pages sont d’abord produites avec une découpe approximative (repli), puis refaites à la mesure réelle
+// dans reflowDocPages() au moment de générer le PDF : plus aucune page ne déborde ni n’est compressée.
 function docPages(d, o){
   const pgs = docPaginate(o.rows.length);
-  return `<div class="pdf-doc">${pgs.map((pg,i)=>docPage(d, o, pg, i, pgs.length)).join("")}</div>`;
+  const tpl = (n, html)=>`<template data-t="${n}">${html}</template>`;
+  return `<div class="pdf-doc" data-reflow="1">${pgs.map((pg,i)=>docPage(d, o, pg, i, pgs.length)).join("")}
+    ${tpl("band", docCoverBand(d, o))}${tpl("meta", docMetaHtml(d, o))}${tpl("slimhead", docSlimHead(d, o, 0, 0))}${tpl("foot", docFooter(0, 0))}${tpl("trust", docTrustFoot(d))}${tpl("end", docEndHtml(o))}${tpl("cgv", o.cgv ? docCgvParas(o.cgv).join("") : "")}
+  </div>`;
+}
+
+// Refait la pagination d’un devis / d’une facture d’après les hauteurs réellement mesurées (document déjà
+// chargé dans l’iframe de génération) : on remplit chaque page ligne par ligne jusqu’à la hauteur A4.
+function reflowDocPages(doc){
+  const root = doc.querySelector('.pdf-doc[data-reflow]');
+  if(!root) return;
+  const T = n=>{ const t = root.querySelector('template[data-t="'+n+'"]'); return t ? t.innerHTML : ""; };
+  const html = {band:T("band"), meta:T("meta"), slimhead:T("slimhead"), foot:T("foot"), trust:T("trust"), end:T("end"), cgv:T("cgv")};
+  const rows = Array.from(root.querySelectorAll(".doc2-page .doc2-table tbody tr")).map(tr=>tr.cloneNode(true));
+  const LIMIT = 1126;
+  const mk = (h)=>{ const w = doc.createElement("div"); w.innerHTML = h.trim(); return w.firstElementChild; };
+  const over = (page)=>page.scrollHeight > LIMIT;
+  root.innerHTML = "";
+  const newPage = (opts)=>{
+    const page = mk('<div class="pdf-page doc2-page"><div class="doc2-body"></div></div>');
+    const body = page.querySelector(".doc2-body");
+    page.insertBefore(mk(opts.first ? html.band : html.slimhead), body);
+    if(opts.first) body.insertAdjacentHTML("beforeend", html.meta);
+    let tbody = null;
+    if(opts.table){
+      body.appendChild(mk(docTable("")));
+      tbody = body.querySelector("tbody");
+    }
+    page.appendChild(mk(html.foot));
+    root.appendChild(page);
+    return {page, body, tbody};
+  };
+  const swapFoot = (cur, h)=>{ const old = cur.page.lastElementChild; old.replaceWith(mk(h)); };
+
+  let cur = newPage({first:true, table:true});
+  while(rows.length){
+    const r = rows[0];
+    cur.tbody.appendChild(r);
+    if(over(cur.page)){
+      cur.tbody.removeChild(r);
+      if(!cur.tbody.children.length){ cur.tbody.appendChild(r); rows.shift(); }
+      cur = newPage({first:false, table:true});
+      continue;
+    }
+    rows.shift();
+  }
+  // Totaux, règlement, réserves + bandeau garanties : sur la dernière page de lignes si ça tient, sinon sur une page dédiée.
+  const endEl = mk(html.end);
+  cur.body.appendChild(endEl);
+  swapFoot(cur, html.trust);
+  if(over(cur.page)){
+    endEl.remove();
+    swapFoot(cur, html.foot);
+    cur = newPage({first:false, table:false});
+    cur.body.appendChild(endEl);
+    swapFoot(cur, html.trust);
+  }
+  // Conditions générales de vente (si renseignées) : pages dédiées, paragraphe par paragraphe.
+  if(html.cgv.trim()){
+    const holder = doc.createElement("div"); holder.innerHTML = html.cgv;
+    const paras = Array.from(holder.children);
+    const cgvPage = (first)=>{
+      const c = newPage({first:false, table:false});
+      if(first) c.body.insertAdjacentHTML("beforeend", '<div class="doc2-cgv-title">Conditions générales de vente</div>');
+      const wrap = doc.createElement("div"); wrap.className = "doc2-cgv"; c.body.appendChild(wrap);
+      c.wrap = wrap; return c;
+    };
+    let c = cgvPage(true);
+    paras.forEach(p=>{
+      c.wrap.appendChild(p);
+      if(over(c.page) && c.wrap.children.length>1){ c.wrap.removeChild(p); c = cgvPage(false); c.wrap.appendChild(p); }
+    });
+  }
 }
 
 function renderDevisDoc(d, dv){
@@ -1591,7 +1715,9 @@ function renderDevisDoc(d, dv){
     rows: docRowsFromDevis(dv),
     bannerLabel: "Conditions de règlement",
     bannerText: `${esc(paiementSummary(dv))} Devis valable ${valid} jours. Pour accepter, il suffit de nous renvoyer ce document signé, précédé de la mention « Bon pour accord ».`,
-    totals: docTotalsHtml(totals)
+    totals: docTotalsHtml(totals),
+    reserves: dv.reserves || "",
+    cgv: SETTINGS.company.cgv || ""
   });
 }
 
@@ -1638,7 +1764,7 @@ function renderFactureDoc(d, f){
     objet: (dv&&dv.objet)||d.motif,
     rows,
     bannerLabel: paid>0 ? "Règlements et échéance" : "Règlement",
-    bannerText: (paid>0 ? pays+"<br>" : "") + echTxt + (SETTINGS.company.siret||SETTINGS.company.iban ? " "+(SETTINGS.company.siret?"SIRET "+esc(SETTINGS.company.siret)+". ":"")+(SETTINGS.company.iban?"IBAN "+esc(SETTINGS.company.iban)+".":"") : ""),
+    bannerText: (paid>0 ? pays+"<br>" : "") + echTxt + (SETTINGS.company.siret ? ". SIRET "+esc(SETTINGS.company.siret)+"." : "."),
     totals: docTotalsHtml(totals)
   });
 }
@@ -2001,7 +2127,7 @@ function wzNew(kind, dossierId){
 
 function wzInitDevis(){
   const w = state.wizard, d = w.dossierId ? byId(w.dossierId) : null;
-  w.data = {objet: d ? d.motif : "", validite:SETTINGS.company.devisValidite||30, lignes:[freshDevisLine()], fois:2, echeancier: defaultEcheancier(2), mode:"Virement"};
+  w.data = {objet: d ? d.motif : "", validite:SETTINGS.company.devisValidite||30, lignes:[freshDevisLine()], fois:2, echeancier: defaultEcheancier(2), mode:"Virement", reserves:SETTINGS.company.reservesDefaut||""};
   if(d && d.devis.length){
     const prev = latestDevis(d), pp = devisPaiement(prev);
     Object.assign(w.data, {objet: prev.objet||d.motif, validite: prev.validite||30, lignes: prev.lignes.map(l=>Object.assign({},l)), fois: pp.echeancier.length, echeancier: pp.echeancier.map(e=>Object.assign({},e)), mode: pp.mode});
@@ -2064,7 +2190,8 @@ function wzFlush(){
       const l = lignes[parseInt(inp.dataset.idx,10)];
       if(!l) return;
       const f = inp.dataset.field;
-      if(f==="designation") l.designation = inp.value;
+      if(f==="titre") l.titre = inp.value;
+      else if(f==="designation") l.designation = inp.value;
       else if(f==="qte") l.qte = parseFloat(inp.value)||0;
       else if(f==="unite") l.unite = inp.value;
       else if(f==="prixUnitaire") l.prixUnitaireCt = Math.round((parseFloat(inp.value)||0)*100);
@@ -2084,7 +2211,7 @@ function wzFlush(){
 
 function wzDevisFromData(){
   const x = state.wizard.data;
-  const lignes = x.lignes.filter(l=>l.designation.trim() && l.qte>0);
+  const lignes = x.lignes.filter(l=>lineLabel(l) && l.qte>0);
   return {lignes, paiement:{echeancier: x.echeancier || defaultEcheancier(x.fois||2), mode:x.mode}};
 }
 
@@ -2158,11 +2285,12 @@ function wzClientCard(d){
 // plusieurs lignes d'affilée puis "← Retour" pour revenir au récapitulatif des lignes ajoutées.
 function wzCatalogPicker(w, d, x){
   const sugg = d ? diagSuggestions(d).filter(sg=>!x.lignes.some(l=>l.code===sg.code)) : [];
+  // Toutes les prestations restent disponibles même déjà ajoutées : on peut les utiliser plusieurs fois dans un devis.
   const items = [
-    ...SERVICE_CATALOG.filter(c=>!x.lignes.some(l=>l.code===c.code)).map(c=>({kind:"Prestation", code:c.code, label:c.label, prix:c.prixUnitaireCt})),
-    ...MATERIEL_CATALOG.filter(c=>!x.lignes.some(l=>l.code===c.code)).map(c=>({kind:"Matériel", code:c.code, label:c.label, prix:catalogVenteCt(c)}))
+    ...SERVICE_CATALOG.map(c=>({kind:"Prestation", code:c.code, label:c.label, prix:c.prixUnitaireCt})),
+    ...MATERIEL_CATALOG.map(c=>({kind:"Matériel", code:c.code, label:c.label, prix:catalogVenteCt(c)}))
   ];
-  const n = x.lignes.filter(l=>l.designation.trim()).length;
+  const n = x.lignes.filter(l=>lineLabel(l)).length;
   return `
     <button class="btn-secondary btn-sm" data-action="wz-close-catalog" style="margin-bottom:14px">← Retour aux lignes${n?" ("+n+")":""}</button>
     ${sugg.length ? `<div class="wz-sugg"><div class="wz-sugg-t">Suggéré d’après le diagnostic</div>${sugg.map(s=>{ const svc = SERVICE_CATALOG.find(c=>c.code===s.code); return `<button class="wz-chip" data-action="wz-add-sugg" data-code="${s.code}">+ ${esc(svc.label)} <small>${esc(s.reason)}</small></button>`; }).join("")}</div>` : ""}
@@ -2191,9 +2319,12 @@ return `<p class="wz-intro">Ajoutez les prestations et le matériel : chaque lig
       ${sugg.length ? `<div class="wz-sugg"><div class="wz-sugg-t">Suggéré d’après le diagnostic</div>${sugg.map(s=>{ const svc = SERVICE_CATALOG.find(c=>c.code===s.code); return `<button class="wz-chip" data-action="wz-add-sugg" data-code="${s.code}">+ ${esc(svc.label)} <small>${esc(s.reason)}</small></button>`; }).join("")}</div>` : ""}
       <button class="btn-primary" style="width:100%;margin-bottom:16px;white-space:normal" data-action="wz-open-catalog">+ Ajouter une prestation ou un matériau</button>
       <div class="wz-lines">
-        <div class="wz-line-head"><span>Désignation</span><span>Qté / unité</span><span>PU HT €</span><span>TVA</span><span>Total HT</span><span></span></div>
+        <div class="wz-line-head"><span>Titre et désignation</span><span>Qté / unité</span><span>PU HT €</span><span>TVA</span><span>Total HT</span><span></span></div>
         ${x.lignes.map((l,i)=>`<div class="wz-line-row">
-          <input class="wz-line" data-idx="${i}" data-field="designation" value="${esc(l.designation)}" placeholder="Désignation">
+          <div class="wz-desc">
+            <input class="wz-line" data-idx="${i}" data-field="titre" value="${esc(l.titre||"")}" placeholder="Titre de la ligne (ex. Dépose de la couverture)">
+            <textarea class="wz-line" data-idx="${i}" data-field="designation" rows="2" placeholder="Désignation : le détail s’affiche sous le titre">${esc(l.designation)}</textarea>
+          </div>
           <div class="wz-qte-unit">
             <input class="wz-line" data-idx="${i}" data-field="qte" type="number" min="0" step="1" value="${l.qte}">
             <select class="wz-line" data-idx="${i}" data-field="unite">${unitOptionsHtml(l.unite)}</select>
@@ -2224,7 +2355,8 @@ return `<p class="wz-intro">Ajoutez les prestations et le matériel : chaque lig
         <span class="wz-ech-amt" id="wzEchAmt-${i}">${fmtEuros(echeanceTtcCt(dvLike,i))}</span>
       </div>`).join("")}
       <p class="form-help" id="wzEchTotal" style="margin:8px 0 0${sumPct!==100?";color:var(--red)":""}">Total : ${sumPct} % ${sumPct!==100?"— doit faire 100 % au total":"✓"}</p>
-      <div class="wz-preview" style="margin-top:14px"><div class="wz-sugg-t">Échéancier prévu</div><div id="wzSchedule">${wzScheduleHtml(dvLike)}</div></div>`;
+      <div class="wz-preview" style="margin-top:14px"><div class="wz-sugg-t">Échéancier prévu</div><div id="wzSchedule">${wzScheduleHtml(dvLike)}</div></div>
+      <div class="form-field" style="margin-top:14px"><label>Conditions particulières / réserves (affichées en bas du devis)</label><textarea data-wz="reserves" rows="3" placeholder="Ex. Travaux soumis à la découverte de l’état réel de la charpente, accès au chantier à dégager par le client…">${esc(x.reserves||"")}</textarea></div>`;
   }
   const dvLike = wzDevisFromData();
   return `<p class="wz-intro">Vérifiez avant de créer : rien n’est envoyé tant que vous ne le décidez pas.</p>
@@ -2313,7 +2445,7 @@ function wzCreate(send){
   if(w.kind==="devis"){
     const numero = nextDevisId(d);
     const dvLike = wzDevisFromData();
-    const dv = {id:numero, numero, version:d.devis.length+1, statut:"Brouillon", lignes:dvLike.lignes, dateCreation:"12 sept.", dateEnvoi:null, objet:x.objet.trim(), validite:x.validite, paiement:dvLike.paiement};
+    const dv = {id:numero, numero, version:d.devis.length+1, statut:"Brouillon", lignes:dvLike.lignes, dateCreation:"12 sept.", dateEnvoi:null, objet:x.objet.trim(), validite:x.validite, paiement:dvLike.paiement, reserves:(x.reserves||"").trim()};
     d.devis.push(dv);
     d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Devis "+numero+" créé ("+fmtEuros(devisTotals(dv).ttcCt)+" TTC)."});
     state.wizard = null;
@@ -2781,7 +2913,9 @@ function applyCustom(c){
   };
   fillByKey(SERVICE_CATALOG, c.catalogue, x=>x.code);
   fillByKey(MATERIEL_CATALOG, c.materiel, x=>x.code);
-  fillByKey(POINTS, c.points, x=>x);
+  // Les anciens points par défaut (liste remplacée par celle du gérant) ne sont pas réinjectés ;
+  // seuls les points ajoutés par l’utilisateur sont conservés.
+  fillByKey(POINTS, Array.isArray(c.points) ? c.points.filter(x=>!LEGACY_POINT_NAMES.includes(x)) : c.points, x=>x);
   if(Array.isArray(c.payModes) && c.payModes.length){ PAY_MODES.length = 0; c.payModes.forEach(x=>PAY_MODES.push(x)); }
   if(c.pointAnoms) Object.assign(POINT_ANOMALIES, c.pointAnoms);
   if(c.vocab) Object.assign(ANOMALY_VOCAB, c.vocab);
@@ -2792,7 +2926,13 @@ function loadCustom(){
 function ensurePoints(){
   DOSSIERS.forEach(d=>{
     if(!d.diagnostic || !d.diagnostic.points) return;
-    POINTS.forEach(p=>{ if(!d.diagnostic.points[p]) d.diagnostic.points[p] = freshPoint(); });
+    const pts = d.diagnostic.points;
+    POINTS.forEach(p=>{ if(!pts[p]) pts[p] = freshPoint(); });
+    // Reprise des constats saisis sous l’ancien nom d’un point (les anciennes entrées ne sont pas supprimées).
+    Object.keys(POINT_RENAMES).forEach(old=>{
+      const nw = POINT_RENAMES[old], src = pts[old], dst = pts[nw];
+      if(src && src.etat && src.etat!=="Non contrôlé" && dst && dst.etat==="Non contrôlé" && !(dst.photos&&dst.photos.length) && !dst.observation && !dst.comment) pts[nw] = JSON.parse(JSON.stringify(src));
+    });
   });
 }
 function persoChange(el){
@@ -3291,7 +3431,8 @@ function modalCatEdit(m){
   const pct = vente>0 ? Math.round((vente-achat)/vente*1000)/10 : null;
   const tvas = [0,5.5,10,20];
   return modalWrap(isNew ? (kind==="cat"?"Nouvelle prestation":"Nouveau matériau") : item.label, `
-    <div class="form-field"><label>Désignation</label><input type="text" id="ceLabel" value="${esc(item.label)}"></div>
+    <div class="form-field"><label>Titre de la ligne</label><input type="text" id="ceLabel" value="${esc(item.label)}"></div>
+    <div class="form-field"><label>Désignation (détail affiché sous le titre dans le devis, facultatif)</label><textarea id="ceDesc" rows="3" style="width:100%;font-family:inherit">${esc(item.desc||"")}</textarea></div>
     <div class="wz-grid">
       <div class="form-field"><label>Prix d’achat HT (coût, interne)</label><input type="number" min="0" step="0.01" id="ceAchat" value="${(achat/100).toFixed(2)}" oninput="ceLive()"></div>
       <div class="form-field"><label>Prix de vente HT</label><input type="number" min="0" step="0.01" id="ceVente" value="${(vente/100).toFixed(2)}" oninput="ceLive()"></div>
@@ -3461,10 +3602,17 @@ function paramEntreprise(){
       ${f("nom","Nom commercial",c.nom)}${f("site","Site internet",c.site)}
       ${f("telephone","Téléphone",c.telephone,"tel")}${f("email","E-mail de contact",c.email,"email")}
       ${f("adresse","Adresse",c.adresse)}${f("siret","SIRET",c.siret)}
-      ${f("iban","IBAN (pour les virements)",c.iban)}
+      ${f("tvaIntra","N° de TVA intracommunautaire",c.tvaIntra)}${f("decennaleNumero","N° d’attestation décennale",c.decennaleNumero)}
+      ${f("decennaleAssureur","Assureur décennale",c.decennaleAssureur)}
+      ${f("iban","IBAN (RIB pour les virements)",c.iban)}${f("bic","BIC",c.bic)}
+      ${f("titulaire","Titulaire du compte",c.titulaire)}
       <div class="form-field"><label>Validité par défaut d’un devis</label><select id="co_devisValidite">${[15,30,60,90].map(n=>`<option value="${n}" ${c.devisValidite===n?"selected":""}>${n} jours</option>`).join("")}</select></div>
       <div class="form-field"><label>Acompte par défaut</label><select id="co_acomptePct">${[20,30,40,50].map(n=>`<option value="${n}" ${c.acomptePct===n?"selected":""}>${n} %</option>`).join("")}</select></div>
     </div>
+    <div class="form-field"><label>Conditions générales de vente (ajoutées en dernière page de chaque devis)</label>
+      <textarea id="co_cgv" rows="8" style="width:100%;font-family:inherit;line-height:1.4" placeholder="Collez ici vos conditions générales de vente. Laissez vide pour ne pas ajouter de page de CGV.">${esc(c.cgv||"")}</textarea></div>
+    <div class="form-field"><label>Mentions / réserves par défaut (reprises sur chaque nouveau devis)</label>
+      <textarea id="co_reservesDefaut" rows="3" style="width:100%;font-family:inherit;line-height:1.4" placeholder="Ex. Les travaux supplémentaires non prévus au devis feront l’objet d’un avenant.">${esc(c.reservesDefaut||"")}</textarea></div>
     <button class="btn-primary btn-sm" data-action="company-save">Enregistrer</button>
   </div>`;
 }
@@ -4171,7 +4319,7 @@ function renderDossierDiagnostic(d){
   const stepsNav = `
     <div class="diag-steps">
       ${POINTS.map((p,i)=>`<button class="diag-step-btn ${step===i+1?"active":d.diagnostic.points[p].etat!=="Non contrôlé"?"done":""}" data-action="diag-step" data-step="${i+1}">${i+1}</button>`).join("")}
-      <button class="diag-step-btn ${isLast?"active":""}" data-action="diag-step" data-step="${POINTS.length+1}">Synthèse</button>
+      <button class="diag-step-btn ${isLast?"active":""}" data-action="diag-step" data-step="${POINTS.length+1}" title="${esc(SYNTHESE_STEP_LABEL)}">${POINTS.length+1}</button>
     </div>`;
 
   if(isLast){
@@ -4180,7 +4328,7 @@ function renderDossierDiagnostic(d){
     <div class="diag-progress">POINT ${POINTS.length+1} SUR ${POINTS.length+1} · ${controlled} / ${POINTS.length} contrôlés</div>
     ${stepsNav}
     <div class="card">
-      <div class="point-title">Synthèse</div>
+      <div class="point-title">${esc(SYNTHESE_STEP_LABEL)}</div>
       <div class="point-sub">Assemble les états et observations saisis. Aucune analyse IA des photos.</div>
       <div class="form-field"><label>Type de couverture</label>
         <select id="synTypeCouverture">
@@ -4456,17 +4604,17 @@ function ppShell(d, o){
 
 // Astuces neutres "tout va bien" par zone (affichées quand le contrôle est en bon état).
 const POINT_GOOD_TIP = {
-  "Couverture et état des tuiles":"Un contrôle visuel régulier de la couverture permet de repérer tôt les petits désordres et de préserver son étanchéité dans le temps.",
-  "Éléments de finition":"Rives, arêtiers, faîtage et solins assurent la continuité de la couverture aux points singuliers : leur bon état évite les infiltrations en périphérie de toiture.",
-  "Zinguerie":"Gouttières, chéneaux et noues assurent la collecte et l’évacuation des eaux pluviales : leur bon état évite débordements et infiltrations en pied de toiture.",
-  "Fenêtres de toit (Velux)":"Les fenêtres de toit sont un point sensible de l’étanchéité : un bon état de leur pourtour et de leurs solins évite les infiltrations au niveau de l’ouverture.",
-  "Cheminées et souches":"Les solins et mitrons de cheminée sont des points singuliers exposés : leur contrôle régulier permet de prévenir les infiltrations autour de la souche.",
-  "Étanchéité":"Une étanchéité en bon état empêche l’eau de pénétrer sous la couverture, notamment autour des raccords et des pénétrations.",
+  "Couverture et état général des tuiles":"Un contrôle visuel régulier de la couverture permet de repérer tôt les petits désordres et de préserver son étanchéité dans le temps.",
+  "Faîtage et arêtiers":"Le faîtage et les arêtiers assurent la continuité de la couverture aux lignes hautes de la toiture : leur bon état (scellements, closoirs, fixations) évite les infiltrations et les chutes d’éléments.",
+  "Rives":"Les rives protègent les bords de la toiture contre le vent et la pluie : leur bon état évite les infiltrations et le soulèvement des éléments en périphérie.",
+  "Conduits et abergements de cheminée":"Les solins et abergements autour des conduits sont des points singuliers exposés : leur contrôle régulier permet de prévenir les infiltrations autour de la souche.",
+  "Fenêtre de toit et raccord d’étanchéité":"Les fenêtres de toit sont un point sensible de l’étanchéité : un bon état de leur pourtour et de leurs raccords évite les infiltrations au niveau de l’ouverture.",
+  "Zinguerie et points singuliers":"Noues, solins et pièces de zinguerie assurent l’étanchéité aux points singuliers de la toiture : leur bon état évite les infiltrations localisées.",
+  "Gouttières et descentes d’eaux pluviales":"Gouttières et descentes assurent la collecte et l’évacuation des eaux pluviales : leur bon état évite débordements et infiltrations en pied de toiture.",
+  "Présence d’écran sous toiture":"L’écran sous toiture est une seconde barrière contre l’eau et la poussière de neige : sa présence et son bon état protègent la charpente et l’isolation en cas d’infiltration.",
+  "Isolation des combles et rampants":"Une isolation en bon état et des combles bien ventilés limitent l’humidité et contribuent à la durabilité de la charpente comme au confort thermique.",
   "Charpente":"La charpente porte toute la toiture : un contrôle périodique permet de s’assurer qu’elle reste saine et à l’abri de l’humidité.",
-  "Isolation et ventilation":"Une bonne ventilation des combles limite l’humidité et contribue à la durabilité de la charpente comme de l’isolation.",
-  "Humidité et infiltrations":"L’absence de traces d’humidité est le meilleur indicateur d’une toiture qui remplit bien son rôle de protection.",
-  "État général et sécurité":"Des accès et équipements de sécurité en bon état facilitent les interventions futures en toute sécurité.",
-  "Entretien, mousses et lichens":"Un entretien régulier limite le développement de mousses et lichens et contribue à la longévité des matériaux."
+  "Entretien et état sanitaire de la toiture":"Un entretien régulier limite le développement de mousses, lichens et salissures et contribue à la longévité des matériaux."
 };
 
 // Contenu prédéfini quand un bloc n'a rien à afficher, selon l'état renseigné dans le diagnostic.
@@ -4767,11 +4915,11 @@ function renderDossierDevis(d){
         </div>
         <div class="devis-table-wrap">
           <table>
-            <thead><tr><th>Désignation</th><th>Qté</th><th>Unité</th><th>PU HT</th><th>TVA</th><th>Total HT</th><th></th></tr></thead>
+            <thead><tr><th>Titre et désignation</th><th>Qté</th><th>Unité</th><th>PU HT</th><th>TVA</th><th>Total HT</th><th></th></tr></thead>
             <tbody>
             ${dv.lignes.map((l,i)=>`
               <tr>
-                <td data-label="Désignation">${canEditDv?`<input type="text" class="devis-line-input" data-idx="${i}" data-field="designation" value="${esc(l.designation)}" placeholder="Désignation">`:esc(l.designation)}</td>
+                <td data-label="Titre et désignation">${canEditDv?`<div class="dv-desc"><input type="text" class="devis-line-input" data-idx="${i}" data-field="titre" value="${esc(l.titre||"")}" placeholder="Titre de la ligne" style="font-weight:600"><textarea class="devis-line-input" data-idx="${i}" data-field="designation" rows="2" placeholder="Désignation : le détail s’affiche sous le titre">${esc(l.designation)}</textarea></div>`:`${l.titre?`<b>${esc(l.titre)}</b><br>`:""}${esc(l.designation)}`}</td>
                 <td data-label="Quantité" style="width:64px">${canEditDv?`<input type="number" min="0" step="1" class="devis-line-input" data-idx="${i}" data-field="qte" value="${l.qte}">`:l.qte}</td>
                 <td data-label="Unité" style="width:80px">${canEditDv?`<select class="devis-line-input" data-idx="${i}" data-field="unite">${unitOptionsHtml(l.unite)}</select>`:esc(l.unite||"")}</td>
                 <td data-label="Prix unitaire HT" style="width:100px">${canEditDv?`<input type="number" min="0" step="0.01" class="devis-line-input" data-idx="${i}" data-field="prixUnitaire" value="${(l.prixUnitaireCt/100).toFixed(2)}">`:fmtEuros(l.prixUnitaireCt)}</td>
@@ -4785,7 +4933,7 @@ function renderDossierDevis(d){
         ${canEditDv?`
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0">
           <button class="btn-secondary btn-sm" data-action="devis-add-line" data-id="${d.id}">+ Ligne libre</button>
-          <select id="devisCatalogSel" class="devis-line-input" data-id="${d.id}" style="max-width:300px"><option value="">+ Ajouter depuis le catalogue…</option>${catalogOptionsHtml(dv.lignes.map(l=>l.code))}</select>
+          <select id="devisCatalogSel" class="devis-line-input" data-id="${d.id}" style="max-width:300px"><option value="">+ Ajouter depuis le catalogue…</option>${catalogOptionsHtml()}</select>
         </div>`:""}
         <div class="devis-totals">
           <div>Total HT <b>${fmtEuros(totals.htCt)}</b></div>
@@ -4793,6 +4941,9 @@ function renderDossierDevis(d){
           <div>Total TTC <b>${fmtEuros(totals.ttcCt)}</b></div>
         </div>
         ${devisMargeHtml(dv)}
+        <div class="form-field" style="margin-top:14px"><label>Conditions particulières / réserves (affichées en bas du devis)</label>
+          ${canEditDv?`<textarea id="devisReserves" class="dv-reserves" placeholder="Ex. Travaux soumis à la découverte de l’état réel de la charpente…">${esc(dv.reserves||"")}</textarea>`:`<div class="form-help">${dv.reserves?esc(dv.reserves):"Aucune réserve renseignée."}</div>`}
+        </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
           ${canEditDv?`<button class="btn-primary btn-sm" data-action="devis-save" data-id="${d.id}">Enregistrer</button>`:""}
           ${dv.statut==="Brouillon" && hasPermission("quote.update")?`<button class="btn-secondary btn-sm" data-action="devis-send" data-id="${d.id}">Marquer comme envoyé</button>`:""}
@@ -5751,7 +5902,8 @@ document.addEventListener("DOMContentLoaded", ()=>{
     }
     if(action==="company-save"){
       const c = SETTINGS.company;
-      ["nom","site","telephone","email","adresse","siret","iban"].forEach(k=>{ c[k] = document.getElementById("co_"+k).value.trim(); });
+      ["nom","site","telephone","email","adresse","siret","iban","bic","titulaire","tvaIntra","decennaleNumero","decennaleAssureur"].forEach(k=>{ const el = document.getElementById("co_"+k); if(el) c[k] = el.value.trim(); });
+      ["cgv","reservesDefaut"].forEach(k=>{ const el = document.getElementById("co_"+k); if(el) c[k] = el.value.trim(); });
       c.devisValidite = parseInt(document.getElementById("co_devisValidite").value,10);
       c.acomptePct = parseInt(document.getElementById("co_acomptePct").value,10);
       saveSettings(); showToast("Informations enregistrées."); return;
@@ -6108,14 +6260,15 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const venteCt = Math.round((parseFloat(document.getElementById("ceVente").value)||0)*100);
       const tvaPct = parseFloat(document.getElementById("ceTva").value)||0;
       const unite = document.getElementById("ceUnite").value.trim() || (kind==="cat"?"forfait":"u");
+      const desc = (document.getElementById("ceDesc")||{value:""}).value.trim();
       const list = kind==="cat" ? SERVICE_CATALOG : MATERIEL_CATALOG;
       if(idx<0){
         const code = (kind==="cat"?"CUS-":"CUSM-")+Date.now().toString(36).toUpperCase();
-        if(kind==="cat") list.push({code, label, prixAchatCt:achatCt, prixUnitaireCt:venteCt, tvaPct, unite});
-        else list.push({code, label, prixAchatCt:achatCt, prixVenteCt:venteCt, tvaPct, unite});
+        if(kind==="cat") list.push({code, label, desc, prixAchatCt:achatCt, prixUnitaireCt:venteCt, tvaPct, unite});
+        else list.push({code, label, desc, prixAchatCt:achatCt, prixVenteCt:venteCt, tvaPct, unite});
       } else {
         const item = list[idx];
-        item.label = label; item.prixAchatCt = achatCt; item.tvaPct = tvaPct; item.unite = unite;
+        item.label = label; item.desc = desc; item.prixAchatCt = achatCt; item.tvaPct = tvaPct; item.unite = unite;
         if(kind==="cat") item.prixUnitaireCt = venteCt; else item.prixVenteCt = venteCt;
       }
       saveCustom(); state.modal = null; render(); showToast("Enregistré."); return;
@@ -6218,7 +6371,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
       if(!svc){ render(); return; }
       const ls = state.wizard.data.lignes;
       const line = catalogLineFrom(svc);
-      if(ls.length===1 && !ls[0].designation && !ls[0].prixUnitaireCt) ls[0] = line; else ls.push(line);
+      if(ls.length===1 && lineIsBlank(ls[0])) ls[0] = line; else ls.push(line);
       render(); return;
     }
     if(action==="confirm-yes"){ const fn = CONFIRM_RUN; CONFIRM_RUN = null; state.modal = null; if(fn) fn(); render(); return; }
@@ -6351,7 +6504,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
       if(svc){
         const ls = state.wizard.data.lignes;
         const line = catalogLineFrom(svc);
-        if(ls.length===1 && !ls[0].designation && !ls[0].prixUnitaireCt) ls[0] = line; else ls.push(line);
+        if(ls.length===1 && lineIsBlank(ls[0])) ls[0] = line; else ls.push(line);
       }
       render(); return;
     }
