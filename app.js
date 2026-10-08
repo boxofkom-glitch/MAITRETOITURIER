@@ -1112,7 +1112,7 @@ async function buildPdfFromHtml(docHtmlString, onProgress){
     const imgs = Array.from(doc.querySelectorAll("img"));
     await Promise.all(imgs.map(img=>img.complete ? Promise.resolve() : new Promise(res=>{ img.onload=res; img.onerror=res; setTimeout(res, 10000); })));
 
-    fitPointPages(doc);
+    reflowReportOverflows(doc);
     numberPdfPages(doc);
     // html2canvas rend mal les box-shadow (voile gris sur la page) : on les retire pour l'export.
     doc.querySelectorAll(".pdf-page,.pp-card,.pp-pill").forEach(el=>{ el.style.boxShadow = "none"; });
@@ -1446,7 +1446,7 @@ function processButtons(d){
     return out;
   }
   if(!b){
-    if(dv.statut==="Refusé") return hasPermission("quote.create") ? [A("+ Nouvelle version du devis", `data-action="wizard-devis" data-id="${d.id}" data-from="${dv.id}"`, "btn-secondary")] : [];
+    if(dv.statut==="Refusé") return hasPermission("quote.create") ? [A("+ Nouveau devis", `data-action="wizard-devis" data-id="${d.id}" data-blank="1"`, "btn-secondary")] : [];
     if(dv.statut==="Brouillon" && hasPermission("quote.send")) out.push(A("Envoyer le devis", `data-action="modal-send-doc" data-id="${d.id}" data-kind="devis" data-doc="${dv.id}"`, "btn-secondary"));
     if(hasPermission("quote.accept")){
       out.push(A("✓ Gagné", `data-action="win-devis" data-id="${d.id}"`, "btn-primary"));
@@ -4703,6 +4703,47 @@ function fitPointPages(root){
       el.style.fontSize = fs + "px";
       guard++;
     }
+  });
+}
+
+// Export PDF du rapport : un texte trop long n'est plus écrasé jusqu'à devenir illisible. On réduit au plus
+// jusqu'à un corps lisible (9,5 px), puis on coupe proprement dans le cadre (« suite page suivante ») et le
+// texte COMPLET passe sur une page de suite, à taille normale, juste après la page concernée.
+function reflowReportOverflows(doc){
+  const win = doc.defaultView, MIN = 9.5;
+  doc.querySelectorAll(".pdf-pointpage").forEach(page=>{
+    const over = [];
+    page.querySelectorAll(".pp-fit").forEach(el=>{
+      const fits = ()=>el.scrollHeight <= el.clientHeight + 1;
+      let fs = parseFloat(win.getComputedStyle(el).fontSize), guard = 0;
+      while(!fits() && fs > MIN && guard < 40){ fs -= 0.4; el.style.fontSize = fs+"px"; guard++; }
+      if(fits()) return;
+      const full = el.innerHTML, plain = el.textContent;
+      const label = el.parentElement && el.parentElement.querySelector(".pp-card-label, .pp-vig-label");
+      over.push({label: label ? label.textContent.trim() : "Détail", html: full});
+      let lo = 0, hi = plain.length;
+      while(lo < hi){
+        const mid = Math.ceil((lo+hi)/2);
+        el.textContent = plain.slice(0,mid).trimEnd()+"… (suite page suivante)";
+        if(fits()) lo = mid; else hi = mid-1;
+      }
+      el.textContent = plain.slice(0,lo).trimEnd()+"… (suite page suivante)";
+    });
+    if(!over.length) return;
+    const titleEl = page.querySelector(".pp-title"), numEl = page.querySelector(".pp-num");
+    const title = titleEl ? titleEl.textContent.trim() : "";
+    const cont = doc.createElement("div");
+    cont.className = "pdf-page doc2-page";
+    cont.innerHTML = `
+      <div class="doc2-slimhead"><span>${esc(SETTINGS.company.nom||"Maître Toiturier")}</span><span>Rapport de diagnostic — suite</span><span></span></div>
+      <div class="doc2-body">
+        <div class="cont-zone">Suite du contrôle</div>
+        <div class="cont-title">${esc(title)}</div>
+        ${over.map(o=>`<div class="cont-block"><div class="cont-label">${esc(o.label)}</div><div class="cont-txt">${o.html}</div></div>`).join("")}
+      </div>
+      <div class="doc2-foot"><span>${esc([SETTINGS.company.nom,SETTINGS.company.site,SETTINGS.company.telephone].filter(Boolean).join(" · "))}</span><span class="pdf-page-num"></span></div>`;
+    const frame = page.closest(".pdf-page-frame") || page;
+    frame.parentNode.insertBefore(cont, frame.nextSibling);
   });
 }
 
