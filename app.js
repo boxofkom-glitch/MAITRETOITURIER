@@ -1881,6 +1881,38 @@ async function downloadDocPdf(d, kind, docId){
   }
 }
 
+// ---------- Moteur de recherche + filtres (commun à tous les onglets) ----------
+// Chaque liste a une clé (« devis », « factures », « diag »…) : état dans state.flt[clé], barre fltBar(), filtres fltText()/fltPeriod().
+function fltState(key){ state.flt = state.flt || {}; return (state.flt[key] = state.flt[key] || {}); }
+function fltNorm(s){ return String(s==null?"":s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,""); }
+// Recherche multi-mots, sans accents ni casse : « dupuis merig » trouve « M. Dupuis · Mérignac ».
+function fltText(f, ...fields){
+  const q = fltNorm(f.q||"").trim(); if(!q) return true;
+  const hay = fltNorm(fields.join(" "));
+  return q.split(/\s+/).every(w=>hay.includes(w));
+}
+function fltActive(key){ const f = fltState(key); return Object.keys(f).some(k=>k!=="sort" && f[k]); }
+// Période : "7" | "30" | "90" | "annee" ; la date est au format court (« 8 oct. »).
+function fltPeriod(val, dateStr){
+  if(!val) return true;
+  const dt = parseShortFrDate(dateStr); if(!dt) return false;
+  const days = Math.round((TODAY_REF - dt)/86400000);
+  if(val==="annee") return dt.getFullYear()===TODAY_REF.getFullYear();
+  return days <= parseInt(val,10) && days >= -366;
+}
+const FLT_PERIODS = [["7","7 derniers jours"],["30","30 derniers jours"],["90","3 derniers mois"],["annee","Cette année"]];
+function fltBar(key, o){
+  const f = fltState(key);
+  const sels = (o.selects||[]).map(s=>`<select class="flt-sel ${f[s.field]?"on":""}" data-flt="${key}|${s.field}" aria-label="${esc(s.label)}"><option value="">${esc(s.label)}</option>${s.options.map(([v,l])=>`<option value="${esc(v)}" ${f[s.field]===v?"selected":""}>${esc(l)}</option>`).join("")}</select>`).join("");
+  const sort = o.sort ? `<select class="flt-sel flt-sort" data-flt="${key}|sort" aria-label="Trier"><option value="">Tri : par défaut</option>${o.sort.map(([v,l])=>`<option value="${esc(v)}" ${f.sort===v?"selected":""}>${esc(l)}</option>`).join("")}</select>` : "";
+  const active = fltActive(key) || f.sort;
+  return `<div class="flt-bar">
+    <div class="flt-search"><span class="flt-ic">⌕</span><input type="search" class="flt-q" data-flt="${key}|q" value="${esc(f.q||"")}" placeholder="${esc(o.placeholder||"Rechercher…")}" autocomplete="off"></div>
+    <div class="flt-row">${sels}${sort}${active?`<button class="btn-ghost btn-sm flt-reset" data-action="flt-reset" data-key="${key}">✕ Effacer les filtres</button>`:""}</div>
+    ${o.total!=null ? `<div class="flt-count">${o.shown} résultat${o.shown>1?"s":""}${o.shown!==o.total?` sur ${o.total}`:""}</div>` : ""}
+  </div>`;
+}
+
 // ---------- Onglet global "Devis & factures" ----------
 
 function allDocs(){
@@ -1944,14 +1976,63 @@ function renderDocuments(only){
     ${only!=="devis" ? stat("Encaissé", fmtEuros(encaisse), "Paiements confirmés") : ""}
     ${only!=="devis" ? stat("Reste à encaisser", fmtEuros(aRegler), "Factures envoyées") : ""}
   </div>
-  ${only!=="factures" && canView("devis") ? `<div class="card">
-    <div class="card-header"><h3>Devis</h3><span class="badge gray">${devis.length}</span></div>
-    ${devis.length ? devis.map(x=>renderDocRow("devis", x.d, x.dv)).join("") : `<div class="empty-note">Aucun devis pour l’instant. Créez-en un depuis un dossier.</div>`}
-  </div>` : ""}
-  ${only!=="devis" && canView("factures") ? `<div class="card">
-    <div class="card-header"><h3>Factures</h3><span class="badge gray">${factures.length}</span></div>
-    ${factures.length ? factures.map(x=>renderDocRow("facture", x.d, x.f)).join("") : `<div class="empty-note">Aucune facture pour l’instant.</div>`}
-  </div>` : ""}`;
+  ${only!=="factures" && canView("devis") ? (()=>{
+    const f = fltState("devis"), staff = teamNames();
+    let list = devis.filter(({d,dv})=>{
+      const t = devisTotals(dv).ttcCt/100;
+      if(!fltText(f, d.client, d.ville, d.telephone, d.email, dv.numero, dv.objet, d.motif, fmtEuros(devisTotals(dv).ttcCt), t.toFixed(0), dv.statut)) return false;
+      if(f.statut && dv.statut!==f.statut) return false;
+      if(f.periode && !fltPeriod(f.periode, dv.dateEnvoi||dv.dateCreation)) return false;
+      if(f.montant==="lt1" && t>=1000) return false;
+      if(f.montant==="1-5" && (t<1000||t>5000)) return false;
+      if(f.montant==="gt5" && t<=5000) return false;
+      if(f.equipe && d.commercial!==f.equipe && d.technicien!==f.equipe) return false;
+      return true;
+    });
+    const dt = x=>{ const v = parseShortFrDate(x.dv.dateEnvoi||x.dv.dateCreation); return v ? v.getTime() : 0; };
+    if(f.sort==="recent") list = list.slice().sort((a,b)=>dt(b)-dt(a));
+    else if(f.sort==="montant") list = list.slice().sort((a,b)=>devisTotals(b.dv).ttcCt-devisTotals(a.dv).ttcCt);
+    return `<div class="card">
+      <div class="card-header"><h3>Devis</h3><span class="badge gray">${devis.length}</span></div>
+      ${fltBar("devis", {placeholder:"Rechercher un client, un n° de devis, un objet, un montant…", shown:list.length, total:devis.length,
+        selects:[
+          {field:"statut", label:"Tous les statuts", options:["Brouillon","Envoyé","Accepté","Refusé"].map(x=>[x,x])},
+          {field:"periode", label:"Toutes les dates", options:FLT_PERIODS},
+          {field:"montant", label:"Tous les montants", options:[["lt1","Moins de 1 000 €"],["1-5","1 000 à 5 000 €"],["gt5","Plus de 5 000 €"]]},
+          {field:"equipe", label:"Toute l’équipe", options:staff.map(x=>[x,x])}],
+        sort:[["recent","Plus récents"],["montant","Montant décroissant"]]})}
+      ${list.length ? list.map(x=>renderDocRow("devis", x.d, x.dv)).join("") : `<div class="empty-note">${devis.length ? "Aucun devis ne correspond à cette recherche." : "Aucun devis pour l’instant. Créez-en un avec « + Créer un devis »."}</div>`}
+    </div>`; })() : ""}
+  ${only!=="devis" && canView("factures") ? (()=>{
+    const f = fltState("factures"), staff = teamNames();
+    let list = factures.filter(({d,f:fa})=>{
+      const st = factureStatutFromPayments(fa), reste = fa.montantTtcCt-facturePaidCt(fa);
+      if(!fltText(f, d.client, d.ville, d.telephone, fa.numero, fa.type, fa.libelle, d.motif, fmtEuros(fa.montantTtcCt), (fa.montantTtcCt/100).toFixed(0), st)) return false;
+      if(f.statut && st!==f.statut) return false;
+      if(f.periode && !fltPeriod(f.periode, fa.date)) return false;
+      if(f.echeance){
+        const ech = parseShortFrDate(fa.echeance);
+        if(reste<=1 || !ech) return false;
+        if(f.echeance==="retard" && !(ech < TODAY_REF)) return false;
+        if(f.echeance==="7j" && !(ech >= TODAY_REF && ech <= addDays(TODAY_REF,7))) return false;
+      }
+      if(f.equipe && d.commercial!==f.equipe && d.technicien!==f.equipe) return false;
+      return true;
+    });
+    const dt = x=>{ const v = parseShortFrDate(x.f.date); return v ? v.getTime() : 0; };
+    if(f.sort==="recent") list = list.slice().sort((a,b)=>dt(b)-dt(a));
+    else if(f.sort==="montant") list = list.slice().sort((a,b)=>b.f.montantTtcCt-a.f.montantTtcCt);
+    return `<div class="card">
+      <div class="card-header"><h3>Factures</h3><span class="badge gray">${factures.length}</span></div>
+      ${fltBar("factures", {placeholder:"Rechercher un client, un n° de facture, un montant…", shown:list.length, total:factures.length,
+        selects:[
+          {field:"statut", label:"Tous les statuts", options:[["Brouillon","Brouillon"],["Envoyée","À régler"],["Partiellement payée","Partiellement payée"],["Payée","Payée"]]},
+          {field:"echeance", label:"Toutes les échéances", options:[["retard","En retard"],["7j","À échéance sous 7 jours"]]},
+          {field:"periode", label:"Toutes les dates", options:FLT_PERIODS},
+          {field:"equipe", label:"Toute l’équipe", options:staff.map(x=>[x,x])}],
+        sort:[["recent","Plus récentes"],["montant","Montant décroissant"]]})}
+      ${list.length ? list.map(x=>renderDocRow("facture", x.d, x.f)).join("") : `<div class="empty-note">${factures.length ? "Aucune facture ne correspond à cette recherche." : "Aucune facture pour l’instant."}</div>`}
+    </div>`; })() : ""}`;
 }
 
 // ---------- Exemples de devis / factures pour la démonstration ----------
@@ -3447,6 +3528,33 @@ function catalogListRow(kind, item, i, canEdit){
     </div>
   </div>`;
 }
+// Liste de catalogue (prestations / matériel) avec recherche + filtres : unité, TVA, tranche de prix, marge.
+function catalogListHtml(kind, list, key, canEdit){
+  const f = fltState(key);
+  const price = it=> kind==="cat" ? it.prixUnitaireCt : (it.prixVenteCt||0);
+  const marge = it=>{ const v = price(it), a = it.prixAchatCt||0; return v>0 ? (v-a)/v*100 : null; };
+  const rows = list.map((it,i)=>({it,i})).filter(({it})=>{
+    const v = price(it)/100;
+    if(!fltText(f, it.label, it.desc, it.unite, it.code, fmtEuros(price(it)))) return false;
+    if(f.unite && (it.unite||(kind==="cat"?"forfait":"u"))!==f.unite) return false;
+    if(f.tva && String(it.tvaPct)!==f.tva) return false;
+    if(f.prix==="lt100" && v>=100) return false;
+    if(f.prix==="100-1000" && (v<100||v>1000)) return false;
+    if(f.prix==="gt1000" && v<=1000) return false;
+    if(canEdit && f.marge){ const m = marge(it); if(m==null) return false; if(f.marge==="low" && m>=15) return false; if(f.marge==="mid" && (m<15||m>=40)) return false; if(f.marge==="high" && m<40) return false; }
+    return true;
+  });
+  if(f.sort==="az") rows.sort((a,b)=>a.it.label.localeCompare(b.it.label,"fr"));
+  else if(f.sort==="prix") rows.sort((a,b)=>price(b.it)-price(a.it));
+  const units = [...new Set(list.map(it=>it.unite||(kind==="cat"?"forfait":"u")))].map(x=>[x,x]);
+  const tvas = [...new Set(list.map(it=>String(it.tvaPct)))].map(x=>[x,x+" %"]);
+  const bar = fltBar(key, {placeholder:kind==="cat"?"Rechercher une prestation…":"Rechercher un matériau…", shown:rows.length, total:list.length,
+    selects:[{field:"unite", label:"Toutes les unités", options:units}, {field:"tva", label:"Toutes les TVA", options:tvas},
+      {field:"prix", label:"Tous les prix", options:[["lt100","Moins de 100 €"],["100-1000","100 à 1 000 €"],["gt1000","Plus de 1 000 €"]]},
+      ...(canEdit?[{field:"marge", label:"Toutes les marges", options:[["low","Marge faible (< 15 %)"],["mid","Marge moyenne"],["high","Marge forte (≥ 40 %)"]]}]:[])],
+    sort:[["az","Nom A → Z"],["prix","Prix décroissant"]]});
+  return `<div class="card">${bar}${rows.length ? rows.map(({it,i})=>catalogListRow(kind, it, i, canEdit)).join("") : `<div class="empty-note">Aucun résultat pour cette recherche.</div>`}</div>`;
+}
 function renderPrestationsSection(){
   const canEdit = canEditMod("prestations");
   return `
@@ -3454,10 +3562,7 @@ function renderPrestationsSection(){
     <div><h1>Prestations</h1><p>${canEdit?"Touchez une prestation pour voir et modifier son prix d’achat, son prix de vente et sa marge.":"Tarifs proposés dans vos devis. Pour modifier les prix, demandez à la direction."}</p></div>
     ${canEdit?`<button class="btn-primary" data-action="cat-edit-open" data-kind="cat" data-idx="-1">+ Ajouter</button>`:""}
   </div>
-  <div class="card">
-    ${catalogSearchRow("prestaSearch")}
-    ${SERVICE_CATALOG.map((s,i)=>catalogListRow("cat", s, i, canEdit)).join("")}
-  </div>`;
+  ${catalogListHtml("cat", SERVICE_CATALOG, "presta", canEdit)}`;
 }
 function renderMaterielSection(){
   const canEdit = canEditMod("materiel");
@@ -3466,12 +3571,8 @@ function renderMaterielSection(){
     <div><h1>Matériel &amp; fournitures</h1><p>${canEdit?"Touchez un matériau pour voir et modifier son prix d’achat fournisseur, son prix de revente et sa marge.":"Tarifs proposés dans vos devis. Pour modifier les prix, demandez à la direction."}</p></div>
     ${canEdit?`<button class="btn-primary" data-action="cat-edit-open" data-kind="mat" data-idx="-1">+ Ajouter</button>`:""}
   </div>
-  <div class="card">
-    ${catalogSearchRow("matSearch")}
-    ${MATERIEL_CATALOG.map((m,i)=>catalogListRow("mat", m, i, canEdit)).join("")}
-  </div>`;
-}
-// Fiche de détail (sous-menu) d'une prestation/d'un matériau : ouverte au clic depuis la liste,
+  ${catalogListHtml("mat", MATERIEL_CATALOG, "matos", canEdit)}`;
+}// Fiche de détail (sous-menu) d'une prestation/d'un matériau : ouverte au clic depuis la liste,
 // pour garder la liste épurée et éviter de tout afficher à l'écran en même temps sur mobile.
 function modalCatEdit(m){
   const kind = m.kind, isNew = m.idx==null || m.idx<0;
@@ -3566,10 +3667,15 @@ function modalProfile(m){
 }
 function paramEquipe(){
   const link = location.origin + location.pathname + "?inscription=1";
+  const f = fltState("equipe");
+  const emps = SETTINGS.employees.filter(e=>fltText(f, e.nom, e.email, e.poste, e.telephone, ROLES[e.role]&&ROLES[e.role].label)
+    && (!f.role || e.role===f.role) && (!f.statut || e.statut===f.statut));
   return `
   <div class="card">
     <div class="card-header"><h3>Salariés (${SETTINGS.employees.length})</h3></div>
-    ${SETTINGS.employees.map(e=>{
+    ${SETTINGS.employees.length>3 || fltActive("equipe") ? fltBar("equipe", {placeholder:"Rechercher un salarié : nom, e-mail, poste…", shown:emps.length, total:SETTINGS.employees.length,
+      selects:[{field:"role", label:"Tous les rôles", options:["directeur","admin","tech","sales"].map(r=>[r,ROLES[r].label])}, {field:"statut", label:"Tous les statuts", options:[["actif","Actif"],["suspendu","Suspendu"]]}]}) : ""}
+    ${emps.map(e=>{
       const isMe = e.id===state.userId;
       const fixed = e.role==="directeur";
       return `
@@ -3997,8 +4103,19 @@ function filteredDossiers(){
     if(scope==="mine" && !isMine(d)) return false;
     if(f.stat && d.statut!==f.stat) return false;
     if(f.team && d.technicien!==f.team && d.commercial!==f.team) return false;
-    if(q && !(d.client+" "+d.ville+" "+d.id+" "+d.motif+" "+(d.telephone||"")+" "+(d.email||"")).toLowerCase().includes(q)) return false;
+    if(f.prio && d.priorite!==f.prio) return false;
+    if(f.etape && d.commercialStage!==f.etape) return false;
+    if(f.devis==="avec" && !(d.devis||[]).length) return false;
+    if(f.devis==="sans" && (d.devis||[]).length) return false;
+    if(f.devis==="impaye" && !(billingAll(d) && billingAll(d).due>1)) return false;
+    if(f.ville && d.ville!==f.ville) return false;
+    if(q && !fltText({q}, d.client, d.ville, d.id, d.motif, d.telephone, d.email, d.adresse, d.technicien, d.commercial)) return false;
     return true;
+  }).sort((a,b)=>{
+    if(f.sort==="client") return a.client.localeCompare(b.client,"fr");
+    if(f.sort==="montant") return dossierKpis(b).valeur - dossierKpis(a).valeur;
+    if(f.sort==="visite"){ const va = parseShortFrDate(a.visiteDate), vb = parseShortFrDate(b.visiteDate); return (va?va.getTime():Infinity)-(vb?vb.getTime():Infinity); }
+    return 0;
   });
 }
 function renderPager(total, page){
@@ -4024,7 +4141,14 @@ function renderDossiersList(){
     <select data-dl="scope"><option value="all" ${scope==="all"?"selected":""}>Tous les dossiers</option><option value="mine" ${scope==="mine"?"selected":""}>Mes dossiers</option></select>
     <select data-dl="stat"><option value="">Tous les statuts</option>${["Nouvelle","Planifié","En cours","Rapport prêt"].map(o=>`<option ${f.stat===o?"selected":""}>${o}</option>`).join("")}</select>
     <select data-dl="team"><option value="">Toute l’équipe</option>${staff.map(o=>`<option ${f.team===o?"selected":""}>${esc(o)}</option>`).join("")}</select>
+    <select data-dl="prio"><option value="">Toutes priorités</option>${["Normale","Urgente","Infiltration signalée"].map(o=>`<option ${f.prio===o?"selected":""}>${o}</option>`).join("")}</select>
+    <select data-dl="etape"><option value="">Toutes les étapes</option>${PROCESS_STAGES.map(o=>`<option ${f.etape===o?"selected":""}>${o}</option>`).join("")}</select>
+    <select data-dl="devis"><option value="">Devis : tous</option><option value="avec" ${f.devis==="avec"?"selected":""}>Avec devis</option><option value="sans" ${f.devis==="sans"?"selected":""}>Sans devis</option><option value="impaye" ${f.devis==="impaye"?"selected":""}>À encaisser</option></select>
+    <select data-dl="ville"><option value="">Toutes les villes</option>${[...new Set(visibleDossiers().map(x=>x.ville).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"fr")).map(o=>`<option ${f.ville===o?"selected":""}>${esc(o)}</option>`).join("")}</select>
+    <select data-dl="sort"><option value="">Tri : par défaut</option><option value="client" ${f.sort==="client"?"selected":""}>Client A → Z</option><option value="montant" ${f.sort==="montant"?"selected":""}>Montant décroissant</option><option value="visite" ${f.sort==="visite"?"selected":""}>Prochaine visite</option></select>
+    ${(f.q||f.stat||f.team||f.prio||f.etape||f.devis||f.ville||f.sort||f.scope==="mine")?`<button class="btn-ghost btn-sm flt-reset" data-action="dl-reset">✕ Effacer les filtres</button>`:""}
   </div>
+  <div class="flt-count">${all.length} résultat${all.length>1?"s":""}${all.length!==visibleDossiers().length?` sur ${visibleDossiers().length}`:""}</div>
   ${all.length===0 ? `<div class="empty-note">Aucun dossier ne correspond à cette recherche.</div>` : ""}
   <div class="card table-wrap">
     <table>
@@ -5234,10 +5358,13 @@ function agendaEventsForDate(date){
       events.push({time:null, label:"Relance commerciale", client:d.client, membre:d.commercial, ville:d.ville, id:d.id});
     }
   });
+  const f = fltState("agenda");
+  const kind = e=> /^Visite/.test(e.label) ? "visite" : /^Relance/.test(e.label) ? "relance" : /^Matériel/.test(e.label) ? "materiel" : "autre";
+  let out = events.filter(e=>fltText(f, e.client, e.ville, e.label, e.membre) && (!f.type || kind(e)===f.type));
   if(state.agendaMember!=="all"){
-    return events.filter(e=>e.membre===state.agendaMember);
+    return out.filter(e=>e.membre===state.agendaMember);
   }
-  return events.sort((a,b)=>(a.time||"").localeCompare(b.time||""));
+  return out.sort((a,b)=>(a.time||"").localeCompare(b.time||""));
 }
 function agendaEventsForMonth(date){
   const start = startOfMonth(date);
@@ -5386,6 +5513,8 @@ function renderAgenda(){
     ${canPlanifierVisite() ? `<button class="btn-primary" data-action="modal-choose">+ Planifier une visite</button>` : ""}
   </div>
   ${renderCalToolbar()}
+  ${fltBar("agenda", {placeholder:"Rechercher un rendez-vous : client, ville, technicien…",
+    selects:[{field:"type", label:"Tous les types", options:[["visite","Visites"],["relance","Relances"],["materiel","Préparation matériel"]]}]})}
   ${body}
   `;
 }
@@ -5393,22 +5522,29 @@ function renderAgenda(){
 // ---------- Entretiens ----------
 
 function renderEntretiens(){
-  const contracts = visibleContracts();
-  const actifs = contracts.filter(c=>c.statut==="Actif").length;
-  const montantAnnuel = contracts.reduce((s,c)=>s+c.montantAnnuel,0);
+  const base = visibleContracts();
+  const f = fltState("entr");
+  const contracts = base.filter(c=>fltText(f, c.client, c.ville, c.prestations, c.frequence, c.statut, c.prochaineVisite)
+    && (!f.statut || c.statut===f.statut) && (!f.freq || c.frequence===f.freq));
+  const actifs = base.filter(c=>c.statut==="Actif").length;
+  const montantAnnuel = base.reduce((s,c)=>s+c.montantAnnuel,0);
+  const uniq = k=>[...new Set(base.map(c=>c[k]).filter(Boolean))].map(x=>[x,x]);
+  const bar = fltBar("entr", {placeholder:"Rechercher un client, une ville, une prestation…", shown:contracts.length, total:base.length,
+    selects:[{field:"statut", label:"Tous les statuts", options:uniq("statut")}, {field:"freq", label:"Toutes les fréquences", options:uniq("frequence")}]});
   return `
   <div class="page-header">
     <div><h1>Contrats d’entretien</h1><p>Conservez le programme prévu et les prochaines visites de chaque toiture.</p></div>
     ${canNouveauContrat() ? `<button class="btn-primary" data-action="form-open" data-form="contract">+ Créer un entretien</button>` : ""}
   </div>
   <div class="stat-grid">
-    ${stat("Contrats suivis", contracts.length, "Proposés et en cours")}
+    ${stat("Contrats suivis", base.length, "Proposés et en cours")}
     ${stat("Contrats actifs", actifs, "Programme d’entretien")}
     ${stat("Visites à reprogrammer", 0, "Échéances dépassées")}
     ${stat("Montant annuel suivi", montantAnnuel.toLocaleString("fr-FR")+" €", "Indication saisie par l’équipe")}
   </div>
+  ${base.length ? bar : ""}
   <div class="card table-wrap">
-    ${contracts.length===0 ? `<div class="empty-note">Aucun contrat d’entretien pour les dossiers visibles.</div>` : `
+    ${contracts.length===0 ? `<div class="empty-note">${base.length ? "Aucun entretien ne correspond à cette recherche." : "Aucun contrat d’entretien pour les dossiers visibles."}</div>` : `
     <table>
       <thead><tr><th>Toiture / client</th><th>Prestations</th><th>Fréquence</th><th>Prochaine visite</th><th>Statut</th><th></th></tr></thead>
       <tbody>
@@ -5425,7 +5561,7 @@ function renderEntretiens(){
   </div>
 
   <div class="mobile-list">
-    ${contracts.length===0 ? `<div class="empty-note">Aucun contrat d’entretien pour les dossiers visibles.</div>` : contracts.map(c=>`
+    ${contracts.length===0 ? `<div class="empty-note">${base.length ? "Aucun entretien ne correspond à cette recherche." : "Aucun contrat d’entretien pour les dossiers visibles."}</div>` : contracts.map(c=>`
       <div class="list-card">
         <div class="lc-top">
           <div><div class="lc-name">${esc(c.client)}</div><div class="lc-sub">${esc(c.ville)}</div></div>
@@ -5443,34 +5579,52 @@ function renderEntretiens(){
 
 // ---------- Diagnostics list ----------
 
-function dgFilter(input){
-  const q = input.value.trim().toLowerCase();
-  document.querySelectorAll(".dg-row").forEach(el=>{ el.style.display = !q || el.dataset.search.includes(q) ? "" : "none"; });
-}
 function renderDiagnosticsList(){
-  const list = visibleDossiers().slice().sort((a,b)=>(b.diagnostic&&b.diagnostic.rapportPret?1:0)-(a.diagnostic&&a.diagnostic.rapportPret?1:0));
+  const f = fltState("diag"), staff = teamNames();
+  const all = visibleDossiers();
+  let list = all.filter(d=>{
+    if(!fltText(f, d.client, d.ville, d.id, d.motif, d.technicien, d.telephone, d.adresse, d.statut)) return false;
+    if(f.statut && d.statut!==f.statut) return false;
+    if(f.tech && d.technicien!==f.tech) return false;
+    if(f.rapport==="pret" && !d.diagnostic.rapportPret) return false;
+    if(f.rapport==="afaire" && d.diagnostic.rapportPret) return false;
+    if(f.visite==="prog" && !d.visiteDate) return false;
+    if(f.visite==="aprog" && d.visiteDate) return false;
+    return true;
+  });
+  const vt = d=>{ const v = parseShortFrDate(d.visiteDate); return v ? v.getTime() : Infinity; };
+  if(f.sort==="visite") list = list.slice().sort((a,b)=>vt(a)-vt(b));
+  else if(f.sort==="client") list = list.slice().sort((a,b)=>a.client.localeCompare(b.client,"fr"));
+  else list = list.slice().sort((a,b)=>(b.diagnostic&&b.diagnostic.rapportPret?1:0)-(a.diagnostic&&a.diagnostic.rapportPret?1:0));
   const act = d=>({tab:d.diagnostic.rapportPret?"rapport":"diagnostic", label:d.diagnostic.rapportPret?"Voir le rapport":"Remplir le diagnostic"});
-  const search = d=>esc((d.client+" "+d.ville+" "+d.id+" "+d.motif).toLowerCase());
+  const nChant = d=>otherChantiers(d).length;
+  const again = d=> diagEditable() && hasPermission("client.create") ? `<button class="btn-ghost btn-sm" data-action="modal-new-diag-for" data-id="${d.id}">+ Nouveau diagnostic</button>` : "";
+  const sub = d=>`${esc(d.ville)} · ${esc(d.id)}${nChant(d)?` · ${nChant(d)+1} chantiers`:""}`;
   return `
   <div class="page-header">
     <div><h1>Diagnostics de toiture</h1><p>Vos contrôles terrain, photos et rapports PDF.</p></div>
     ${diagEditable() ? `<button class="btn-primary" data-action="modal-new-diag">+ Créer un diagnostic</button>` : ""}
   </div>
-  ${!list.length ? `<div class="card" style="text-align:center;padding:34px 20px"><h3 style="margin:0 0 6px">Aucun diagnostic pour l’instant</h3><p style="color:var(--muted);margin:0 0 16px">Créez un client puis lancez son diagnostic : les 11 points de contrôle vous guident pas à pas.</p>${diagEditable() ? `<button class="btn-primary" data-action="modal-new-diag">+ Créer un diagnostic</button>` : ""}</div>` : `
-  <div class="filters-row">
-    <input type="search" placeholder="Rechercher un client, une ville, un dossier…" oninput="dgFilter(this)">
-  </div>
+  ${!all.length ? `<div class="card" style="text-align:center;padding:34px 20px"><h3 style="margin:0 0 6px">Aucun diagnostic pour l’instant</h3><p style="color:var(--muted);margin:0 0 16px">Créez un client puis lancez son diagnostic : les 11 points de contrôle vous guident pas à pas.</p>${diagEditable() ? `<button class="btn-primary" data-action="modal-new-diag">+ Créer un diagnostic</button>` : ""}</div>` : `
+  ${fltBar("diag", {placeholder:"Rechercher un client, une ville, une adresse, un technicien…", shown:list.length, total:all.length,
+    selects:[
+      {field:"statut", label:"Tous les statuts", options:["Nouvelle","Planifié","En cours","Rapport prêt"].map(x=>[x,x])},
+      {field:"rapport", label:"Rapport : tous", options:[["pret","Rapport prêt"],["afaire","Diagnostic à faire"]]},
+      {field:"visite", label:"Visite : toutes", options:[["prog","Visite programmée"],["aprog","À programmer"]]},
+      {field:"tech", label:"Tous les techniciens", options:staff.map(x=>[x,x])}],
+    sort:[["visite","Prochaine visite"],["client","Client A → Z"]]})}
+  ${!list.length ? `<div class="empty-note">Aucun diagnostic ne correspond à cette recherche.</div>` : `
   <div class="card table-wrap">
     <table>
-      <thead><tr><th>Dossier</th><th>Technicien</th><th>Visite</th><th>Avancement</th><th></th></tr></thead>
+      <thead><tr><th>Client</th><th>Technicien</th><th>Visite</th><th>Avancement</th><th></th></tr></thead>
       <tbody>
       ${list.map(d=>`
-        <tr class="dg-row" data-search="${search(d)}">
-          <td><div class="row-title">${esc(d.client)}</div><div class="row-sub">${esc(d.ville)} · ${esc(d.id)}</div></td>
+        <tr>
+          <td><div class="row-title">${esc(d.client)}</div><div class="row-sub">${sub(d)} · ${esc(d.motif)}</div></td>
           <td>${esc(d.technicien||"—")}</td>
           <td>${d.visiteDate ? esc(d.visiteDate)+" · "+esc(d.visiteHeure||"") : "À programmer"}</td>
           <td>${badge(d.statut, statutBadgeClass(d.statut))}</td>
-          <td><button class="btn-ghost" data-action="open-dossier" data-id="${d.id}" data-tab="${act(d).tab}">${act(d).label}</button></td>
+          <td style="white-space:nowrap"><button class="btn-secondary btn-sm" data-action="open-dossier" data-id="${d.id}" data-tab="${act(d).tab}">${act(d).label}</button> ${again(d)}</td>
         </tr>`).join("")}
       </tbody>
     </table>
@@ -5478,18 +5632,19 @@ function renderDiagnosticsList(){
 
   <div class="mobile-list">
     ${list.map(d=>`
-      <div class="list-card dg-row" data-search="${search(d)}">
+      <div class="list-card">
         <div class="lc-top">
-          <div><div class="lc-name">${esc(d.client)}</div><div class="lc-sub">${esc(d.ville)} · ${esc(d.id)}</div></div>
+          <div><div class="lc-name">${esc(d.client)}</div><div class="lc-sub">${sub(d)}</div></div>
           ${badge(d.statut, statutBadgeClass(d.statut))}
         </div>
-        <div class="lc-motif">${esc(d.technicien||"—")} · ${d.visiteDate ? esc(d.visiteDate)+" "+esc(d.visiteHeure||"") : "Visite à programmer"}</div>
+        <div class="lc-motif">${esc(d.motif)}<br>${esc(d.technicien||"—")} · ${d.visiteDate ? esc(d.visiteDate)+" "+esc(d.visiteHeure||"") : "Visite à programmer"}</div>
         <div class="lc-foot">
-          <button class="btn-secondary btn-sm" style="width:100%" data-action="open-dossier" data-id="${d.id}" data-tab="${act(d).tab}">${act(d).label}</button>
+          <button class="btn-secondary btn-sm" style="flex:1" data-action="open-dossier" data-id="${d.id}" data-tab="${act(d).tab}">${act(d).label}</button>${again(d)}
         </div>
       </div>`).join("")}
-  </div>`}`;
+  </div>`}`}`;
 }
+
 // ---------- Suivi commercial (kanban) ----------
 
 function kanbanQuick(d){
@@ -5503,13 +5658,29 @@ function kanbanQuick(d){
 }
 
 function renderCommercialKanban(){
-  const list = visibleDossiers();
+  const base = visibleDossiers();
+  const f = fltState("kan"), staff = teamNames();
+  const list = base.filter(d=>{
+    if(!fltText(f, d.client, d.ville, d.id, d.motif, d.telephone, d.commercial, d.technicien)) return false;
+    if(f.com && d.commercial!==f.com) return false;
+    if(f.prio && d.priorite!==f.prio) return false;
+    if(f.relance==="oui" && !d.prochaineRelance) return false;
+    if(f.montant==="lt5" && !(d.montant && d.montant<5000)) return false;
+    if(f.montant==="gt5" && !(d.montant && d.montant>=5000)) return false;
+    return true;
+  });
   const stages = PROCESS_STAGES;
   const actives = list.filter(d=>!["Perdu","Gagné","Impayé","Payé"].includes(d.commercialStage));
   const devisEnvoyes = list.filter(d=>d.commercialStage==="Devis envoyé").length;
   const montantGagne = list.filter(d=>["Gagné","Impayé","Payé"].includes(d.commercialStage)).reduce((s,d)=>s+d.montant,0);
   const aEncaisser = list.reduce((s,d)=>{ const b = billingAll(d); return s + (b ? b.due : 0); }, 0);
   const relancesRetard = list.filter(d=>d.prochaineRelance).length;
+  const bar = fltBar("kan", {placeholder:"Rechercher une affaire : client, ville, commercial…", shown:list.length, total:base.length,
+    selects:[
+      {field:"com", label:"Tous les commerciaux", options:staff.map(x=>[x,x])},
+      {field:"prio", label:"Toutes priorités", options:["Normale","Urgente","Infiltration signalée"].map(x=>[x,x])},
+      {field:"relance", label:"Relances : toutes", options:[["oui","Relance en retard"]]},
+      {field:"montant", label:"Tous les montants", options:[["lt5","Moins de 5 000 €"],["gt5","5 000 € et plus"]]}]});
 
   return `
   <div class="page-header"><div><h1>Suivi commercial</h1><p>Du premier contact à l’accord du client. Ouvrez une affaire pour la faire avancer.</p></div></div>
@@ -5519,6 +5690,7 @@ function renderCommercialKanban(){
     ${stat("Montant gagné", montantGagne.toLocaleString("fr-FR")+" €", "Affaires marquées gagnées")}
     ${stat("À encaisser", fmtEuros(aEncaisser), list.filter(d=>d.commercialStage==="Impayé").length+" client(s) impayé(s)")}
   </div>
+  ${bar}
   <div class="kanban">
     ${stages.map(stg=>{
       const items = list.filter(d=>d.commercialStage===stg);
@@ -5567,22 +5739,29 @@ function renderCommercialKanban(){
 // ---------- Parrainages ----------
 
 function renderParrainages(){
-  const list = visibleParrainages();
-  const gagnees = list.filter(p=>p.affaire==="Gagné").length;
-  const prevues = list.reduce((s,p)=>s+p.recompense,0);
+  const base = visibleParrainages();
+  const f = fltState("parr");
+  const list = base.filter(p=>fltText(f, p.parrain, p.clientApporte, p.affaire, p.suivi, p.date, p.recompense+" €")
+    && (!f.affaire || p.affaire===f.affaire) && (!f.suivi || p.suivi===f.suivi));
+  const gagnees = base.filter(p=>p.affaire==="Gagné").length;
+  const prevues = base.reduce((s,p)=>s+p.recompense,0);
+  const uniq = k=>[...new Set(base.map(p=>p[k]).filter(Boolean))].map(x=>[x,x]);
+  const bar = fltBar("parr", {placeholder:"Rechercher un parrain, un client apporté…", shown:list.length, total:base.length,
+    selects:[{field:"affaire", label:"Toutes les affaires", options:uniq("affaire")}, {field:"suivi", label:"Tous les suivis", options:uniq("suivi")}]});
   return `
   <div class="page-header">
     <div><h1>Parrainages clients</h1><p>Suivez les recommandations et les récompenses, du contact à la remise.</p></div>
     ${canAjouterParrainage() ? `<button class="btn-primary" data-action="form-open" data-form="parrainage">+ Ajouter un parrainage</button>` : ""}
   </div>
   <div class="stat-grid">
-    ${stat("Recommandations", list.length, "Clients apportés")}
+    ${stat("Recommandations", base.length, "Clients apportés")}
     ${stat("Affaires gagnées", gagnees, "Issues du parrainage")}
     ${stat("Récompenses prévues", prevues.toLocaleString("fr-FR")+" €", "Suivi indicatif, aucun versement")}
     ${stat("Récompenses remises", list.filter(p=>p.suivi==="Récompense remise").length, "Déclarées par l’administration")}
   </div>
+  ${base.length ? bar : ""}
   <div class="card table-wrap">
-    ${list.length===0 ? `<div class="empty-note">Aucun parrainage enregistré.</div>` : `
+    ${list.length===0 ? `<div class="empty-note">${base.length ? "Aucun parrainage ne correspond à cette recherche." : "Aucun parrainage enregistré."}</div>` : `
     <table>
       <thead><tr><th>Parrain</th><th>Client apporté</th><th>Affaire</th><th>Récompense prévue</th><th>Suivi</th><th></th></tr></thead>
       <tbody>
@@ -5599,7 +5778,7 @@ function renderParrainages(){
   </div>
 
   <div class="mobile-list">
-    ${list.length===0 ? `<div class="empty-note">Aucun parrainage enregistré.</div>` : list.map((p,i)=>`
+    ${list.length===0 ? `<div class="empty-note">${base.length ? "Aucun parrainage ne correspond à cette recherche." : "Aucun parrainage enregistré."}</div>` : list.map((p,i)=>`
       <div class="list-card">
         <div class="lc-top">
           <div><div class="lc-name">${esc(p.parrain)}</div><div class="lc-sub">${esc(p.date)}</div></div>
@@ -5745,7 +5924,7 @@ function modalNewDemande(){
     ? `<div class="form-field"><label>Commercial à affecter <span class="req">obligatoire</span></label><select id="fCommercial"><option value="">— Choisir un commercial —</option>${comOpts}</select><div class="form-help">Vous êtes automatiquement le technicien de ce client.</div></div>`
     : `<div class="form-field"><label>Technicien</label><select id="fTech"><option value="">À affecter</option>${techOpts}</select></div>
        <div class="form-field"><label>Commercial</label><select id="fCommercial"><option value="">À affecter</option>${comOpts}</select></div>`;
-  return modalWrap(pf ? "Nouveau chantier pour "+pf.client : (m.toDiagnostic ? "Créer un diagnostic" : "Créer un client"), `
+  return modalWrap(pf ? (m.toDiagnostic ? "Nouveau diagnostic pour " : "Nouveau chantier pour ")+pf.client : (m.toDiagnostic ? "Créer un diagnostic" : "Créer un client"), `
     ${pf ? `<p class="form-help" style="margin:0 0 12px">Ce dossier est indépendant : il aura son propre diagnostic, devis, factures et suivi de chantier, séparé de ${esc(pf.client)} (${esc(pf.id)}).</p>` : ""}
     <div class="form-field"><label>Client déjà enregistré ? Recherchez-le</label>
       <input type="search" id="fExisting" list="knownClients" placeholder="Tapez un nom ou une ville…" autocomplete="off" value="${pf?esc(pf.client+" · "+pf.ville):""}">
@@ -5762,7 +5941,7 @@ function modalNewDemande(){
     <div class="form-field"><label>Objet de la demande</label><textarea id="fMotif" placeholder="${pf?"Ex. réfection de la toiture du garage…":""}"></textarea></div>
     <div class="form-field"><label>Priorité</label><select id="fPriorite"><option>Normale</option><option>Urgente</option><option>Infiltration signalée</option></select></div>
     ${assign}
-    <div class="modal-actions"><button class="btn-primary" data-action="submit-new">${pf?"Créer ce chantier":(m.toDiagnostic?"Créer et démarrer le diagnostic":"Créer le client")}</button><button class="btn-secondary" data-action="modal-close">Annuler</button></div>
+    <div class="modal-actions"><button class="btn-primary" data-action="submit-new">${m.toDiagnostic?"Créer et démarrer le diagnostic":(pf?"Créer ce chantier":"Créer le client")}</button><button class="btn-secondary" data-action="modal-close">Annuler</button></div>
   `);
 }
 function prefillExistingClient(val){
@@ -5998,6 +6177,8 @@ document.addEventListener("DOMContentLoaded", ()=>{
       c.acomptePct = parseInt(document.getElementById("co_acomptePct").value,10);
       saveSettings(); showToast("Informations enregistrées."); return;
     }
+    if(action==="flt-reset"){ state.flt = state.flt || {}; state.flt[t.dataset.key] = {}; render(); return; }
+    if(action==="dl-reset"){ state.dl = {q:"", stat:"", team:"", scope:"", page:1}; render(); return; }
     if(action==="toggle-nav-more"){ state.navMore = !state.navMore; render(); return; }
     if(action==="toggle-sidebar"){ state.sidebarOpen=!state.sidebarOpen; render(); return; }
     if(action==="close-sidebar"){ state.sidebarOpen=false; render(); return; }
@@ -6005,6 +6186,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(action==="open-dossier"){ if(t.dataset.doc){ const dd = byId(t.dataset.id); if(dd && findDevis(dd, t.dataset.doc)) selectDevis(dd, t.dataset.doc); } state.section="dossiers"; state.dossierId=t.dataset.id; state.dossierTab=t.dataset.tab||"info"; state.diagStep=1; render(); scrollContentTop(); return; }
     if(action==="dossier-tab"){ state.dossierTab=t.dataset.tab; state.diagStep=1; render(); scrollContentTop(); return; }
     if(action==="modal-new"){ state.modal={type:"new"}; render(); return; }
+    if(action==="modal-new-diag-for"){ state.modal={type:"new", toDiagnostic:true, prefillId:t.dataset.id}; render(); return; }
     if(action==="modal-new-chantier"){ state.modal={type:"new", prefillId:t.dataset.id}; render(); return; }
     if(action==="modal-new-diag"){ state.modal={type:"new", toDiagnostic:true}; render(); return; }
     if(action==="modal-edit"){ state.modal={type:"edit", id:t.dataset.id}; render(); return; }
@@ -6565,9 +6747,22 @@ document.addEventListener("DOMContentLoaded", ()=>{
     }
   });
   // Recherche des dossiers « en direct » : on filtre pendant la frappe (sans attendre Entrée) et on garde le curseur.
-  let dlTimer = null;
+  let dlTimer = null, fltTimer = null;
   document.getElementById("app").addEventListener("input", (e)=>{
     const t = e.target;
+    // Moteur de recherche commun (tous les onglets) : filtre pendant la frappe, garde le curseur.
+    if(t && t.dataset && t.dataset.flt && t.dataset.flt.endsWith("|q")){
+      clearTimeout(fltTimer);
+      fltTimer = setTimeout(()=>{
+        const [key] = t.dataset.flt.split("|");
+        fltState(key).q = t.value;
+        const pos = t.selectionStart, sel = '[data-flt="'+t.dataset.flt+'"]';
+        render();
+        const ni = document.querySelector(sel);
+        if(ni){ ni.focus(); try{ ni.setSelectionRange(pos,pos); }catch(_){} }
+      }, 200);
+      return;
+    }
     if(!(t && t.dataset && t.dataset.dl==="q")) return;
     clearTimeout(dlTimer);
     dlTimer = setTimeout(()=>{
@@ -6583,6 +6778,10 @@ document.addEventListener("DOMContentLoaded", ()=>{
     savePointFieldsFromDOM();
     saveSynthFieldsFromDOM();
     saveDevisLinesFromDOM();
+    if(e.target.dataset && e.target.dataset.flt && !e.target.dataset.flt.endsWith("|q")){
+      const [fk, ff] = e.target.dataset.flt.split("|");
+      fltState(fk)[ff] = e.target.value; render(); return;
+    }
     if(e.target.dataset && e.target.dataset.pc){ persoChange(e.target); return; }
     if(e.target.id==="importCsv"){ const f = e.target.files[0]; e.target.value = ""; if(f) importCsvFile(f); return; }
     if(e.target.id==="importJson"){ const f = e.target.files[0]; e.target.value = ""; if(f) importBackupFile(f); return; }
