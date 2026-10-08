@@ -2204,6 +2204,39 @@ function askDelete(ds){
 
 // ---------- Confirmation de suppression ----------
 let CONFIRM_RUN = null;
+// Glisser une ligne vers la gauche = demander sa suppression (même confirmation que le bouton ✕ / Supprimer de la ligne).
+(function initSwipeDelete(){
+  let st = null;
+  const reset = ()=>{ if(st && st.el){ st.el.classList.remove("swipe-on"); st.el.style.removeProperty("--sw"); } st = null; };
+  document.addEventListener("touchstart", e=>{
+    reset();
+    if(e.touches.length!==1) return;
+    const el = e.target.closest && e.target.closest(".row-item, .list-card");
+    if(!el || el.closest(".modal")) return;
+    const btn = el.querySelector('[data-action="ask-delete"]');
+    if(!btn) return;
+    st = {el, btn, x:e.touches[0].clientX, y:e.touches[0].clientY, dx:0, on:false};
+  }, {passive:true});
+  document.addEventListener("touchmove", e=>{
+    if(!st) return;
+    const dx = e.touches[0].clientX - st.x, dy = e.touches[0].clientY - st.y;
+    if(!st.on){
+      if(Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)){ reset(); return; }
+      if(dx < -14 && Math.abs(dx) > Math.abs(dy)) st.on = true; else return;
+    }
+    st.dx = dx;
+    st.el.classList.add("swipe-on");
+    st.el.style.setProperty("--sw", Math.min(-dx, 160)+"px");
+  }, {passive:true});
+  document.addEventListener("touchend", ()=>{
+    if(!st) return;
+    const go = st.on && st.dx < -90, ds = st.btn.dataset;
+    reset();
+    if(go){ askDelete(ds); }
+  }, {passive:true});
+  document.addEventListener("touchcancel", reset, {passive:true});
+})();
+
 function askConfirm(title, text, run, yesLabel, yesCls){
   CONFIRM_RUN = run;
   state.modal = {type:"confirm", title, text, yesLabel:yesLabel||"Supprimer", yesCls:yesCls||"btn-danger"};
@@ -4402,9 +4435,15 @@ function renderReportRow(d){
 }
 
 function renderDossierActivite(d){
-  const taches = d.taches || [];
+  const f = fltState("act");
+  const tachesAll = d.taches || [];
+  const taches = tachesAll.filter(t=>fltText(f, t.titre, t.assigne, t.echeance) && (!f.etat || (f.etat==="fait") === !!t.done));
+  const notesAll = d.notes.map((n,i)=>({n,i})), notes = notesAll.filter(({n})=>fltText(f, n.texte, n.date));
+  const histo = d.historique.slice().reverse().filter(h=>fltText(f, h.texte, h.auteur, h.date));
   const editable = canEditActivity();
   return `
+  ${fltBar("act", {placeholder:"Rechercher une tâche, une note, un événement…", shown:taches.length+notes.length+histo.length, total:tachesAll.length+notesAll.length+d.historique.length,
+    selects:[{field:"etat", label:"Tâches : toutes", options:[["afaire","À faire"],["fait","Terminées"]]}]})}
   <div class="card">
     <div class="card-header"><h3>Tâches</h3>${editable?`<button class="btn-secondary btn-sm" data-action="form-open" data-form="task" data-id="${d.id}">+ Ajouter une tâche</button>`:""}</div>
     ${taches.length ? taches.map(t=>`
@@ -4419,14 +4458,14 @@ function renderDossierActivite(d){
 
   <div class="card">
     <div class="card-header"><h3>Notes internes</h3><span class="badge gray">Équipe uniquement</span></div>
-    ${d.notes.length ? d.notes.map((n,i)=>`<div class="row-item"><div style="min-width:0"><div class="row-sub">${esc(n.date)}</div><div>${esc(n.texte)}</div></div>${editable?`<div class="doc-row-actions"><button class="btn-ghost btn-sm" data-action="form-open" data-form="note" data-id="${d.id}" data-nid="${i}">Modifier</button><button class="btn-ghost btn-sm" data-action="ask-delete" data-what="note" data-id="${d.id}" data-nid="${i}">✕</button></div>`:""}</div>`).join("") : `<div class="empty-note">Aucune note.</div>`}
+    ${notes.length ? notes.map(({n,i})=>`<div class="row-item"><div style="min-width:0"><div class="row-sub">${esc(n.date)}</div><div>${esc(n.texte)}</div></div>${editable?`<div class="doc-row-actions"><button class="btn-ghost btn-sm" data-action="form-open" data-form="note" data-id="${d.id}" data-nid="${i}">Modifier</button><button class="btn-ghost btn-sm" data-action="ask-delete" data-what="note" data-id="${d.id}" data-nid="${i}">✕</button></div>`:""}</div>`).join("") : `<div class="empty-note">Aucune note.</div>`}
     ${editable?`<div class="form-field" style="margin-top:14px"><textarea id="noteInput" placeholder="Informations utiles pour la prochaine intervention…"></textarea></div>
     <button class="btn-secondary btn-sm" data-action="add-note" data-id="${d.id}">Ajouter la note</button>`:""}
   </div>
 
   <div class="card">
     <div class="card-header"><h3>Historique du dossier</h3></div>
-    ${d.historique.slice().reverse().map(h=>`<div class="row-item"><div><div class="row-sub">${esc(h.date)} · ${esc(h.auteur)}</div><div>${esc(h.texte)}</div></div></div>`).join("")}
+    ${histo.map(h=>`<div class="row-item"><div><div class="row-sub">${esc(h.date)} · ${esc(h.auteur)}</div><div>${esc(h.texte)}</div></div></div>`).join("")}
   </div>`;
 }
 
