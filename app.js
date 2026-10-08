@@ -2505,6 +2505,7 @@ return `<p class="wz-intro">Ajoutez les prestations et le matériel : chaque lig
     const dvLike = wzDevisFromData();
     const sumPct = x.echeancier.reduce((s,e)=>s+(e.pct||0),0);
     return `<p class="wz-intro">Comment le client règle-t-il ? Choisissez en combien de fois, personnalisez le libellé et le pourcentage de chaque paiement : une facture sera créée pour chacun, au fil du chantier.</p>
+      <div class="wz-presets">${[[1,"Paiement unique (100 %)"],[2,"Acompte + solde"],[3,"En 3 fois"]].map(([n,l])=>`<button type="button" class="btn-${x.echeancier.length===n?"primary":"secondary"} btn-sm" data-action="wz-pay-preset" data-n="${n}">${l}</button>`).join("")}</div>
       <div class="wz-grid">
         <div class="form-field"><label>Nombre de paiements</label><select data-wz="fois" data-wz-rerender="1">${PAY_FOIS.map(n=>`<option value="${n}" ${x.fois===n?"selected":""}>${n===1?"1 fois (paiement unique)":n+" fois"}</option>`).join("")}</select></div>
         <div class="form-field"><label>Mode de règlement</label><select data-wz="mode" data-wz-rerender="1">${PAY_MODES.map(m=>`<option ${x.mode===m?"selected":""}>${m}</option>`).join("")}</select></div>
@@ -3657,6 +3658,7 @@ function modalEchEdit(m){
   const mode = m.mode || devisPaiement(dv).mode;
   const sumPct = echeancier.reduce((s,e)=>s+(e.pct||0),0);
   return modalWrap("Conditions de paiement", `
+    <div class="wz-presets">${[[1,"Paiement unique (100 %)"],[2,"Acompte + solde"],[3,"En 3 fois"]].map(([n,l])=>`<button type="button" class="btn-${echeancier.length===n?"primary":"secondary"} btn-sm" data-action="ech-preset" data-n="${n}">${l}</button>`).join("")}</div>
     <div class="wz-grid">
       <div class="form-field"><label>Nombre de paiements</label><select id="echFois" data-action-change="ech-fois-change">${PAY_FOIS.map(n=>`<option value="${n}" ${echeancier.length===n?"selected":""}>${n===1?"1 fois (paiement unique)":n+" fois"}</option>`).join("")}</select></div>
       <div class="form-field"><label>Mode de règlement</label><select id="echMode">${PAY_MODES.map(mm=>`<option ${mode===mm?"selected":""}>${mm}</option>`).join("")}</select></div>
@@ -6716,6 +6718,8 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(action==="wz-next"){ wzNext(); return; }
     if(action==="wz-prev"){ wzFlush(); state.wizard.step = Math.max(1, state.wizard.step-1); render(); return; }
     if(action==="wz-create"){ wzCreate(t.dataset.send==="1"); return; }
+    if(action==="ech-preset"){ state.modal.echeancier = defaultEcheancier(parseInt(t.dataset.n,10)); render(); return; }
+    if(action==="wz-pay-preset"){ wzFlush(); const n = parseInt(t.dataset.n,10); state.wizard.data.fois = n; state.wizard.data.echeancier = defaultEcheancier(n); render(); return; }
     if(action==="wz-add-line"){ wzFlush(); state.wizard.data.lignes.push(freshDevisLine()); render(); return; }
     if(action==="wz-open-catalog"){ wzFlush(); state.wizard.showCatalog = true; render(); return; }
     if(action==="wz-close-catalog"){ wzFlush(); state.wizard.showCatalog = false; render(); return; }
