@@ -1,4 +1,4 @@
-/* ToitPilot / Maître Toiturier — CRM demo clone. Static, in-memory, no backend. */
+﻿/* ToitPilot / Maître Toiturier — CRM demo clone. Static, in-memory, no backend. */
 
 // Points de contrôle du diagnostic, tels que définis par le gérant (le 12e, « Synthèse, niveau d’urgence
 // et préconisations », est l’étape finale de synthèse du diagnostic).
@@ -543,9 +543,20 @@ function devisStatutCls(s){
   if(s==="Envoyé") return "gold";
   return "gray";
 }
-function nextDevisId(d){ return d.id+"-D"+(d.devis.length+1); }
+// Numéro libre suivant : ne réutilise jamais un numéro déjà pris, même si un devis a été supprimé.
+function nextDevisId(d){
+  const used = d.devis.map(v=>{ const m = /-D(\d+)$/.exec(v.id||""); return m ? parseInt(m[1],10) : 0; });
+  return d.id+"-D"+(Math.max(0, ...used, d.devis.length)+1);
+}
 function nextFactureId(d){ return d.id+"-F"+(d.factures.length+1); }
-function latestDevis(d){ return d.devis.length ? d.devis[d.devis.length-1] : null; }
+// Un dossier peut contenir plusieurs devis : celui affiché/modifié à l'écran est le devis « sélectionné »
+// (state.devisSel), à défaut le dernier créé.
+function selectedDevis(d){
+  const id = state.devisSel && state.devisSel[d.id];
+  return id ? (d.devis.find(v=>v.id===id) || null) : null;
+}
+function latestDevis(d){ return selectedDevis(d) || (d.devis.length ? d.devis[d.devis.length-1] : null); }
+function selectDevis(d, id){ state.devisSel = state.devisSel || {}; state.devisSel[d.id] = id; }
 function facturePaidCt(f){
   return (f.paiements||[]).filter(p=>p.mode!=="Virement" || p.virementStatut==="Confirmé").reduce((s,p)=>s+p.montantCt,0);
 }
@@ -1276,12 +1287,24 @@ function createFacture(d, dv, stepIdx, o){
 const PROCESS_STAGES = ["À contacter","Devis à préparer","Devis envoyé","Gagné","Impayé","Payé","Perdu"];
 const MANUAL_STAGES = ["À contacter","Devis à préparer","Devis envoyé","Perdu"];
 
+// Devis « gagné » sur lequel porte le suivi affiché : le devis sélectionné s'il est accepté, sinon (rien de
+// sélectionné) le dernier accepté. Plusieurs devis d'un même client peuvent être acceptés.
 function acceptedDevis(d){
+  const sel = selectedDevis(d);
+  if(sel) return sel.statut==="Accepté" ? sel : null;
   const a = (d.devis||[]).filter(v=>v.statut==="Accepté");
   return a.length ? a[a.length-1] : null;
 }
-function billingOf(d){
-  const dv = acceptedDevis(d);
+function anyAcceptedDevis(d){ return (d.devis||[]).some(v=>v.statut==="Accepté"); }
+function billingOf(d){ return billingOfDevis(d, acceptedDevis(d)); }
+// Cumul de tous les devis acceptés du dossier (étape commerciale, indicateurs, « à encaisser »).
+function billingAll(d){
+  const bs = (d.devis||[]).filter(v=>v.statut==="Accepté").map(v=>billingOfDevis(d, v));
+  if(!bs.length) return null;
+  const sum = k=>bs.reduce((s,b)=>s+b[k],0);
+  return {ttc:sum("ttc"), fs:bs.reduce((a,b)=>a.concat(b.fs),[]), invoiced:sum("invoiced"), paid:sum("paid"), due:sum("due"), annonce:sum("annonce"), remaining:sum("remaining"), count:sum("count"), n:bs.length};
+}
+function billingOfDevis(d, dv){
   if(!dv) return null;
   const ttc = devisTotals(dv).ttcCt;
   const fs = (d.factures||[]).filter(f=>f.devisId===dv.id);
@@ -1300,7 +1323,7 @@ function processStageOf(b){
 }
 // Recalcule l'étape commerciale et referme les tâches de relance devenues inutiles.
 function syncProcess(d, quiet){
-  const b = billingOf(d);
+  const b = billingAll(d);
   if(!b) return;
   (b.fs||[]).forEach(f=>{
     if(facturePaidCt(f)>=f.montantTtcCt-1) (d.taches||[]).forEach(t=>{ if(t.autoFacture===f.id && !t.done) t.done = true; });
@@ -1333,22 +1356,30 @@ function addFactureTask(d, f){
   d.taches.push({id:nextTaskId(d), titre:"Encaisser « "+f.type+" » "+f.numero+" ("+fmtEuros(f.montantTtcCt)+")", echeance:f.echeance||"", assigne:d.commercial||"", done:false, autoFacture:f.id});
 }
 
-function winPreview(d){
-  const dv = (d.devis||[]).filter(v=>v.statut!=="Refusé").slice(-1)[0];
+// Devis visé par « Gagné » : celui désigné explicitement, sinon le devis sélectionné, sinon le dernier non refusé.
+function winTarget(d, devisId){
+  if(devisId){ const v = findDevis(d, devisId); if(v) return v; }
+  const sel = selectedDevis(d);
+  if(sel && sel.statut!=="Refusé") return sel;
+  return (d.devis||[]).filter(v=>v.statut!=="Refusé").slice(-1)[0] || null;
+}
+function winPreview(d, devisId){
+  const dv = winTarget(d, devisId);
   if(!dv) return null;
   const p = devisPaiement(dv), ttc = devisTotals(dv).ttcCt;
   const first = p.echeancier[0], ac = echeanceTtcCt(dv, 0);
   const suite = p.echeancier.length>1 ? " Les "+(p.echeancier.length-1)+" facture(s) suivante(s) ("+p.echeancier.slice(1).map(e=>e.label).join(", ")+") se créeront au fur et à mesure du chantier." : "";
   return {dv, ttc, p, ac, text: "Le devis "+dv.numero+" ("+fmtEuros(ttc)+") sera accepté. Automatiquement : le chantier est préparé, la facture « "+first.label+" » de "+fmtEuros(ac)+" est créée, et le client passe en « Impayé » jusqu’au paiement."+suite};
 }
-function askWin(d){
-  const w = winPreview(d);
+function askWin(d, devisId){
+  const w = winPreview(d, devisId);
   if(!w) return;
-  askConfirm("Marquer le devis comme gagné ?", w.text, ()=>winDevis(d), "Gagné ✓", "btn-primary");
+  askConfirm("Marquer le devis comme gagné ?", w.text, ()=>winDevis(d, w.dv.id), "Gagné ✓", "btn-primary");
 }
-function winDevis(d){
-  const dv = (d.devis||[]).filter(v=>v.statut!=="Refusé").slice(-1)[0];
+function winDevis(d, devisId){
+  const dv = winTarget(d, devisId);
   if(!dv) return;
+  selectDevis(d, dv.id);
   if(dv.statut==="Brouillon"){ dv.statut = "Envoyé"; dv.dateEnvoi = dv.dateEnvoi || "12 sept."; }
   dv.statut = "Accepté";
   dv.dateAcceptation = "12 sept.";
@@ -1374,7 +1405,7 @@ function revertDevis(d){
   d.factures = (d.factures||[]).filter(f=>f.devisId!==dv.id);
   dv.statut = "Envoyé";
   delete dv.dateAcceptation;
-  d.commercialStage = "Devis envoyé";
+  if(anyAcceptedDevis(d)) syncProcess(d, true); else d.commercialStage = "Devis envoyé";
   stampHist(d, "Retour en arrière : devis "+dv.numero+" repassé en « Envoyé », facture(s) associée(s) retirée(s).");
   showToast("Revenu au devis "+dv.numero+".");
 }
@@ -1406,7 +1437,7 @@ function processButtons(d){
     return out;
   }
   if(!b){
-    if(dv.statut==="Refusé") return hasPermission("quote.create") ? [A("+ Nouvelle version du devis", `data-action="wizard-devis" data-id="${d.id}"`, "btn-secondary")] : [];
+    if(dv.statut==="Refusé") return hasPermission("quote.create") ? [A("+ Nouvelle version du devis", `data-action="wizard-devis" data-id="${d.id}" data-from="${dv.id}"`, "btn-secondary")] : [];
     if(dv.statut==="Brouillon" && hasPermission("quote.send")) out.push(A("Envoyer le devis", `data-action="modal-send-doc" data-id="${d.id}" data-kind="devis" data-doc="${dv.id}"`, "btn-secondary"));
     if(hasPermission("quote.accept")){
       out.push(A("✓ Gagné", `data-action="win-devis" data-id="${d.id}"`, "btn-primary"));
@@ -1708,7 +1739,7 @@ function renderDevisDoc(d, dv){
   return docPages(d, {
     topTitle: "Devis",
     eyebrow: "Proposition commerciale",
-    topNum: "N° "+dv.numero+(dv.version>1?" · v"+dv.version:""),
+    topNum: "N° "+dv.numero+(dv.deriveDe?" · v"+dv.version:""),
     dateLabel: esc(dv.dateEnvoi||dv.dateCreation||"12 sept."),
     validLabel: valid+" jours",
     objet: dv.objet||d.motif,
@@ -1846,8 +1877,7 @@ async function downloadDocPdf(d, kind, docId){
 function allDocs(){
   const devis = [], factures = [];
   visibleDossiers().forEach(d=>{
-    const last = (d.devis||[])[(d.devis||[]).length-1];
-    if(last) devis.push({d, dv:last});
+    (d.devis||[]).forEach(dv=>devis.push({d, dv}));
     (d.factures||[]).forEach(f=>factures.push({d, f}));
   });
   return {devis, factures};
@@ -1860,7 +1890,7 @@ function renderDocRow(kind, d, doc, hideOpen){
   const pill = docPill(kind, doc);
   const cls = pill.cls==="ok"?"green":pill.cls==="warn"?"gold":pill.cls==="bad"?"red":"gray";
   const canSend = isDevis ? hasPermission("quote.send") : hasPermission("invoice.create");
-  const sub = isDevis ? `${esc(d.motif)}${doc.version>1?" · v"+doc.version:""}` : `${esc(doc.type)} · ${esc(d.motif)}`;
+  const sub = isDevis ? `${esc(doc.objet||d.motif)}${doc.deriveDe?" · v"+doc.version:""}` : `${esc(doc.type)} · ${esc(d.motif)}`;
   return `
   <div class="row-item" data-search="${esc((d.client+" "+num+" "+d.ville+" "+pill.label).toLowerCase())}" data-statut="${esc(pill.label)}">
     <div class="row-left">
@@ -1871,7 +1901,7 @@ function renderDocRow(kind, d, doc, hideOpen){
       <div class="doc-row-amount">${fmtEuros(ttc)}</div>
       ${badge(pill.label, cls)}
       <div class="doc-row-actions">
-        ${isDevis && (doc.statut==="Envoyé"||doc.statut==="Brouillon") && !acceptedDevis(d) && hasPermission("quote.accept") ? `<button class="btn-primary btn-sm" data-action="win-devis" data-id="${d.id}">✓ Gagné</button>` : ""}
+        ${isDevis && (doc.statut==="Envoyé"||doc.statut==="Brouillon") && hasPermission("quote.accept") ? `<button class="btn-primary btn-sm" data-action="win-devis" data-id="${d.id}" data-doc="${doc.id}">✓ Gagné</button>` : ""}
         ${!isDevis && doc.montantTtcCt-facturePaidCt(doc)>1 && hasPermission("payment.register") ? `<button class="btn-primary btn-sm" data-action="pay-open" data-id="${d.id}" data-fid="${doc.id}">Paiement</button>` : ""}
         <button class="btn-ghost btn-sm" data-action="doc-pdf" data-id="${d.id}" data-kind="${kind}" data-doc="${doc.id}">PDF</button>
         ${canSend ? `<button class="btn-secondary btn-sm" data-action="modal-send-doc" data-id="${d.id}" data-kind="${kind}" data-doc="${doc.id}">Envoyer</button>` : ""}
@@ -2118,8 +2148,8 @@ function diagSuggestions(d){
   return out;
 }
 
-function wzNew(kind, dossierId){
-  state.wizard = {kind, step:1, dossierId:dossierId||null, data:{}};
+function wzNew(kind, dossierId, fromId){
+  state.wizard = {kind, step:1, dossierId:dossierId||null, fromId:fromId||null, data:{}};
   if(kind==="devis") wzInitDevis(); else wzInitFacture();
   state.modal = {type:"wizard"};
   render();
@@ -2128,9 +2158,11 @@ function wzNew(kind, dossierId){
 function wzInitDevis(){
   const w = state.wizard, d = w.dossierId ? byId(w.dossierId) : null;
   w.data = {objet: d ? d.motif : "", validite:SETTINGS.company.devisValidite||30, lignes:[freshDevisLine()], fois:2, echeancier: defaultEcheancier(2), mode:"Virement", reserves:SETTINGS.company.reservesDefaut||""};
-  if(d && d.devis.length){
-    const prev = latestDevis(d), pp = devisPaiement(prev);
-    Object.assign(w.data, {objet: prev.objet||d.motif, validite: prev.validite||30, lignes: prev.lignes.map(l=>Object.assign({},l)), fois: pp.echeancier.length, echeancier: pp.echeancier.map(e=>Object.assign({},e)), mode: pp.mode});
+  // Nouveau devis = page blanche ; « Dupliquer ce devis » reprend les lignes et conditions du devis choisi.
+  const prev = d && w.fromId ? findDevis(d, w.fromId) : null;
+  if(prev){
+    const pp = devisPaiement(prev);
+    Object.assign(w.data, {objet: prev.objet||d.motif, validite: prev.validite||30, lignes: prev.lignes.map(l=>Object.assign({},l)), fois: pp.echeancier.length, echeancier: pp.echeancier.map(e=>Object.assign({},e)), mode: pp.mode, reserves: prev.reserves||w.data.reserves});
   }
 }
 
@@ -2141,6 +2173,8 @@ function wzInitFacture(){
 }
 
 function wzAcceptedDevis(d){
+  const sel = selectedDevis(d);
+  if(sel && sel.statut==="Accepté") return sel;
   const acc = d.devis.filter(x=>x.statut==="Accepté");
   return acc.length ? acc[acc.length-1] : null;
 }
@@ -2445,8 +2479,9 @@ function wzCreate(send){
   if(w.kind==="devis"){
     const numero = nextDevisId(d);
     const dvLike = wzDevisFromData();
-    const dv = {id:numero, numero, version:d.devis.length+1, statut:"Brouillon", lignes:dvLike.lignes, dateCreation:"12 sept.", dateEnvoi:null, objet:x.objet.trim(), validite:x.validite, paiement:dvLike.paiement, reserves:(x.reserves||"").trim()};
+    const dv = {id:numero, numero, version:d.devis.length+1, statut:"Brouillon", lignes:dvLike.lignes, dateCreation:"12 sept.", dateEnvoi:null, objet:x.objet.trim(), validite:x.validite, paiement:dvLike.paiement, reserves:(x.reserves||"").trim(), deriveDe:w.fromId||null};
     d.devis.push(dv);
+    selectDevis(d, dv.id);
     d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Devis "+numero+" créé ("+fmtEuros(devisTotals(dv).ttcCt)+" TTC)."});
     state.wizard = null;
     if(send) state.modal = {type:"send", id:d.id, kind:"devis", docId:dv.id, phase:"choose"};
@@ -4059,10 +4094,10 @@ function nextTaskId(d){ return "T"+(((d.taches||[]).reduce((m,t)=>Math.max(m, pa
 // bloc excluait les factures encore en brouillon et affichait 0 € alors que la carte du dessus
 // montrait déjà un montant facturé — deux sources différentes pour la même information.
 function dossierKpis(d){
-  const acc = wzAcceptedDevis(d);
-  const dv = acc || latestDevis(d);
-  const valeur = dv ? devisTotals(dv).ttcCt : 0;
-  const b = billingOf(d);
+  const accs = d.devis.filter(x=>x.statut==="Accepté");
+  const dv = accs.length ? accs[accs.length-1] : latestDevis(d);
+  const valeur = accs.length ? accs.reduce((s,v)=>s+devisTotals(v).ttcCt,0) : (dv ? devisTotals(dv).ttcCt : 0);
+  const b = billingAll(d);
   const facture = b ? b.invoiced : 0;
   const encaisse = b ? b.paid : 0;
   const reste = b ? b.due : 0;
@@ -4094,7 +4129,7 @@ function renderDossierInfo(d){
   const sendReport = d.diagnostic.rapportPret && hasPermission("quote.send");
   const docs = [];
   if(d.diagnostic.rapportPret) docs.push({kind:"report"});
-  (d.devis||[]).slice(-1).forEach(dv=>docs.push({kind:"devis", doc:dv}));
+  (d.devis||[]).forEach(dv=>docs.push({kind:"devis", doc:dv}));
   (d.factures||[]).forEach(f=>docs.push({kind:"facture", doc:f}));
   return `
   <div class="card crm-head">
@@ -4820,9 +4855,9 @@ function renderDossierCommercial(d){
   ${renderProcessCard(d)}
   <div class="card">
     <div class="card-header"><h3>Suivi de l’opportunité</h3>${badge(d.commercialStage, d.commercialStage==="Gagné"?"green":d.commercialStage==="Perdu"?"red":"blue")}</div>
-    <div class="form-field"><label>Étape commerciale${acceptedDevis(d)?" (pilotée automatiquement par les factures et paiements)":""}</label>
-      <select id="comStage" ${!hasPermission("opportunity.update")||acceptedDevis(d)?"disabled":""}>
-        ${(acceptedDevis(d)?PROCESS_STAGES:MANUAL_STAGES).map(o=>`<option ${d.commercialStage===o?"selected":""}>${o}</option>`).join("")}
+    <div class="form-field"><label>Étape commerciale${anyAcceptedDevis(d)?" (pilotée automatiquement par les factures et paiements)":""}</label>
+      <select id="comStage" ${!hasPermission("opportunity.update")||anyAcceptedDevis(d)?"disabled":""}>
+        ${(anyAcceptedDevis(d)?PROCESS_STAGES:MANUAL_STAGES).map(o=>`<option ${d.commercialStage===o?"selected":""}>${o}</option>`).join("")}
       </select>
     </div>
     <div class="form-field"><label>Montant estimé du devis (€)</label><input type="number" id="comMontant" value="${d.montant}" ${!hasPermission("opportunity.update")?"disabled":""}></div>
@@ -4910,7 +4945,18 @@ function renderDossierDevis(d){
     devisBlock = `
       <div class="card">
         <div class="card-header">
-          <h3>Devis ${esc(dv.numero)} <span style="color:var(--muted);font-weight:400">v${dv.version}</span></h3>
+          <h3>Devis du dossier <span style="color:var(--muted);font-weight:400">(${d.devis.length})</span></h3>
+          ${hasPermission("quote.create") ? `<button class="btn-primary btn-sm" data-action="wizard-devis" data-id="${d.id}" data-blank="1">+ Nouveau devis</button>` : ""}
+        </div>
+        <p class="form-help" style="margin:0 0 8px">Un client peut avoir plusieurs devis (travaux différents, variantes…). Touchez un devis pour l’afficher, le modifier, l’envoyer ou le marquer « Gagné ».</p>
+        ${d.devis.map(v=>`<div class="row-item devis-pick ${v.id===dv.id?"on":""}" data-action="devis-select" data-id="${d.id}" data-doc="${v.id}">
+          <div style="min-width:0"><div class="row-title">${esc(v.numero)}${v.deriveDe?` <span style="color:var(--muted);font-weight:400">v${v.version}</span>`:""}</div><div class="row-sub">${esc(v.objet||d.motif)} · ${fmtEuros(devisTotals(v).ttcCt)}</div></div>
+          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">${badge(v.statut, devisStatutCls(v.statut))}${v.id===dv.id?`<span class="devis-pick-on">Affiché</span>`:""}</div>
+        </div>`).join("")}
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h3>Devis ${esc(dv.numero)}${dv.deriveDe?` <span style="color:var(--muted);font-weight:400">v${dv.version}</span>`:""}</h3>
           ${badge(dv.statut, devisStatutCls(dv.statut))}
         </div>
         <div class="devis-table-wrap">
@@ -4947,28 +4993,23 @@ function renderDossierDevis(d){
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
           ${canEditDv?`<button class="btn-primary btn-sm" data-action="devis-save" data-id="${d.id}">Enregistrer</button>`:""}
           ${dv.statut==="Brouillon" && hasPermission("quote.update")?`<button class="btn-secondary btn-sm" data-action="devis-send" data-id="${d.id}">Marquer comme envoyé</button>`:""}
-          ${(dv.statut==="Envoyé"||dv.statut==="Brouillon") && hasPermission("quote.accept")?`<button class="btn-primary btn-sm" data-action="win-devis" data-id="${d.id}">✓ Gagné</button>`:""}${dv.statut==="Envoyé" && hasPermission("quote.update")?`<button class="btn-ghost btn-sm" data-action="devis-reject" data-id="${d.id}">Marquer refusé</button>`:""}
-          ${dv.statut!=="Brouillon"?`<button class="btn-ghost btn-sm" data-action="wizard-devis" data-id="${d.id}">+ Nouvelle version</button>`:""}
+          ${(dv.statut==="Envoyé"||dv.statut==="Brouillon") && hasPermission("quote.accept")?`<button class="btn-primary btn-sm" data-action="win-devis" data-id="${d.id}" data-doc="${dv.id}">✓ Gagné</button>`:""}${dv.statut==="Envoyé" && hasPermission("quote.update")?`<button class="btn-ghost btn-sm" data-action="devis-reject" data-id="${d.id}" data-doc="${dv.id}">Marquer refusé</button>`:""}
+          ${hasPermission("quote.create")?`<button class="btn-ghost btn-sm" data-action="wizard-devis" data-id="${d.id}" data-from="${dv.id}">Dupliquer ce devis</button>`:""}
           <button class="btn-ghost btn-sm" data-action="doc-pdf" data-id="${d.id}" data-kind="devis" data-doc="${dv.id}">Télécharger le PDF</button>
           ${hasPermission("quote.send")?`<button class="btn-secondary btn-sm" data-action="modal-send-doc" data-id="${d.id}" data-kind="devis" data-doc="${dv.id}">Envoyer au client</button>`:""}
           ${dv.statut==="Brouillon" && hasPermission("quote.create")?`<button class="btn-ghost btn-sm" data-action="ask-delete" data-what="devis" data-id="${d.id}" data-doc="${dv.id}">Supprimer</button>`:""}
         </div>
         <p class="form-help" style="margin-top:10px">${esc(paiementSummary(dv))} ${canEditDv?`<button class="link-btn" data-action="ech-edit-open" data-id="${d.id}">Modifier</button>`:""}</p>
         ${dv.dateEnvoi?`<p class="form-help" style="margin-top:8px">Envoyé le ${esc(dv.dateEnvoi)}</p>`:""}
-      </div>
-      ${d.devis.length>1?`
-      <div class="card">
-        <h3 style="margin:0 0 10px;font-size:14.5px">Historique des versions</h3>
-        ${d.devis.slice(0,-1).reverse().map(v=>`<div class="row-item"><div><div class="row-title">${esc(v.numero)} · v${v.version}</div><div class="row-sub">${fmtEuros(devisTotals(v).ttcCt)}</div></div><div style="display:flex;align-items:center;gap:8px">${badge(v.statut, devisStatutCls(v.statut))}<button class="btn-ghost btn-sm" data-action="doc-pdf" data-id="${d.id}" data-kind="devis" data-doc="${v.id}">PDF</button></div></div>`).join("")}
-      </div>`:""}`;
+      </div>`;
   }
 
   const facturesBlock = `
     <div class="card">
       <div class="card-header"><h3>Factures</h3>
-        ${dv && dv.statut==="Accepté" && hasPermission("invoice.create") ? `<button class="btn-secondary btn-sm" data-action="wizard-facture" data-id="${d.id}">+ Nouvelle facture</button>` : ""}
+        ${anyAcceptedDevis(d) && hasPermission("invoice.create") ? `<button class="btn-secondary btn-sm" data-action="wizard-facture" data-id="${d.id}">+ Nouvelle facture</button>` : ""}
       </div>
-      ${!d.factures.length ? `<div class="empty-note">${dv && dv.statut==="Accepté" ? "Aucune facture pour l’instant." : "Le devis doit être accepté avant de pouvoir facturer."}</div>` : d.factures.map(f=>renderFactureCard(d,f)).join("")}
+      ${!d.factures.length ? `<div class="empty-note">${anyAcceptedDevis(d) ? "Aucune facture pour l’instant." : "Un devis doit être accepté avant de pouvoir facturer."}</div>` : d.factures.map(f=>renderFactureCard(d,f)).join("")}
     </div>`;
 
   return (canView("devis")||canView("factures") ? renderProcessCard(d) : "") + (canView("devis") ? devisBlock : "") + (canView("factures") ? facturesBlock : "");
@@ -5421,7 +5462,7 @@ function renderCommercialKanban(){
   const actives = list.filter(d=>!["Perdu","Gagné","Impayé","Payé"].includes(d.commercialStage));
   const devisEnvoyes = list.filter(d=>d.commercialStage==="Devis envoyé").length;
   const montantGagne = list.filter(d=>["Gagné","Impayé","Payé"].includes(d.commercialStage)).reduce((s,d)=>s+d.montant,0);
-  const aEncaisser = list.reduce((s,d)=>{ const b = billingOf(d); return s + (b ? b.due : 0); }, 0);
+  const aEncaisser = list.reduce((s,d)=>{ const b = billingAll(d); return s + (b ? b.due : 0); }, 0);
   const relancesRetard = list.filter(d=>d.prochaineRelance).length;
 
   return `
@@ -6182,7 +6223,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
       render();
       return;
     }
-    if(action==="devis-accept" || action==="win-devis"){ askWin(byId(t.dataset.id)); return; }
+    if(action==="devis-accept" || action==="win-devis"){ saveDevisLinesFromDOM(); askWin(byId(t.dataset.id), t.dataset.doc||null); return; }
     if(action==="win-invoice"){
       const d = byId(t.dataset.id); const dv = acceptedDevis(d);
       if(dv){ const f = ensureInvoices(d, dv); syncProcess(d); showToast(f ? factureLabel(d,f)+" créée." : "La facture existe déjà."); }
@@ -6213,9 +6254,10 @@ document.addEventListener("DOMContentLoaded", ()=>{
     }
     if(action==="devis-reject"){
       const d = byId(t.dataset.id);
-      const dv = latestDevis(d);
+      const dv = (t.dataset.doc && findDevis(d, t.dataset.doc)) || latestDevis(d);
       dv.statut = "Refusé";
-      d.commercialStage = "Perdu";
+      if(!d.devis.some(v=>v.statut!=="Refusé")) d.commercialStage = "Perdu";
+      else if(anyAcceptedDevis(d)) syncProcess(d, true);
       d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Devis "+dv.numero+" refusé par le client."});
       showToast("Devis marqué comme refusé.");
       render();
@@ -6356,7 +6398,8 @@ document.addEventListener("DOMContentLoaded", ()=>{
       render(); return;
     }
     if(action==="form-save"){ saveForm(); return; }
-    if(action==="wizard-devis"){ wzNew("devis", t.dataset.id||null); return; }
+    if(action==="wizard-devis"){ saveDevisLinesFromDOM(); wzNew("devis", t.dataset.id||null, t.dataset.from||null); return; }
+    if(action==="devis-select"){ saveDevisLinesFromDOM(); const dd = byId(t.dataset.id); selectDevis(dd, t.dataset.doc); render(); return; }
     if(action==="wizard-facture"){ wzNew("facture", t.dataset.id||null); return; }
     if(action==="wz-next"){ wzNext(); return; }
     if(action==="wz-prev"){ wzFlush(); state.wizard.step = Math.max(1, state.wizard.step-1); render(); return; }
@@ -6614,4 +6657,5 @@ document.addEventListener("DOMContentLoaded", ()=>{
     }
   });
 });
+
 

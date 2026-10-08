@@ -243,6 +243,10 @@ tr:last-child td{border-bottom:none}
 .wz-line-row textarea{resize:vertical;min-height:52px;line-height:1.35}
 .dv-desc{display:flex;flex-direction:column;gap:6px;min-width:220px}
 .dv-desc textarea{width:100%;resize:vertical;min-height:52px;line-height:1.35;font-family:inherit}
+.devis-pick{cursor:pointer;border-radius:12px;border:1px solid transparent;padding-left:10px;padding-right:10px}
+.devis-pick:hover{background:rgba(255,255,255,.03)}
+.devis-pick.on{border-color:var(--gold-line);background:rgba(201,165,59,.07)}
+.devis-pick-on{font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.06em}
 .dv-reserves{width:100%;min-height:70px;resize:vertical;font-family:inherit;line-height:1.4}
 .wz-line-total{font-weight:600;text-align:right;font-size:13px;white-space:nowrap}
 .wz-addbar{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 12px}
@@ -783,10 +787,11 @@ a.btn-secondary{text-decoration:none;display:inline-flex;align-items:center}
   .devis-table-wrap tr{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px}
   .devis-table-wrap td{padding:5px 0;border:none;display:flex;align-items:center;justify-content:space-between;gap:10px}
   .devis-table-wrap td:before{content:attr(data-label);font-size:11px;color:var(--muted-dim);flex:none}
-  .devis-table-wrap td[data-label="Désignation"]{display:block}
-  .devis-table-wrap td[data-label="Désignation"]:before{display:block;margin-bottom:4px}
+  .devis-table-wrap td[data-label="Désignation"],.devis-table-wrap td[data-label="Titre et désignation"]{display:block}
+  .devis-table-wrap td[data-label="Désignation"]:before,.devis-table-wrap td[data-label="Titre et désignation"]:before{display:block;margin-bottom:4px}
   .devis-table-wrap td input{max-width:60%;text-align:right}
-  .devis-table-wrap td[data-label="Désignation"] input{max-width:100%;text-align:left}
+  .devis-table-wrap td[data-label="Désignation"] input,.devis-table-wrap td[data-label="Titre et désignation"] input,.devis-table-wrap td[data-label="Titre et désignation"] textarea{max-width:100%;text-align:left}
+  .dv-desc{min-width:0;width:100%}
   .proc-steps{grid-template-columns:repeat(2,1fr)}
   .modal{max-width:100vw;width:100%;border-radius:18px;max-height:88dvh;margin:0}
   .modal-overlay{align-items:center}
