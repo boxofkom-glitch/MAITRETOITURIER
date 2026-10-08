@@ -1,4 +1,4 @@
-﻿/* ToitPilot / Maître Toiturier — CRM demo clone. Static, in-memory, no backend. */
+/* ToitPilot / Maître Toiturier — CRM demo clone. Static, in-memory, no backend. */
 
 // Points de contrôle du diagnostic, tels que définis par le gérant (le 12e, « Synthèse, niveau d’urgence
 // et préconisations », est l’étape finale de synthèse du diagnostic).
@@ -636,7 +636,10 @@ const MODULES = [
   {id:"client-preview", section:"client-preview", label:"Aperçu espace client", readOnly:true}
 ];
 const CONFIG_ROLES = ["admin","tech","sales"];
-const SECTION_ORDER = ["overview","dossiers","agenda","entretiens","diagnostics","commercial","devis","factures","prestations","materiel","parrainages","connexions","client-preview"];
+const SECTION_ORDER = ["overview","dossiers","agenda","commercial","devis","factures","diagnostics","entretiens","prestations","materiel","parrainages","connexions","client-preview"];
+// Menu simplifié : l’essentiel toujours visible, le reste sous « Plus d’outils ».
+const NAV_PRIMARY = ["overview","dossiers","agenda","commercial","devis","factures"];
+const NAV_BOTTOM = ["overview","dossiers","agenda","devis"];
 
 const DEFAULT_ACCESS = {
   admin:{overview:1, dossiers:2, agenda:2, entretiens:2, diagnostics:2, commercial:2, devis:2, factures:2, prestations:2, materiel:2, parrainages:2, connexions:2, "client-preview":1},
@@ -826,7 +829,7 @@ async function doSignup(){
     state.signupMsg = "Un accès existe déjà pour cette adresse e-mail."; render(); return;
   }
   SETTINGS.requests = SETTINGS.requests.filter(r=>r.email.toLowerCase()!==email);
-  SETTINGS.requests.push({id:"R"+Date.now(), nom, email, telephone:tel, poste, pwdHash:await hashPwd(pwd), date:"12 sept., "+new Date().toTimeString().slice(0,5), statut:"en attente"});
+  SETTINGS.requests.push({id:"R"+Date.now(), nom, email, telephone:tel, poste, pwdHash:await hashPwd(pwd), date:nowStamp(), statut:"en attente"});
   saveSettings();
   state.signupMsg = "";
   state.appStage = "signup-done";
@@ -838,7 +841,7 @@ const MONTH_SHORT = ["janv.","févr.","mars","avr.","mai","juin","juil.","août"
 const DOW_LONG = ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"];
 const DOW_SHORT = ["Lun.","Mar.","Mer.","Jeu.","Ven.","Sam.","Dim."];
 const DOW_MIN = ["L","M","M","J","V","S","D"];
-const TODAY_REF = new Date(2026,8,12);
+const TODAY_REF = (()=>{ const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); })();
 
 function addDays(date,n){ const d=new Date(date); d.setDate(d.getDate()+n); return d; }
 function addMonths(date,n){ const d=new Date(date); const day=d.getDate(); d.setDate(1); d.setMonth(d.getMonth()+n); const last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate(); d.setDate(Math.min(day,last)); return d; }
@@ -855,10 +858,16 @@ function parseShortFrDate(str){
   const day = parseInt(parts[0],10);
   const monthIdx = MONTH_SHORT.indexOf(parts[1]);
   if(isNaN(day) || monthIdx<0) return null;
-  return new Date(2026, monthIdx, day);
+  // Les dates courtes (« 12 sept. ») n'ont pas d'année : on prend l'année en cours, ou la suivante si la date serait
+  // plus de 6 mois dans le passé (ex. « 15 janv. » saisi en décembre).
+  let dt = new Date(TODAY_REF.getFullYear(), monthIdx, day);
+  if(dt < addDays(TODAY_REF, -183)) dt = new Date(TODAY_REF.getFullYear()+1, monthIdx, day);
+  return dt;
 }
 function fmtFullDate(d){ return `${DOW_LONG[(d.getDay()+6)%7]} ${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`; }
 function fmtDayMonth(d){ return `${d.getDate()} ${MONTH_SHORT[d.getMonth()]}`; }
+function todayShort(){ return fmtDayMonth(new Date()); }
+function nowStamp(){ return todayShort()+", "+new Date().toTimeString().slice(0,5); }
 function fmtMonthYear(d){ return `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`; }
 
 let DOSSIERS = seedDossiers();
@@ -1272,12 +1281,12 @@ function createFacture(d, dv, stepIdx, o){
   const f = {
     id:numero, numero, type: step.label, stepIdx, stepPct: step.pct, isFirst, isLast, devisId:dv.id,
     libelle: step.label,
-    montantTtcCt: montant, statut:"Brouillon", date:"12 sept.",
+    montantTtcCt: montant, statut:"Brouillon", date:todayShort(),
     echeance: o.echeance || fmtDayMonth(addDays(TODAY_REF, 15)), echeances:[{date:o.echeance || fmtDayMonth(addDays(TODAY_REF, 15)), montantCt:montant}],
     mode: o.mode || p.mode, paiements:[]
   };
   d.factures.push(f);
-  d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Facture « "+step.label+" » créée ("+fmtEuros(montant)+")."});
+  d.historique.push({date:nowStamp(), auteur:authorLabel(), texte:"Facture « "+step.label+" » créée ("+fmtEuros(montant)+")."});
   return f;
 }
 
@@ -1330,7 +1339,7 @@ function syncProcess(d, quiet){
   });
   const stage = processStageOf(b);
   if(d.commercialStage!==stage){
-    if(!quiet && d.historique) d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:"Suivi automatique", texte:"Étape commerciale : "+d.commercialStage+" → "+stage+"."});
+    if(!quiet && d.historique) d.historique.push({date:nowStamp(), auteur:"Suivi automatique", texte:"Étape commerciale : "+d.commercialStage+" → "+stage+"."});
     d.commercialStage = stage;
   }
 }
@@ -1380,9 +1389,9 @@ function winDevis(d, devisId){
   const dv = winTarget(d, devisId);
   if(!dv) return;
   selectDevis(d, dv.id);
-  if(dv.statut==="Brouillon"){ dv.statut = "Envoyé"; dv.dateEnvoi = dv.dateEnvoi || "12 sept."; }
+  if(dv.statut==="Brouillon"){ dv.statut = "Envoyé"; dv.dateEnvoi = dv.dateEnvoi || todayShort(); }
   dv.statut = "Accepté";
-  dv.dateAcceptation = "12 sept.";
+  dv.dateAcceptation = todayShort();
   d.montant = Math.round(devisTotals(dv).ttcCt/100);
   stampHist(d, "Devis "+dv.numero+" gagné (accepté par le client).");
   if(!d.chantier){ d.chantier = freshChantier(); stampHist(d, "Chantier préparé automatiquement."); }
@@ -1412,7 +1421,7 @@ function revertDevis(d){
 function recordPayment(d, f, montantCt, mode, date, virementRecu){
   const pid = f.id+"-P"+((f.paiements||[]).length+1);
   f.paiements = f.paiements || [];
-  f.paiements.push({id:pid, montantCt, mode, date:date||"12 sept.", virementStatut: mode==="Virement" ? (virementRecu ? "Confirmé" : "Annoncé") : null});
+  f.paiements.push({id:pid, montantCt, mode, date:date||todayShort(), virementStatut: mode==="Virement" ? (virementRecu ? "Confirmé" : "Annoncé") : null});
   f.statut = factureStatutFromPayments(f);
   stampHist(d, "Paiement de "+fmtEuros(montantCt)+" ("+mode+") enregistré sur "+f.numero+".");
   syncProcess(d);
@@ -1503,7 +1512,7 @@ function modalPay(m){
     ${ech.length>1 ? `<div style="margin-bottom:12px">${ech.map((e,i)=>`<div class="row-item"><div class="row-sub">Échéance ${i+1}/${ech.length} · ${esc(e.date||"")}</div><div>${fmtEuros(e.montantCt)} ${e.reglee?badge("Réglée","green"):badge("À venir","gray")}</div></div>`).join("")}</div>` : ""}
     <div class="form-field"><label>Montant reçu (€)</label><input type="number" min="0" step="0.01" id="payMontant" value="${(sug/100).toFixed(2)}"></div>
     <div class="form-field"><label>Mode de paiement</label><select id="payMode">${PAY_MODES.map(x=>`<option ${(f.mode||"")===x?"selected":""}>${esc(x)}</option>`).join("")}</select></div>
-    <div class="form-field"><label>Date de réception</label><input type="text" id="payDate" value="12 sept."></div>
+    <div class="form-field"><label>Date de réception</label><input type="text" id="payDate" value="${todayShort()}"></div>
     <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-bottom:14px"><input type="checkbox" id="payRecu" checked> Paiement bien reçu (pour un virement : reçu sur le compte)</label>
     <div class="modal-actions"><button class="btn-primary" data-action="pay-save" data-id="${d.id}" data-fid="${f.id}">Enregistrer</button><button class="btn-secondary" data-action="modal-close">Annuler</button></div>`);
 }
@@ -1740,7 +1749,7 @@ function renderDevisDoc(d, dv){
     topTitle: "Devis",
     eyebrow: "Proposition commerciale",
     topNum: "N° "+dv.numero+(dv.deriveDe?" · v"+dv.version:""),
-    dateLabel: esc(dv.dateEnvoi||dv.dateCreation||"12 sept."),
+    dateLabel: esc(dv.dateEnvoi||dv.dateCreation||todayShort()),
     validLabel: valid+" jours",
     objet: dv.objet||d.motif,
     rows: docRowsFromDevis(dv),
@@ -1791,7 +1800,7 @@ function renderFactureDoc(d, f){
     topTitle: "Facture",
     eyebrow: "Document comptable",
     topNum: "N° "+f.numero,
-    dateLabel: esc(f.date||"12 sept."),
+    dateLabel: esc(f.date||todayShort()),
     objet: (dv&&dv.objet)||d.motif,
     rows,
     bannerLabel: paid>0 ? "Règlements et échéance" : "Règlement",
@@ -2021,7 +2030,7 @@ function addSampleDocs(list){
 
 // ---------- Suppressions (toujours confirmées) ----------
 function stampHist(d, texte){
-  d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte});
+  d.historique.push({date:nowStamp(), auteur:authorLabel(), texte});
 }
 
 function askDelete(ds){
@@ -2479,10 +2488,10 @@ function wzCreate(send){
   if(w.kind==="devis"){
     const numero = nextDevisId(d);
     const dvLike = wzDevisFromData();
-    const dv = {id:numero, numero, version:d.devis.length+1, statut:"Brouillon", lignes:dvLike.lignes, dateCreation:"12 sept.", dateEnvoi:null, objet:x.objet.trim(), validite:x.validite, paiement:dvLike.paiement, reserves:(x.reserves||"").trim(), deriveDe:w.fromId||null};
+    const dv = {id:numero, numero, version:d.devis.length+1, statut:"Brouillon", lignes:dvLike.lignes, dateCreation:todayShort(), dateEnvoi:null, objet:x.objet.trim(), validite:x.validite, paiement:dvLike.paiement, reserves:(x.reserves||"").trim(), deriveDe:w.fromId||null};
     d.devis.push(dv);
     selectDevis(d, dv.id);
-    d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Devis "+numero+" créé ("+fmtEuros(devisTotals(dv).ttcCt)+" TTC)."});
+    d.historique.push({date:nowStamp(), auteur:authorLabel(), texte:"Devis "+numero+" créé ("+fmtEuros(devisTotals(dv).ttcCt)+" TTC)."});
     state.wizard = null;
     if(send) state.modal = {type:"send", id:d.id, kind:"devis", docId:dv.id, phase:"choose"};
     else { state.modal = null; state.section="dossiers"; state.dossierId=d.id; state.dossierTab="devis"; }
@@ -2527,12 +2536,12 @@ async function prepareSend(d, channel){
 
 function finishSend(d, channel, how){
   const m = state.modal || {};
-  d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:docHistoryLabel(m.kind||"report", m.docId)+" envoyé au client ("+(channel==="whatsapp"?"WhatsApp":"e-mail")+", "+how+")."});
+  d.historique.push({date:nowStamp(), auteur:authorLabel(), texte:docHistoryLabel(m.kind||"report", m.docId)+" envoyé au client ("+(channel==="whatsapp"?"WhatsApp":"e-mail")+", "+how+")."});
   const sentTarget = m.kind==="devis" ? findDevis(d, m.docId) : (m.kind==="facture" ? findFacture(d, m.docId) : d.diagnostic);
-  if(sentTarget){ sentTarget.sent = sentTarget.sent || []; sentTarget.sent.push({date:"12 sept.", canal: channel==="whatsapp" ? "WhatsApp" : "e-mail"}); }
+  if(sentTarget){ sentTarget.sent = sentTarget.sent || []; sentTarget.sent.push({date:todayShort(), canal: channel==="whatsapp" ? "WhatsApp" : "e-mail"}); }
   if(m.kind==="devis" && m.docId){
     const dv = findDevis(d, m.docId);
-    if(dv && dv.statut==="Brouillon"){ dv.statut = "Envoyé"; dv.dateEnvoi = "12 sept."; }
+    if(dv && dv.statut==="Brouillon"){ dv.statut = "Envoyé"; dv.dateEnvoi = todayShort(); }
   }
   if(m.kind==="facture" && m.docId){
     const f = findFacture(d, m.docId);
@@ -3100,7 +3109,7 @@ function blankDossier(f){
     id:nid, client:f.nom||"Nouveau client", ville:f.ville||"—", motif:f.motif||"Nouvelle demande", priorite:"Normale", statut:"Nouvelle",
     technicien:null, commercial:null, creePar:{id:state.userId, nom:currentName(), role:state.role},
     telephone:f.tel||"", email:f.email||"", adresse:f.adresse||"", typeBatiment:f.type||"Maison individuelle", infosGenerales:"",
-    notes:[], historique:[{date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Client importé (fichier CSV)."}],
+    notes:[], historique:[{date:nowStamp(), auteur:authorLabel(), texte:"Client importé (fichier CSV)."}],
     commercialStage:"À contacter", montant:0, prochaineRelance:null, compteRendu:"", visiteDate:null, visiteHeure:null,
     diagnostic:freshDiagnostic(), devis:[], factures:[], chantier:null, taches:[]
   };
@@ -3670,7 +3679,7 @@ async function acceptRequest(rid){
   const r = SETTINGS.requests.find(x=>x.id===rid);
   const role = document.getElementById("reqRole-"+rid).value;
   const id = "E"+(SETTINGS.employees.reduce((m,e)=>Math.max(m, parseInt(e.id.slice(1),10)||0),0)+1);
-  SETTINGS.employees.push({id, nom:r.nom, email:r.email, telephone:r.telephone, poste:r.poste, role, statut:"actif", ajoute:"12 sept.", pwdHash:r.pwdHash});
+  SETTINGS.employees.push({id, nom:r.nom, email:r.email, telephone:r.telephone, poste:r.poste, role, statut:"actif", ajoute:todayShort(), pwdHash:r.pwdHash});
   r.statut = "accepté";
   (SETTINGS.invitations||[]).forEach(iv=>{ if(iv.email.toLowerCase()===r.email.toLowerCase()) iv.statut = "acceptée"; });
   saveSettings();
@@ -3692,7 +3701,7 @@ function buildApp(){
       ${buildSidebar()}
       <div class="main">
         ${buildTopbar()}
-        <div class="disclaimer">${SRV.on ? "Espace de travail · données enregistrées sur le serveur, partagées avec votre équipe" : "Démo interactive · Données fictives, modifications conservées jusqu’au rechargement · Rôles simulés · Aucun e-mail envoyé"}</div>
+        ${SRV.on ? "" : `<div class="disclaimer">Démo interactive · Données fictives, modifications conservées jusqu’au rechargement · Rôles simulés · Aucun e-mail envoyé</div>`}
         <div class="content">${renderClientPortal("Marie Laurent")}</div>
       </div>
       ${state.modal ? buildModal() : ""}
@@ -3703,7 +3712,7 @@ function buildApp(){
     ${buildSidebar()}
     <div class="main">
       ${buildTopbar()}
-      <div class="disclaimer">${SRV.on ? "Espace de travail · données enregistrées sur le serveur, partagées avec votre équipe" : "Démo interactive · Données fictives, modifications conservées jusqu’au rechargement · Rôles simulés · Aucun e-mail envoyé"}</div>
+      ${SRV.on ? "" : `<div class="disclaimer">Démo interactive · Données fictives, modifications conservées jusqu’au rechargement · Rôles simulés · Aucun e-mail envoyé</div>`}
       <div class="content">${buildSection()}</div>
     </div>
     ${buildBottomNav()}
@@ -3734,11 +3743,12 @@ function navIcon(key){ return `<svg class="ni" viewBox="0 0 24 24" fill="none" s
 const SHORT_LABELS = {overview:"Accueil", dossiers:"Clients", agenda:"Agenda", entretiens:"Entretiens", diagnostics:"Diagnostics", commercial:"Suivi", devis:"Devis", factures:"Factures", prestations:"Tarifs", materiel:"Matériel", parrainages:"Parrainage", connexions:"Liens", "client-preview":"Aperçu", client:"Mon espace", parametres:"Réglages"};
 function buildBottomNav(){
   const nav = navItems();
-  const main = nav.slice(0, nav.length>5 ? 4 : nav.length);
-  const rest = nav.length>5;
+  let main = nav.filter(n=>NAV_BOTTOM.includes(n[0]));
+  if(!main.length) main = nav.slice(0, 4);
+  const rest = nav.length > main.length;
   return `<nav class="bottom-nav" aria-label="Navigation principale">
-    ${main.map(([key,label])=>`<button class="bn-item ${state.section===key?"active":""}" data-action="nav" data-section="${key}">${navIcon(key)}<span>${esc(SHORT_LABELS[key]||label)}</span>${key==="parametres" && pendingRequests().length ? `<i class="bn-dot"></i>`:""}</button>`).join("")}
-    ${rest ? `<button class="bn-item ${nav.slice(4).some(n=>n[0]===state.section)?"active":""}" data-action="toggle-sidebar">${navIcon("more")}<span>Plus</span></button>` : ""}
+    ${main.map(([key,label])=>`<button class="bn-item ${state.section===key?"active":""}" data-action="nav" data-section="${key}">${navIcon(key)}<span>${esc(SHORT_LABELS[key]||label)}</span></button>`).join("")}
+    ${rest ? `<button class="bn-item ${!main.some(n=>n[0]===state.section)?"active":""}" data-action="toggle-sidebar">${navIcon("more")}<span>Plus</span>${pendingRequests().length ? `<i class="bn-dot"></i>`:""}</button>` : ""}
   </nav>`;
 }
 
@@ -3758,18 +3768,27 @@ function buildSidebar(){
       </div>
     </div>
     <nav class="sidebar-nav">
-      ${nav.map(([key,label])=>`<button class="nav-btn ${state.section===key?"active":""}" data-action="nav" data-section="${key}">${navIcon(key)}${esc(label)}${key==="parametres" && pendingRequests().length ? `<span class="nav-badge">${pendingRequests().length}</span>` : ""}</button>`).join("")}
+      ${(()=>{
+        const btn = ([key,label])=>`<button class="nav-btn ${state.section===key?"active":""}" data-action="nav" data-section="${key}">${navIcon(key)}${esc(label)}${key==="parametres" && pendingRequests().length ? `<span class="nav-badge">${pendingRequests().length}</span>` : ""}</button>`;
+        const prim = NAV_PRIMARY.map(k=>nav.find(n=>n[0]===k)).filter(Boolean);
+        const sec = nav.filter(n=>!NAV_PRIMARY.includes(n[0]));
+        if(state.role==="client" || !sec.length) return nav.map(btn).join("");
+        const open = state.navMore || sec.some(n=>n[0]===state.section);
+        return prim.map(btn).join("")
+          + `<button class="nav-btn nav-more" data-action="toggle-nav-more">${navIcon("more")}Plus d’outils<span class="nav-caret">${open?"▴":"▾"}</span></button>`
+          + (open ? `<div class="nav-sub">${sec.map(btn).join("")}</div>` : "");
+      })()}
     </nav>
     <div class="sidebar-footer">
-      <div>Maître Toiturier</div>
-      <div>Démonstration métier</div>
+      <div>${esc(SETTINGS.company.nom||"Maître Toiturier")}</div>
+      <div>${esc(currentName())}${ROLES[state.role] ? " · "+esc(ROLES[state.role].label) : ""}</div>
       ${SRV.on ? "" : `<button class="reset-btn" data-action="reset-demo">Réinitialiser la démo</button>`}
     </div>
   </div>`;
 }
 
 function buildTopbar(){
-  const dateStr = "samedi 12 septembre 2026";
+  const dateStr = fmtFullDate(TODAY_REF);
   const roleOptions = SETTINGS.employees.filter(e=>e.statut==="actif").map(e=>`<option value="${e.id}" ${state.userId===e.id?"selected":""}>${esc(e.nom)} · ${esc(ROLES[e.role].label)}</option>`).join("") + `<option value="CLIENT" ${state.userId==="CLIENT"?"selected":""}>Marie Laurent · Client</option>`;
   return `
   <div class="topbar">
@@ -3781,6 +3800,7 @@ function buildTopbar(){
       </div>
     </div>
     <div class="topbar-right">
+      ${state.role!=="client" && canView("dossiers") ? `<input class="gsearch" id="gsearch" type="search" placeholder="Chercher un client, un téléphone…  ⏎" autocomplete="off">` : ""}
       ${SRV.on ? `<button class="btn-ghost btn-sm" data-action="logout">Déconnexion</button>` : `<div class="demo-tag">Vue démo</div>
       <select class="role-select" id="profileSelect">${roleOptions}</select>`}
       <div class="avatar">${esc(initials(currentName()))}</div>
@@ -3806,7 +3826,7 @@ function buildSection(){
     case "parrainages": return renderParrainages();
     case "parametres": return isManager() ? renderParametres() : renderOverview();
     case "connexions": return renderConnexions();
-    case "client-preview": return renderClientPortal("Marie Laurent");
+    case "client-preview": return renderClientPortal(null);
     default: return renderOverview();
   }
 }
@@ -3839,11 +3859,11 @@ function buildMaJournee(list){
     .forEach(d=>urgent.push({d, tag:"Demande "+d.priorite.toLowerCase()}));
   list.filter(d=>d.prochaineRelance).forEach(d=>urgent.push({d, tag:"Relance en retard"}));
 
-  const today = list.filter(d=>d.visiteDate && parseInt(d.visiteDate,10)===12)
+  const today = list.filter(d=>{ const v = parseShortFrDate(d.visiteDate); return v && sameDay(v, TODAY_REF); })
     .map(d=>({d, tag:(d.visiteHeure||"")+" · Visite"}));
 
-  const upcoming = list.filter(d=>d.visiteDate && parseInt(d.visiteDate,10)>12)
-    .sort((a,b)=>parseInt(a.visiteDate,10)-parseInt(b.visiteDate,10))
+  const upcoming = list.filter(d=>{ const v = parseShortFrDate(d.visiteDate); return v && v > TODAY_REF; })
+    .sort((a,b)=>parseShortFrDate(a.visiteDate)-parseShortFrDate(b.visiteDate))
     .map(d=>({d, tag:d.visiteDate+" · Visite"}));
   list.forEach(d=>(d.taches||[]).filter(t=>!t.done).forEach(t=>{
     const dt = parseShortFrDate(t.echeance);
@@ -3865,87 +3885,93 @@ function buildMaJournee(list){
   </div>`;
 }
 
+// Accueil = « Aujourd’hui » : ce qu’il y a à faire maintenant, par ordre d’importance. Chaque bloc vide disparaît.
+function todayFirstName(){ return (currentName()||"").split(" ")[0] || ""; }
+function renderTodayRow(d, sub, rightHtml){
+  return `<div class="row-item">
+    <div class="row-left"><div class="row-avatar">${initials(d.client)}</div><div style="min-width:0"><div class="row-title">${esc(d.client)}</div><div class="row-sub">${sub}</div></div></div>
+    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">${rightHtml}</div>
+  </div>`;
+}
 function renderOverview(){
-  const list = myDossiers();
-  const nouvelles = list.filter(d=>d.statut==="Nouvelle");
-  const planifiees = list.filter(d=>d.statut==="Planifié");
-  const rapports = list.filter(d=>d.statut==="Rapport prêt");
-  const montant = list.filter(d=>d.commercialStage==="Devis envoyé").reduce((s,d)=>s+d.montant,0);
-  const relances = list.filter(d=>d.prochaineRelance);
-  const prochainesVisites = list.filter(d=>d.visiteDate && parseInt(d.visiteDate,10)>=12).sort((a,b)=>parseInt(a.visiteDate,10)-parseInt(b.visiteDate,10));
-  const diagPretCount = list.filter(d=>d.diagnostic.rapportPret).length;
-  const partages = list.filter(d=>d.diagnostic.rapportPartage).length;
+  const all = visibleDossiers();
+  const mine = myDossiers();
+  const canQuote = hasPermission("quote.create");
 
-  const titles = {
-    admin:["Le contrôle, à chaque étape.","Votre journée : ce qui est urgent, ce qui est prévu aujourd’hui, ce qui arrive."],
-    tech:["Votre journée sur le terrain.","Votre journée : ce qui est urgent, ce qui est prévu aujourd’hui, ce qui arrive."],
-    sales:["Vos prochaines affaires.","Votre journée : ce qui est urgent, ce qui est prévu aujourd’hui, ce qui arrive."]
-  };
-  const [h1,sub] = titles[state.role] || titles.admin;
-  const traiterTitle = state.role==="tech" ? "Mes dossiers à diagnostiquer" : "Demandes à traiter";
-  const traiterList = state.role==="tech" ? list.filter(d=>d.statut!=="Rapport prêt") : nouvelles;
+  // 1) Demandes à traiter (nouvelles) — urgentes d'abord
+  const prioRank = p=> p==="Infiltration signalée" ? 0 : p==="Urgente" ? 1 : 2;
+  const nouvelles = mine.filter(d=>d.statut==="Nouvelle").sort((a,b)=>prioRank(a.priorite)-prioRank(b.priorite));
+  // 2) Devis envoyés, en attente de réponse
+  const devisAttente = [];
+  all.forEach(d=>(d.devis||[]).filter(v=>v.statut==="Envoyé").forEach(v=>devisAttente.push({d, v})));
+  // 3) À encaisser
+  const aEncaisser = [];
+  all.forEach(d=>{ const b = billingAll(d); if(b && b.due>1){ const open = b.fs.find(f=>f.montantTtcCt-facturePaidCt(f)>1); aEncaisser.push({d, b, open}); } });
+  // 4) Visites (aujourd'hui + à venir)
+  const visites = mine.filter(d=>{ const v = parseShortFrDate(d.visiteDate); return v && v >= TODAY_REF; })
+    .sort((a,b)=>parseShortFrDate(a.visiteDate)-parseShortFrDate(b.visiteDate));
+  // 5) Relances et tâches en retard
+  const relances = mine.filter(d=>d.prochaineRelance);
+  const taches = [];
+  mine.forEach(d=>(d.taches||[]).filter(t=>!t.done).forEach(t=>{ const dt = parseShortFrDate(t.echeance); if(dt && dt<=TODAY_REF) taches.push({d,t}); }));
 
+  const totDevis = devisAttente.reduce((s,x)=>s+devisTotals(x.v).ttcCt,0);
+  const totDue = aEncaisser.reduce((s,x)=>s+x.b.due,0);
+
+  const sectionCard = (titre, count, body, more)=>`<div class="card today-card">
+    <div class="card-header"><h3>${titre} <span class="today-count">${count}</span></h3>${more||""}</div>${body}</div>`;
+  const blocks = [];
+
+  if(nouvelles.length) blocks.push(sectionCard("Demandes à traiter", nouvelles.length, nouvelles.slice(0,6).map(d=>renderTodayRow(d,
+      `${esc(d.motif)} · ${esc(d.ville)}`,
+      `${badge(d.priorite, priorityBadgeClass(d.priorite))}<button class="btn-primary btn-sm" data-action="open-dossier" data-id="${d.id}">Ouvrir</button>`)).join(""),
+      nouvelles.length>6 ? `<button class="link-btn" data-action="nav" data-section="dossiers">Tout voir</button>` : ""));
+
+  if(devisAttente.length) blocks.push(sectionCard("Devis à relancer", devisAttente.length, devisAttente.slice(0,6).map(({d,v})=>{
+      const ph = (d.telephone||"").replace(/\D/g,"").replace(/^0/,"33");
+      return renderTodayRow(d, `${esc(v.numero)} · ${esc(v.objet||d.motif)} · <b>${fmtEuros(devisTotals(v).ttcCt)}</b>`,
+      `${ph?`<a class="btn-secondary btn-sm" href="tel:${(d.telephone||"").replace(/\D/g,"")}">Appeler</a>`:""}<button class="btn-primary btn-sm" data-action="open-dossier" data-id="${d.id}" data-tab="devis">Voir le devis</button>`);
+    }).join(""), `<span class="today-sum">${fmtEuros(totDevis)}</span>`));
+
+  if(aEncaisser.length) blocks.push(sectionCard("À encaisser", aEncaisser.length, aEncaisser.slice(0,6).map(({d,b,open})=>renderTodayRow(d,
+      `Reste dû <b>${fmtEuros(b.due)}</b>${open?` · ${esc(open.type||"")}`:""}`,
+      hasPermission("payment.register") && open
+        ? `<button class="btn-primary btn-sm" data-action="pay-open" data-id="${d.id}" data-fid="${open.id}">Encaisser</button>`
+        : `<button class="btn-secondary btn-sm" data-action="open-dossier" data-id="${d.id}" data-tab="devis">Voir</button>`)).join(""),
+      `<span class="today-sum">${fmtEuros(totDue)}</span>`));
+
+  if(visites.length) blocks.push(sectionCard("Visites à venir", visites.length, visites.slice(0,6).map(d=>{
+      const v = parseShortFrDate(d.visiteDate), isT = v && sameDay(v, TODAY_REF);
+      return `<div class="row-item"><div class="row-left"><div class="date-tile">${esc(String(parseInt(d.visiteDate,10)))}<br>${esc((d.visiteDate.split(" ")[1]||"").replace(".","").toUpperCase())}</div>
+        <div style="min-width:0"><div class="row-title">${isT?"Aujourd’hui · ":""}${esc(d.visiteHeure||"")} · ${esc(d.client)}</div><div class="row-sub">${esc(d.adresse||"")}, ${esc(d.ville)}</div></div></div>
+        <button class="btn-ghost btn-sm" data-action="open-dossier" data-id="${d.id}">Voir</button></div>`;
+    }).join(""), `<button class="link-btn" data-action="nav" data-section="agenda">Agenda</button>`));
+
+  if(relances.length || taches.length) blocks.push(sectionCard("Relances et tâches", relances.length+taches.length,
+      relances.map(d=>renderTodayRow(d, `Relance prévue ${esc(d.prochaineRelance)}`, `${badge("En retard","red")}<button class="btn-ghost btn-sm" data-action="open-dossier" data-id="${d.id}" data-tab="commercial">Suivre</button>`)).join("") +
+      taches.map(({d,t})=>renderTodayRow(d, esc(t.titre), `<button class="btn-ghost btn-sm" data-action="open-dossier" data-id="${d.id}">Ouvrir</button>`)).join("")));
+
+  const empty = !blocks.length;
   return `
   <div class="page-header">
-    <div><h1>${esc(h1)}</h1><p>${esc(sub)}</p></div>
-    ${canCreateDemande() ? `<button class="btn-primary" data-action="modal-new">+ Nouvelle demande</button>` : ""}
+    <div><h1>Bonjour${todayFirstName()?" "+esc(todayFirstName()):""}</h1><p>${esc(fmtFullDate(TODAY_REF))}</p></div>
+    <div class="today-actions">
+      ${canCreateDemande() ? `<button class="btn-primary" data-action="modal-new">+ Nouveau client</button>` : ""}
+      ${canQuote ? `<button class="btn-secondary" data-action="wizard-devis">+ Nouveau devis</button>` : ""}
+    </div>
   </div>
-  ${buildMaJournee(list)}
-  <div class="stat-grid">
-    ${stat("Demandes à affecter", nouvelles.length, "À prendre en charge")}
-    ${stat("Visites programmées", planifiees.length, "Interventions à venir")}
-    ${stat("Rapports prêts", rapports.length, "Diagnostics terminés")}
-    ${stat("Affaires en cours", montant.toLocaleString("fr-FR")+" €", "Montant estimé des devis")}
+  <div class="stat-grid today-kpis">
+    ${stat("Demandes à traiter", nouvelles.length, "Nouveaux clients")}
+    ${stat("Devis en attente", devisAttente.length, fmtEuros(totDevis))}
+    ${stat("À encaisser", fmtEuros(totDue), aEncaisser.length+" dossier"+(aEncaisser.length>1?"s":""))}
   </div>
-
-  <div class="card">
-    <div class="card-header"><h3>${esc(traiterTitle)}</h3><button class="link-btn" data-action="nav" data-section="dossiers">Tous les dossiers</button></div>
-    ${traiterList.length===0 ? `<div class="empty-note">Aucun dossier à traiter.</div>` : traiterList.map(d=>`
-      <div class="row-item">
-        <div class="row-left">
-          <div class="row-avatar">${initials(d.client)}</div>
-          <div><div class="row-title">${esc(d.client)}</div><div class="row-sub">${esc(d.motif)} · ${esc(d.ville)}</div></div>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px">
-          ${badge(d.priorite, priorityBadgeClass(d.priorite))}
-          <button class="btn-ghost" data-action="open-dossier" data-id="${d.id}">Ouvrir</button>
-        </div>
-      </div>`).join("")}
-  </div>
-
-  <div class="card">
-    <div class="card-header"><h3>Relances à effectuer</h3><span class="badge gray">${relances.length} à traiter</span></div>
-    ${relances.length===0 ? `<div class="empty-note">Aucune relance en attente.</div>` : relances.map(d=>`
-      <div class="row-item">
-        <div class="row-left">
-          <div class="row-avatar">${initials(d.client)}</div>
-          <div><div class="row-title">${esc(d.client)}</div><div class="row-sub">${esc(d.commercial)} · Échéance ${esc(d.prochaineRelance)}</div></div>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px">
-          ${badge("En retard","red")}
-          <button class="btn-ghost" data-action="open-dossier" data-id="${d.id}" data-tab="commercial">Suivre</button>
-        </div>
-      </div>`).join("")}
-  </div>
-
-  <div class="card">
-    <div class="card-header"><h3>Prochaines visites</h3><button class="link-btn" data-action="nav" data-section="agenda">Agenda</button></div>
-    ${prochainesVisites.length===0 ? `<div class="empty-note">Aucune visite programmée.</div>` : prochainesVisites.map(d=>`
-      <div class="row-item">
-        <div class="row-left">
-          <div class="date-tile">${esc(d.visiteDate.replace(" sept.",""))}<br>SEPT.</div>
-          <div><div class="row-title">${esc(d.visiteHeure)} · ${esc(d.client)}</div><div class="row-sub">${esc(d.technicien||"À affecter")} · ${esc(d.ville)}</div></div>
-        </div>
-        <button class="btn-ghost" data-action="open-dossier" data-id="${d.id}">Voir</button>
-      </div>`).join("")}
-  </div>
-
-  <div class="card">
-    <div class="card-header"><h3>Du diagnostic au client</h3></div>
-    <div style="font-size:20px;font-weight:700;margin-bottom:6px">Diagnostics terminés<br><span style="color:var(--gold)">${diagPretCount} / ${list.length}</span></div>
-    <p style="color:var(--muted);font-size:13px">${partages} rapport(s) partagé(s) dans l’espace client de démonstration.</p>
-    <button class="btn-secondary" data-action="nav" data-section="dossiers">Consulter les dossiers</button>
-  </div>
+  ${empty ? `<div class="card" style="text-align:center;padding:34px 20px">
+      <h3 style="margin:0 0 6px">Tout est à jour ✓</h3>
+      <p style="color:var(--muted);margin:0 0 16px">Aucune demande, relance ni encaissement en attente.</p>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        ${canCreateDemande() ? `<button class="btn-primary" data-action="modal-new">+ Nouveau client</button>` : ""}
+        <button class="btn-secondary" data-action="nav" data-section="dossiers">Voir les dossiers</button>
+      </div></div>` : `<div class="today-grid">${blocks.join("")}</div>`}
   `;
 }
 
@@ -3987,7 +4013,7 @@ function renderDossiersList(){
     ${canCreateDemande() ? `<button class="btn-primary" data-action="modal-new">+ Créer un client</button>` : ""}
   </div>
   <div class="filters-row">
-    <input type="search" data-dl="q" placeholder="Rechercher un client, une ville, un n° de dossier… (Entrée)" value="${esc(f.q)}">
+    <input type="search" data-dl="q" placeholder="Rechercher un client, une ville, un téléphone…" value="${esc(f.q)}">
     <select data-dl="scope"><option value="all" ${scope==="all"?"selected":""}>Tous les dossiers</option><option value="mine" ${scope==="mine"?"selected":""}>Mes dossiers</option></select>
     <select data-dl="stat"><option value="">Tous les statuts</option>${["Nouvelle","Planifié","En cours","Rapport prêt"].map(o=>`<option ${f.stat===o?"selected":""}>${o}</option>`).join("")}</select>
     <select data-dl="team"><option value="">Toute l’équipe</option>${staff.map(o=>`<option ${f.team===o?"selected":""}>${esc(o)}</option>`).join("")}</select>
@@ -3995,34 +4021,38 @@ function renderDossiersList(){
   ${all.length===0 ? `<div class="empty-note">Aucun dossier ne correspond à cette recherche.</div>` : ""}
   <div class="card table-wrap">
     <table>
-      <thead><tr><th>Client / dossier</th><th>Demande</th><th>Priorité</th><th>Statut</th><th>Équipe</th><th></th></tr></thead>
+      <thead><tr><th>Client</th><th>Demande</th><th>Affaire</th><th>Statut</th><th>Équipe</th><th></th></tr></thead>
       <tbody>
-      ${list.map(d=>`
-        <tr>
-          <td><div class="row-title">${esc(d.client)}</div><div class="row-sub">${esc(d.id)} · ${esc(d.ville)}</div></td>
+      ${list.map(d=>{
+        const k = dossierKpis(d), tel = (d.telephone||"").replace(/\D/g,"");
+        return `
+        <tr class="row-click" data-action="open-dossier" data-id="${d.id}">
+          <td><div class="row-title">${esc(d.client)} ${d.priorite!=="Normale"?badge(d.priorite, priorityBadgeClass(d.priorite)):""}</div><div class="row-sub">${esc(d.id)} · ${esc(d.ville)}${d.telephone?" · "+esc(d.telephone):""}</div></td>
           <td>${esc(d.motif)}</td>
-          <td>${badge(d.priorite, priorityBadgeClass(d.priorite))}</td>
+          <td>${k.valeur>0?`<div class="row-title">${fmtEuros(k.valeur)}</div>`:`<div class="row-sub">Pas de devis</div>`}<div class="row-sub">${esc(d.commercialStage||"")}${k.reste>0?` · reste ${fmtEuros(k.reste)}`:""}</div></td>
           <td>${badge(d.statut, statutBadgeClass(d.statut))}</td>
-          <td><div class="row-sub">${esc(d.technicien||"Technicien à affecter")}</div><div class="row-sub">${esc(d.commercial||"Commercial à affecter")}</div></td>
-          <td><button class="btn-ghost" data-action="open-dossier" data-id="${d.id}">Ouvrir</button></td>
-        </tr>`).join("")}
+          <td style="white-space:nowrap"><div class="row-sub">${esc(d.technicien||"Technicien à affecter")}</div><div class="row-sub">${esc(d.commercial||"Commercial à affecter")}</div></td>
+          <td style="white-space:nowrap">${tel?`<a class="btn-ghost btn-sm" href="tel:${tel}" onclick="event.stopPropagation()">Appeler</a> `:""}<button class="btn-secondary btn-sm" data-action="open-dossier" data-id="${d.id}">Ouvrir</button></td>
+        </tr>`; }).join("")}
       </tbody>
     </table>
   </div>
 
   <div class="mobile-list">
-    ${list.map(d=>`
+    ${list.map(d=>{
+      const k = dossierKpis(d), tel = (d.telephone||"").replace(/\D/g,"");
+      return `
       <div class="list-card" data-action="open-dossier" data-id="${d.id}">
         <div class="lc-top">
-          <div><div class="lc-name">${esc(d.client)}</div><div class="lc-sub">${esc(d.id)} · ${esc(d.ville)}</div></div>
-          ${badge(d.priorite, priorityBadgeClass(d.priorite))}
+          <div><div class="lc-name">${esc(d.client)}</div><div class="lc-sub">${esc(d.ville)}${d.telephone?" · "+esc(d.telephone):""}</div></div>
+          ${d.priorite!=="Normale"?badge(d.priorite, priorityBadgeClass(d.priorite)):badge(d.statut, statutBadgeClass(d.statut))}
         </div>
         <div class="lc-motif">${esc(d.motif)}</div>
         <div class="lc-foot">
-          <div><div class="row-sub">${esc(d.technicien||"Technicien à affecter")}</div><div class="row-sub">${esc(d.commercial||"Commercial à affecter")}</div></div>
-          ${badge(d.statut, statutBadgeClass(d.statut))}
+          <div class="row-sub">${k.valeur>0?`<b>${fmtEuros(k.valeur)}</b> · `:""}${esc(d.commercialStage||d.statut)}${k.reste>0?` · reste ${fmtEuros(k.reste)}`:""}</div>
+          ${tel?`<a class="btn-secondary btn-sm" href="tel:${tel}" onclick="event.stopPropagation()">Appeler</a>`:""}
         </div>
-      </div>`).join("")}
+      </div>`; }).join("")}
   </div>
   ${renderPager(all.length, f.page)}`;
 }
@@ -4136,20 +4166,25 @@ function renderDossierInfo(d){
     <div class="crm-head-top">
       <div class="row-avatar big">${initials(d.client)}</div>
       <div style="flex:1;min-width:0">
-        <div class="crm-name">${esc(d.client)}</div>
-        <div class="row-sub">${esc(d.adresse)}, ${esc(d.ville)} · ${esc(d.typeBatiment)}</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${badge(d.priorite, priorityBadgeClass(d.priorite))}${badge(d.statut, statutBadgeClass(d.statut))}${d.commercialStage?badge(d.commercialStage,"gray"):""}</div>
+        <div class="row-title">${esc(d.adresse)}, ${esc(d.ville)}</div>
+        <div class="row-sub">${esc(d.typeBatiment||"")}${d.telephone?" · "+esc(d.telephone):""}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${d.commercialStage?badge(d.commercialStage,"gray"):""}</div>
       </div>
     </div>
     <div class="crm-actions">
-      ${phone?`<a class="btn-secondary btn-sm" href="tel:${phone}">Appeler</a><a class="btn-secondary btn-sm" href="https://wa.me/${wa}" target="_blank" rel="noopener">WhatsApp</a>`:""}
+      ${phone?`<a class="btn-primary btn-sm" href="tel:${phone}">Appeler</a><a class="btn-secondary btn-sm" href="https://wa.me/${wa}" target="_blank" rel="noopener">WhatsApp</a>`:""}
       ${d.email?`<a class="btn-secondary btn-sm" href="${gmailComposeUrl(d.email)}" target="_blank" rel="noopener">E-mail</a>`:""}
-      ${canEditActivity()?`<button class="btn-secondary btn-sm" data-action="form-open" data-form="task" data-id="${d.id}">+ Tâche</button><button class="btn-secondary btn-sm" data-action="dossier-tab" data-tab="activite">+ Note</button>`:""}
-      ${canQuote?`<button class="btn-primary btn-sm" data-action="wizard-devis" data-id="${d.id}">+ Devis</button>`:""}
-      ${d.email?`<button class="btn-secondary btn-sm" data-action="client-invite" data-id="${d.id}">Inviter (espace client)</button>`:""}
-      ${sendReport?`<button class="btn-primary btn-sm" data-action="modal-send" data-id="${d.id}">Envoyer le rapport</button>`:""}
-      ${canCreateDemande()?`<button class="btn-secondary btn-sm" data-action="modal-new-chantier" data-id="${d.id}">+ Nouveau chantier pour ce client</button>`:""}
+      ${canQuote?`<button class="btn-secondary btn-sm" data-action="wizard-devis" data-id="${d.id}" data-blank="1">+ Devis</button>`:""}
     </div>
+    <details class="crm-more">
+      <summary>Plus d’actions</summary>
+      <div class="crm-actions">
+        ${canEditActivity()?`<button class="btn-secondary btn-sm" data-action="form-open" data-form="task" data-id="${d.id}">+ Tâche</button><button class="btn-secondary btn-sm" data-action="dossier-tab" data-tab="activite">+ Note</button>`:""}
+        ${canCreateDemande()?`<button class="btn-secondary btn-sm" data-action="modal-new-chantier" data-id="${d.id}">+ Nouveau chantier pour ce client</button>`:""}
+        ${sendReport?`<button class="btn-secondary btn-sm" data-action="modal-send" data-id="${d.id}">Envoyer le rapport</button>`:""}
+        ${d.email?`<button class="btn-secondary btn-sm" data-action="client-invite" data-id="${d.id}">Inviter (espace client)</button>`:""}
+      </div>
+    </details>
   </div>
 
   ${otherChantiers(d).length ? `<div class="card">
@@ -4205,7 +4240,7 @@ function renderDossierInfo(d){
       <div class="row-item">
         <div><div class="row-title">Diagnostic du ${esc(d.visiteDate)}</div><div class="row-sub">Version 1 · ${esc(d.technicien)} · ${Object.values(d.diagnostic.points).reduce((s,p)=>s+p.photos.length,0)} photo(s)</div></div>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          ${badge(d.diagnostic.rapportPartage?"Partagé (démo)":"Interne", d.diagnostic.rapportPartage?"green":"gray")}
+          ${badge(d.diagnostic.rapportPartage?"Partagé":"Interne", d.diagnostic.rapportPartage?"green":"gray")}
           <button class="btn-ghost btn-sm" data-action="dossier-tab" data-tab="rapport">Aperçu</button>
           ${diagEditable()?`<button class="btn-ghost btn-sm" data-action="ask-delete" data-what="diagnostic" data-id="${d.id}">Supprimer</button>`:""}
         </div>
@@ -4293,7 +4328,7 @@ function modalForm(m){
       <div class="modal-actions"><button class="btn-primary" data-action="form-save">Enregistrer</button><button class="btn-secondary" data-action="modal-close">Annuler</button></div>`);
   }
   if(m.form==="parrainage"){
-    const p = m.idx!=null ? PARRAINAGES[m.idx] : {parrain:"", clientApporte:"", date:"12 sept.", affaire:"À contacter", recompense:80, suivi:"En attente"};
+    const p = m.idx!=null ? PARRAINAGES[m.idx] : {parrain:"", clientApporte:"", date:todayShort(), affaire:"À contacter", recompense:80, suivi:"En attente"};
     return modalWrap(m.idx!=null?"Modifier le parrainage":"Nouveau parrainage", `
       <div class="form-field"><label>Parrain (client existant)</label><input type="text" id="ffParrain" value="${esc(p.parrain)}"></div>
       <div class="form-field"><label>Client apporté</label><input type="text" id="ffApporte" value="${esc(p.clientApporte)}"></div>
@@ -4813,7 +4848,7 @@ function ppBackPage(d){
       ppCard("globe","Nous contacter",esc(SETTINGS.company.site||"")+"<br>Téléphone : "+esc(SETTINGS.company.telephone||"à renseigner")+"<br>E-mail : "+esc(SETTINGS.company.email||"à renseigner")),
       ppCard("check","Et maintenant ?","Ce rapport vous a été remis à l’issue de la visite diagnostic. Notre équipe reste à votre disposition pour répondre à vos questions et organiser les travaux recommandés.")
     ],
-    banner: ppBanner("shield","Information","Document de démonstration. Contrôle visuel des zones accessibles, selon les observations renseignées par le technicien. Ce rapport n’est pas une certification.", PP_QUOTE),
+    banner: ppBanner("shield","Information","Contrôle visuel des zones accessibles, selon les observations renseignées par le technicien. Ce rapport n’est pas une certification.", PP_QUOTE),
     pagenum: false
   });
 }
@@ -4841,9 +4876,9 @@ function renderDossierRapport(d){
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <button class="btn-secondary btn-sm" data-action="download-pdf" data-id="${d.id}">Télécharger le PDF</button>
       <button class="btn-primary btn-sm" data-action="modal-send" data-id="${d.id}">Envoyer au client</button>
-      <button class="btn-secondary btn-sm" data-action="share-report" data-id="${d.id}">Partager au client (démo)</button>
+      <button class="btn-secondary btn-sm" data-action="share-report" data-id="${d.id}">Partager au client</button>
     </div>
-    ${badge(d.diagnostic.rapportPartage?"Partagé (démo)":"Non partagé", d.diagnostic.rapportPartage?"green":"gray")}
+    ${badge(d.diagnostic.rapportPartage?"Partagé":"Non partagé", d.diagnostic.rapportPartage?"green":"gray")}
   </div>
   <p class="form-help" style="margin-bottom:16px">Le PDF téléchargé comprend une couverture de marque, la synthèse, le plan d’action, les constats argumentés, les photos et la proposition de suite.</p>
   ${renderReportDoc(d)}
@@ -5395,55 +5430,59 @@ function renderEntretiens(){
         </div>
       </div>`).join("")}
   </div>
-  <p class="form-help">Suivi de démonstration : ces fiches ne constituent pas des contrats signés. La visite d’entretien est une échéance à planifier avec un technicien.</p>
+  <p class="form-help">Ces fiches de suivi ne constituent pas des contrats signés. La visite d’entretien est une échéance à planifier avec un technicien.</p>
   `;
 }
 
 // ---------- Diagnostics list ----------
 
+function dgFilter(input){
+  const q = input.value.trim().toLowerCase();
+  document.querySelectorAll(".dg-row").forEach(el=>{ el.style.display = !q || el.dataset.search.includes(q) ? "" : "none"; });
+}
 function renderDiagnosticsList(){
-  const list = visibleDossiers();
+  const list = visibleDossiers().slice().sort((a,b)=>(b.diagnostic&&b.diagnostic.rapportPret?1:0)-(a.diagnostic&&a.diagnostic.rapportPret?1:0));
+  const act = d=>({tab:d.diagnostic.rapportPret?"rapport":"diagnostic", label:d.diagnostic.rapportPret?"Voir le rapport":"Remplir le diagnostic"});
+  const search = d=>esc((d.client+" "+d.ville+" "+d.id+" "+d.motif).toLowerCase());
   return `
   <div class="page-header">
     <div><h1>Diagnostics de toiture</h1><p>Vos contrôles terrain, photos et rapports PDF.</p></div>
     ${diagEditable() ? `<button class="btn-primary" data-action="modal-new-diag">+ Créer un diagnostic</button>` : ""}
   </div>
+  ${!list.length ? `<div class="card" style="text-align:center;padding:34px 20px"><h3 style="margin:0 0 6px">Aucun diagnostic pour l’instant</h3><p style="color:var(--muted);margin:0 0 16px">Créez un client puis lancez son diagnostic : les 11 points de contrôle vous guident pas à pas.</p>${diagEditable() ? `<button class="btn-primary" data-action="modal-new-diag">+ Créer un diagnostic</button>` : ""}</div>` : `
   <div class="filters-row">
-    <input type="text" placeholder="Rechercher un client, une ville, un dossier…" disabled>
-    <select disabled><option>Tous les statuts</option></select>
-    <select disabled><option>Toute l’équipe</option></select>
+    <input type="search" placeholder="Rechercher un client, une ville, un dossier…" oninput="dgFilter(this)">
   </div>
   <div class="card table-wrap">
     <table>
       <thead><tr><th>Dossier</th><th>Technicien</th><th>Visite</th><th>Avancement</th><th></th></tr></thead>
       <tbody>
-      ${list.filter(d=>d.visiteDate).map(d=>`
-        <tr>
+      ${list.map(d=>`
+        <tr class="dg-row" data-search="${search(d)}">
           <td><div class="row-title">${esc(d.client)}</div><div class="row-sub">${esc(d.ville)} · ${esc(d.id)}</div></td>
           <td>${esc(d.technicien||"—")}</td>
-          <td>${esc(d.visiteDate)} · ${esc(d.visiteHeure)}</td>
+          <td>${d.visiteDate ? esc(d.visiteDate)+" · "+esc(d.visiteHeure||"") : "À programmer"}</td>
           <td>${badge(d.statut, statutBadgeClass(d.statut))}</td>
-          <td><button class="btn-ghost" data-action="open-dossier" data-id="${d.id}" data-tab="${d.diagnostic.rapportPret?"rapport":"diagnostic"}">${d.diagnostic.rapportPret?"Voir le rapport":"Remplir le diagnostic"}</button></td>
+          <td><button class="btn-ghost" data-action="open-dossier" data-id="${d.id}" data-tab="${act(d).tab}">${act(d).label}</button></td>
         </tr>`).join("")}
       </tbody>
     </table>
   </div>
 
   <div class="mobile-list">
-    ${list.filter(d=>d.visiteDate).map(d=>`
-      <div class="list-card">
+    ${list.map(d=>`
+      <div class="list-card dg-row" data-search="${search(d)}">
         <div class="lc-top">
           <div><div class="lc-name">${esc(d.client)}</div><div class="lc-sub">${esc(d.ville)} · ${esc(d.id)}</div></div>
           ${badge(d.statut, statutBadgeClass(d.statut))}
         </div>
-        <div class="lc-motif">${esc(d.technicien||"—")} · ${esc(d.visiteDate)} ${esc(d.visiteHeure)}</div>
+        <div class="lc-motif">${esc(d.technicien||"—")} · ${d.visiteDate ? esc(d.visiteDate)+" "+esc(d.visiteHeure||"") : "Visite à programmer"}</div>
         <div class="lc-foot">
-          <button class="btn-secondary btn-sm" style="width:100%" data-action="open-dossier" data-id="${d.id}" data-tab="${d.diagnostic.rapportPret?"rapport":"diagnostic"}">${d.diagnostic.rapportPret?"Voir le rapport":"Remplir le diagnostic"}</button>
+          <button class="btn-secondary btn-sm" style="width:100%" data-action="open-dossier" data-id="${d.id}" data-tab="${act(d).tab}">${act(d).label}</button>
         </div>
       </div>`).join("")}
-  </div>`;
+  </div>`}`;
 }
-
 // ---------- Suivi commercial (kanban) ----------
 
 function kanbanQuick(d){
@@ -5592,7 +5631,10 @@ function renderConnexions(){
 // ---------- Client portal ----------
 
 function renderClientPortal(clientName){
-  const d = DOSSIERS.find(x=>x.client===clientName);
+  // L'aperçu montre l'espace d'un client réel (le dossier demandé, sinon le premier rapport partagé, sinon le premier dossier).
+  const d = DOSSIERS.find(x=>x.client===clientName) || DOSSIERS.find(x=>x.diagnostic && x.diagnostic.rapportPartage) || DOSSIERS[0];
+  if(!d) return `<div class="card" style="text-align:center;padding:34px 20px"><h3 style="margin:0 0 6px">Aucun client à afficher</h3><p style="color:var(--muted);margin:0">Créez un premier dossier client : vous verrez ici ce que voit votre client.</p></div>`;
+  clientName = d.client;
   const steps = [
     {label:"Demande reçue", done:true},
     {label:"Visite programmée", done:!!d.visiteDate},
@@ -5600,7 +5642,7 @@ function renderClientPortal(clientName){
     {label:"Rapport partagé", done:d.diagnostic.rapportPartage}
   ];
   return `
-  <h1>Bonjour ${esc(clientName.split(" ")[0])},</h1>
+  <h1>Bonjour ${esc(clientName)},</h1>
   <p style="color:var(--muted);margin-bottom:24px">Retrouvez votre demande et les documents partagés par votre équipe.</p>
 
   <div class="progress-tracker">
@@ -5840,7 +5882,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const em = (document.getElementById("fgEmail").value||"").trim().toLowerCase();
       if(!/^\S+@\S+\.\S+$/.test(em)){ state.loginMsg = "Indiquez une adresse e-mail valide."; render(); return; }
       SETTINGS.resets = (SETTINGS.resets||[]).filter(r=>r.email.toLowerCase()!==em);
-      SETTINGS.resets.push({id:"P"+Date.now(), email:em, date:"12 sept., "+new Date().toTimeString().slice(0,5), statut:"à traiter"});
+      SETTINGS.resets.push({id:"P"+Date.now(), email:em, date:nowStamp(), statut:"à traiter"});
       saveSettings(); state.loginEmail = em;
       state.loginMsg = "Demande enregistrée. Si cette adresse correspond à un compte, la direction vous enverra un mot de passe temporaire.";
       render(); return;
@@ -5850,7 +5892,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
       if(!/^\S+@\S+\.\S+$/.test(em)){ showToast("Indiquez l’e-mail du salarié."); return; }
       const nom = document.getElementById("invNom").value.trim(), role = document.getElementById("invRole").value;
       SETTINGS.invitations = (SETTINGS.invitations||[]).filter(i=>i.email.toLowerCase()!==em);
-      const iv = {id:"I"+Date.now(), email:em, nom, role, date:"12 sept.", statut:"envoyée"};
+      const iv = {id:"I"+Date.now(), email:em, nom, role, date:todayShort(), statut:"envoyée"};
       SETTINGS.invitations.push(iv); saveSettings();
       inviteMail(iv); return;
     }
@@ -5949,6 +5991,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
       c.acomptePct = parseInt(document.getElementById("co_acomptePct").value,10);
       saveSettings(); showToast("Informations enregistrées."); return;
     }
+    if(action==="toggle-nav-more"){ state.navMore = !state.navMore; render(); return; }
     if(action==="toggle-sidebar"){ state.sidebarOpen=!state.sidebarOpen; render(); return; }
     if(action==="close-sidebar"){ state.sidebarOpen=false; render(); return; }
     if(action==="nav"){ state.section=t.dataset.section; state.dossierId=null; state.diagStep=1; state.sidebarOpen=false; render(); scrollContentTop(); return; }
@@ -5989,13 +6032,13 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(action==="send-now"){ sendNow(byId(t.dataset.id)); return; }
     if(action==="share-report"){
       const d = byId(t.dataset.id); d.diagnostic.rapportPartage = true;
-      showToast("Rapport partagé dans l’espace client de démonstration.");
+      showToast("Rapport partagé dans l’espace client.");
       return;
     }
     if(action==="add-note"){
       const d = byId(t.dataset.id);
       const val = document.getElementById("noteInput").value.trim();
-      if(val){ d.notes.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), texte:val}); render(); }
+      if(val){ d.notes.push({date:nowStamp(), texte:val}); render(); }
       return;
     }
     if(action==="submit-new"){
@@ -6021,7 +6064,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
         adresse: document.getElementById("fAdresse").value||"12 rue des Tilleuls",
         typeBatiment: document.getElementById("fType").value,
         infosGenerales: document.getElementById("fInfos").value,
-        notes:[], historique:[{date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Dossier créé par "+authorLabel()+(tech||com ? " · affecté à "+[tech,com].filter(Boolean).join(" et ") : "")+"."}],
+        notes:[], historique:[{date:nowStamp(), auteur:authorLabel(), texte:"Dossier créé par "+authorLabel()+(tech||com ? " · affecté à "+[tech,com].filter(Boolean).join(" et ") : "")+"."}],
         commercialStage:"À contacter", montant:0, prochaineRelance:null, compteRendu:"",
         visiteDate:null, visiteHeure:null, diagnostic:freshDiagnostic(),
         devis:[], factures:[], chantier:null, taches:[]
@@ -6059,7 +6102,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
       d.commercial = com==="À affecter"?null:com;
       if(date){
         const dt = new Date(date+"T00:00:00");
-        d.visiteDate = dt.getDate()+" "+dt.toLocaleDateString("fr-FR",{month:"short"}).replace(".","")+".";
+        d.visiteDate = fmtDayMonth(dt);
         d.visiteHeure = heure||"09:00";
         d.statut = "Planifié";
       }
@@ -6159,7 +6202,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
       d.diagnostic.synthese.conclusion = document.getElementById("synConclusion").value;
       d.diagnostic.rapportPret = true;
       d.statut = "Rapport prêt";
-      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Diagnostic validé, rapport généré."});
+      d.historique.push({date:nowStamp(), auteur:authorLabel(), texte:"Diagnostic validé, rapport généré."});
       state.dossierTab = "rapport";
       render();
       return;
@@ -6177,7 +6220,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(action==="devis-new"){
       const d = byId(t.dataset.id);
       const numero = nextDevisId(d);
-      d.devis.push({ id:numero, numero, version:d.devis.length+1, statut:"Brouillon", lignes:[freshDevisLine()], dateCreation:"12 sept.", dateEnvoi:null });
+      d.devis.push({ id:numero, numero, version:d.devis.length+1, statut:"Brouillon", lignes:[freshDevisLine()], dateCreation:todayShort(), dateEnvoi:null });
       render();
       return;
     }
@@ -6185,7 +6228,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const d = byId(t.dataset.id);
       const prev = latestDevis(d);
       const numero = nextDevisId(d);
-      d.devis.push({ id:numero, numero, version:d.devis.length+1, statut:"Brouillon", lignes:prev.lignes.map(l=>Object.assign({},l)), dateCreation:"12 sept.", dateEnvoi:null, objet:prev.objet, validite:prev.validite, paiement:prev.paiement?Object.assign({},prev.paiement):undefined });
+      d.devis.push({ id:numero, numero, version:d.devis.length+1, statut:"Brouillon", lignes:prev.lignes.map(l=>Object.assign({},l)), dateCreation:todayShort(), dateEnvoi:null, objet:prev.objet, validite:prev.validite, paiement:prev.paiement?Object.assign({},prev.paiement):undefined });
       showToast("Nouvelle version du devis créée.");
       render();
       return;
@@ -6215,10 +6258,10 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const d = byId(t.dataset.id);
       const dv = latestDevis(d);
       dv.statut = "Envoyé";
-      dv.dateEnvoi = "12 sept.";
+      dv.dateEnvoi = todayShort();
       d.montant = Math.round(devisTotals(dv).ttcCt/100);
       if(d.commercialStage==="À contacter" || d.commercialStage==="Devis à préparer") d.commercialStage = "Devis envoyé";
-      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Devis "+dv.numero+" envoyé au client."});
+      d.historique.push({date:nowStamp(), auteur:authorLabel(), texte:"Devis "+dv.numero+" envoyé au client."});
       showToast("Devis marqué comme envoyé.");
       render();
       return;
@@ -6258,7 +6301,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
       dv.statut = "Refusé";
       if(!d.devis.some(v=>v.statut!=="Refusé")) d.commercialStage = "Perdu";
       else if(anyAcceptedDevis(d)) syncProcess(d, true);
-      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Devis "+dv.numero+" refusé par le client."});
+      d.historique.push({date:nowStamp(), auteur:authorLabel(), texte:"Devis "+dv.numero+" refusé par le client."});
       showToast("Devis marqué comme refusé.");
       render();
       return;
@@ -6432,7 +6475,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const d = byId(t.dataset.id);
       const f = d.factures.find(x=>x.id===t.dataset.fid);
       f.statut = "Envoyée";
-      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Facture "+f.numero+" envoyée au client."});
+      d.historique.push({date:nowStamp(), auteur:authorLabel(), texte:"Facture "+f.numero+" envoyée au client."});
       showToast("Facture envoyée.");
       render();
       return;
@@ -6443,7 +6486,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const montant = parseFloat(document.getElementById("paiementMontant-"+f.id).value);
       if(!montant || montant<=0){ showToast("Indiquez un montant valide."); return; }
       const mode = document.getElementById("paiementMode-"+f.id).value;
-      const date = document.getElementById("paiementDate-"+f.id).value || "12 sept.";
+      const date = document.getElementById("paiementDate-"+f.id).value || todayShort();
       recordPayment(d, f, Math.round(montant*100), mode, date, false);
       showToast(mode==="Virement" ? "Virement enregistré (annoncé, non encaissé)." : "Paiement enregistré.");
       render();
@@ -6499,12 +6542,34 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const desc = document.getElementById("incDescription").value.trim();
       if(!desc){ showToast("Décrivez le problème avant de l'envoyer."); return; }
       const cat = document.getElementById("incCategorie").value;
-      d.chantier.incidents.unshift({categorie:cat, description:desc, date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel()});
-      d.historique.push({date:"12 sept., "+new Date().toTimeString().slice(0,5), auteur:authorLabel(), texte:"Incident chantier signalé : "+incidentCatLabel(cat)+"."});
+      d.chantier.incidents.unshift({categorie:cat, description:desc, date:nowStamp(), auteur:authorLabel()});
+      d.historique.push({date:nowStamp(), auteur:authorLabel(), texte:"Incident chantier signalé : "+incidentCatLabel(cat)+"."});
       showToast("Incident signalé.");
       render();
       return;
     }
+  });
+
+  // Recherche globale (barre du haut, ordinateur) : Entrée ouvre la liste des dossiers déjà filtrée.
+  document.getElementById("app").addEventListener("keydown", (e)=>{
+    if(e.key==="Enter" && e.target && e.target.id==="gsearch"){
+      const f = dossierListState(); f.q = e.target.value.trim(); f.page = 1; f.scope = "all"; f.stat = ""; f.team = "";
+      state.section = "dossiers"; state.dossierId = null; render();
+    }
+  });
+  // Recherche des dossiers « en direct » : on filtre pendant la frappe (sans attendre Entrée) et on garde le curseur.
+  let dlTimer = null;
+  document.getElementById("app").addEventListener("input", (e)=>{
+    const t = e.target;
+    if(!(t && t.dataset && t.dataset.dl==="q")) return;
+    clearTimeout(dlTimer);
+    dlTimer = setTimeout(()=>{
+      const f = dossierListState(); f.page = 1; f.q = t.value;
+      const pos = t.selectionStart;
+      render();
+      const ni = document.querySelector('[data-dl="q"]');
+      if(ni){ ni.focus(); try{ ni.setSelectionRange(pos,pos); }catch(_){} }
+    }, 220);
   });
 
   document.getElementById("app").addEventListener("change", (e)=>{
