@@ -1885,7 +1885,8 @@ async function downloadDocPdf(d, kind, docId){
 
 function allDocs(){
   const devis = [], factures = [];
-  visibleDossiers().forEach(d=>{
+  // Regroupés par client : tous les devis / factures d'un même client se suivent.
+  visibleDossiers().slice().sort((a,b)=>a.client.localeCompare(b.client,"fr")||a.id.localeCompare(b.id)).forEach(d=>{
     (d.devis||[]).forEach(dv=>devis.push({d, dv}));
     (d.factures||[]).forEach(f=>factures.push({d, f}));
   });
@@ -1914,7 +1915,8 @@ function renderDocRow(kind, d, doc, hideOpen){
         ${!isDevis && doc.montantTtcCt-facturePaidCt(doc)>1 && hasPermission("payment.register") ? `<button class="btn-primary btn-sm" data-action="pay-open" data-id="${d.id}" data-fid="${doc.id}">Paiement</button>` : ""}
         <button class="btn-ghost btn-sm" data-action="doc-pdf" data-id="${d.id}" data-kind="${kind}" data-doc="${doc.id}">PDF</button>
         ${canSend ? `<button class="btn-secondary btn-sm" data-action="modal-send-doc" data-id="${d.id}" data-kind="${kind}" data-doc="${doc.id}">Envoyer</button>` : ""}
-        ${hideOpen || !canView("dossiers") ? "" : `<button class="btn-ghost btn-sm" data-action="open-dossier" data-id="${d.id}" data-tab="devis">Ouvrir</button>`}
+        ${isDevis && hasPermission("quote.create") ? `<button class="btn-ghost btn-sm" data-action="wizard-devis" data-id="${d.id}" data-from="${doc.id}">Dupliquer</button>` : ""}
+        ${!canView("dossiers") ? "" : `<button class="btn-ghost btn-sm" data-action="open-dossier" data-id="${d.id}" data-tab="devis"${isDevis?` data-doc="${doc.id}"`:""}>Ouvrir</button>`}
       </div>
     </div>
   </div>`;
@@ -2352,6 +2354,9 @@ function wzDevisStep(w, d){
     return `<p class="wz-intro">Commençons par le client et l’objet des travaux.</p>
       <div class="form-field"><label>Dossier client</label><select data-wz="dossier" data-wz-rerender="1"><option value="">Choisir un client…</option>${opts}</select></div>
       ${wzClientCard(d)}
+      ${d && d.devis.length ? `<div class="form-field"><label>Ce client a déjà ${d.devis.length} devis — point de départ</label>
+        <select data-wz="from" data-wz-rerender="1"><option value="">Nouveau devis vierge</option>${d.devis.map(v=>`<option value="${v.id}" ${w.fromId===v.id?"selected":""}>Reprendre ${esc(v.numero)} · ${esc(v.objet||d.motif)} · ${fmtEuros(devisTotals(v).ttcCt)} (${esc(v.statut)})</option>`).join("")}</select>
+        <div class="form-help">Le devis existant n’est pas modifié : vous en créez un nouveau, à part.</div></div>` : ""}
       <div class="form-field"><label>Objet des travaux</label><input type="text" data-wz="objet" value="${esc(x.objet)}" placeholder="Ex. Réparation de la couverture et de l’étanchéité"></div>
       <div class="form-field"><label>Validité du devis</label><select data-wz="validite">${[15,30,60,90].map(n=>`<option value="${n}" ${x.validite===n?"selected":""}>${n} jours</option>`).join("")}</select></div>`;
   }
@@ -2428,6 +2433,8 @@ function wzFactureStep(w, d){
     return `<p class="wz-intro">Choisissez le devis accepté à facturer.</p>
       <div class="form-field"><label>Dossier client</label><select data-wz="dossier" data-wz-rerender="1"><option value="">Choisir un client…</option>${opts}</select></div>
       ${wzClientCard(d)}
+      ${d && d.devis.filter(v=>v.statut==="Accepté").length>1 ? `<div class="form-field"><label>Devis à facturer (ce client en a ${d.devis.filter(v=>v.statut==="Accepté").length} d’acceptés)</label>
+        <select data-wz="devisId" data-wz-rerender="1">${d.devis.filter(v=>v.statut==="Accepté").map(v=>`<option value="${v.id}" ${x.devisId===v.id?"selected":""}>${esc(v.numero)} · ${esc(v.objet||d.motif)} · ${fmtEuros(devisTotals(v).ttcCt)}</option>`).join("")}</select></div>` : ""}
       ${dv ? `<div class="wz-recap"><div class="wz-recap-row"><span>Devis accepté</span><b>${esc(dv.numero)} · ${fmtEuros(devisTotals(dv).ttcCt)} TTC</b></div><div class="wz-recap-row"><span>Conditions</span><b>${esc(paiementSummary(dv).replace("Règlement : ",""))}</b></div></div>` : ""}
       ${types.length ? `<div class="form-field"><label>Type de facture</label><select data-wz="type" data-wz-rerender="1">${types.map(t=>`<option value="${t.v}" ${x.type===t.v?"selected":""}>${esc(t.label)}</option>`).join("")}</select></div>` : info}`;
   }
@@ -3930,7 +3937,7 @@ function renderOverview(){
   if(devisAttente.length) blocks.push(sectionCard("Devis à relancer", devisAttente.length, devisAttente.slice(0,6).map(({d,v})=>{
       const ph = (d.telephone||"").replace(/\D/g,"").replace(/^0/,"33");
       return renderTodayRow(d, `${esc(v.numero)} · ${esc(v.objet||d.motif)} · <b>${fmtEuros(devisTotals(v).ttcCt)}</b>`,
-      `${ph?`<a class="btn-secondary btn-sm" href="tel:${(d.telephone||"").replace(/\D/g,"")}">Appeler</a>`:""}<button class="btn-primary btn-sm" data-action="open-dossier" data-id="${d.id}" data-tab="devis">Voir le devis</button>`);
+      `${ph?`<a class="btn-secondary btn-sm" href="tel:${(d.telephone||"").replace(/\D/g,"")}">Appeler</a>`:""}<button class="btn-primary btn-sm" data-action="open-dossier" data-id="${d.id}" data-tab="devis" data-doc="${v.id}">Voir le devis</button>`);
     }).join(""), `<span class="today-sum">${fmtEuros(totDevis)}</span>`));
 
   if(aEncaisser.length) blocks.push(sectionCard("À encaisser", aEncaisser.length, aEncaisser.slice(0,6).map(({d,b,open})=>renderTodayRow(d,
@@ -5995,7 +6002,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(action==="toggle-sidebar"){ state.sidebarOpen=!state.sidebarOpen; render(); return; }
     if(action==="close-sidebar"){ state.sidebarOpen=false; render(); return; }
     if(action==="nav"){ state.section=t.dataset.section; state.dossierId=null; state.diagStep=1; state.sidebarOpen=false; render(); scrollContentTop(); return; }
-    if(action==="open-dossier"){ state.section="dossiers"; state.dossierId=t.dataset.id; state.dossierTab=t.dataset.tab||"info"; state.diagStep=1; render(); scrollContentTop(); return; }
+    if(action==="open-dossier"){ if(t.dataset.doc){ const dd = byId(t.dataset.id); if(dd && findDevis(dd, t.dataset.doc)) selectDevis(dd, t.dataset.doc); } state.section="dossiers"; state.dossierId=t.dataset.id; state.dossierTab=t.dataset.tab||"info"; state.diagStep=1; render(); scrollContentTop(); return; }
     if(action==="dossier-tab"){ state.dossierTab=t.dataset.tab; state.diagStep=1; render(); scrollContentTop(); return; }
     if(action==="modal-new"){ state.modal={type:"new"}; render(); return; }
     if(action==="modal-new-chantier"){ state.modal={type:"new", prefillId:t.dataset.id}; render(); return; }
@@ -6595,10 +6602,21 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const k = e.target.dataset.wz;
       if(k==="dossier"){
         state.wizard.dossierId = e.target.value || null;
+        state.wizard.fromId = null;
         if(state.wizard.kind==="devis") wzInitDevis(); else wzInitFacture();
+        render();
+      } else if(k==="from" && state.wizard.kind==="devis"){
+        state.wizard.fromId = e.target.value || null;
+        wzInitDevis();
         render();
       } else if(e.target.dataset.wzRerender){
         if(state.wizard.kind==="facture" && k==="type") wzFactureDefaults();
+        if(state.wizard.kind==="facture" && k==="devisId"){
+          const wd = byId(state.wizard.dossierId), wv = wd && findDevis(wd, state.wizard.data.devisId);
+          const ty = wv ? wzFactureTypes(wd, wv) : [];
+          state.wizard.data.type = ty.length ? ty[0].v : null;
+          wzFactureDefaults();
+        }
         if(state.wizard.kind==="devis" && k==="fois") state.wizard.data.echeancier = defaultEcheancier(state.wizard.data.fois);
         render();
       } else wzUpdateLive();
