@@ -501,7 +501,7 @@ function catalogFind(code){ return SERVICE_CATALOG.find(x=>x.code===code) || MAT
 function catalogVenteCt(item){ return item.prixVenteCt!=null ? item.prixVenteCt : item.prixUnitaireCt; }
 // Une prestation du catalogue donne le titre de la ligne ; son éventuelle description (champ « Description »
 // de la fiche) devient la désignation affichée dessous. Une même prestation peut être ajoutée plusieurs fois.
-function catalogLineFrom(item){ return freshDevisLine({titre:item.label, designation:item.desc||"", qte:1, prixUnitaireCt:catalogVenteCt(item), tvaPct:item.tvaPct, code:item.code, coutUnitaireCt:item.prixAchatCt||0, unite:item.unite||"forfait"}); }
+function catalogLineFrom(item){ return freshDevisLine({titre:item.label, designation:item.desc||"", qte:1, prixUnitaireCt:catalogVenteCt(item), tvaPct:item.tvaPct, code:item.code, photo:(item.photo&&item.photo.dataUrl?{dataUrl:item.photo.dataUrl}:undefined), coutUnitaireCt:item.prixAchatCt||0, unite:item.unite||"forfait"}); }
 function lineIsBlank(l){ return !l.titre && !l.designation && !l.prixUnitaireCt; }
 function lineLabel(l){ return ((l.titre||"")+" "+(l.designation||"")).trim(); }
 function catalogOptionsHtml(exclude){
@@ -3101,7 +3101,10 @@ async function loadPersisted(){
 
 // ---------- Personnalisation sans développeur (catalogue, paiements, diagnostic) ----------
 const CUSTOM_KEY = "mt_custom_v1";
-function customObj(){ return {catalogue:SERVICE_CATALOG, materiel:MATERIEL_CATALOG, payModes:PAY_MODES, points:POINTS, pointAnoms:POINT_ANOMALIES, vocab:ANOMALY_VOCAB}; }
+const MEDIA_CACHE = {};
+// Pour le serveur, les photos du catalogue ne voyagent pas dans les réglages : seule leur référence (mediaId) y est.
+function catPhotoLite(arr){ return arr.map(x=>{ if(!x.photo || !x.photo.mediaId) { if(!x.photo) return x; const c = Object.assign({}, x); delete c.photo; return c; } return Object.assign({}, x, {photo:{mediaId:x.photo.mediaId}}); }); }
+function customObj(server){ return {catalogue:server?catPhotoLite(SERVICE_CATALOG):SERVICE_CATALOG, materiel:server?catPhotoLite(MATERIEL_CATALOG):MATERIEL_CATALOG, payModes:PAY_MODES, points:POINTS, pointAnoms:POINT_ANOMALIES, vocab:ANOMALY_VOCAB}; }
 function saveCustom(){
   try{ localStorage.setItem(CUSTOM_KEY, JSON.stringify(customObj())); }catch(e){}
   if(typeof SRV!=="undefined" && SRV.on) srvSettingsSoon();
@@ -3121,6 +3124,7 @@ function applyCustom(c){
   };
   fillByKey(SERVICE_CATALOG, c.catalogue, x=>x.code);
   fillByKey(MATERIEL_CATALOG, c.materiel, x=>x.code);
+  [SERVICE_CATALOG, MATERIEL_CATALOG].forEach(arr=>arr.forEach(x=>{ if(x.photo && x.photo.mediaId && !x.photo.dataUrl && MEDIA_CACHE[x.photo.mediaId]) x.photo.dataUrl = MEDIA_CACHE[x.photo.mediaId]; }));
   // Les anciens points par défaut (liste remplacée par celle du gérant) ne sont pas réinjectés ;
   // seuls les points ajoutés par l’utilisateur sont conservés.
   fillByKey(POINTS, Array.isArray(c.points) ? c.points.filter(x=>!LEGACY_POINT_NAMES.includes(x)) : c.points, x=>x);
@@ -3362,14 +3366,25 @@ async function srvUploadPhotos(d){
     o.mediaId = r.id;
   }
 }
+async function srvUploadCatPhotos(){
+  for(const arr of [SERVICE_CATALOG, MATERIEL_CATALOG]){
+    for(const x of arr){
+      if(x.photo && x.photo.dataUrl && !x.photo.mediaId){
+        const r = await srvApi("media", "POST", {dataUrl:x.photo.dataUrl});
+        x.photo.mediaId = r.id; MEDIA_CACHE[r.id] = x.photo.dataUrl;
+      }
+    }
+  }
+}
 async function srvFetchMedia(){
   if(SRV.fetching) return;
   SRV.fetching = true;
   try{
     const todo = [];
     DOSSIERS.forEach(d=>srvWalk(d, o=>{ if(o.mediaId && !o.dataUrl) todo.push(o); }));
+    [SERVICE_CATALOG, MATERIEL_CATALOG].forEach(arr=>arr.forEach(x=>{ if(x.photo && x.photo.mediaId && !x.photo.dataUrl){ if(MEDIA_CACHE[x.photo.mediaId]) x.photo.dataUrl = MEDIA_CACHE[x.photo.mediaId]; else todo.push(x.photo); } }));
     for(let i=0;i<todo.length;i+=3){
-      await Promise.all(todo.slice(i, i+3).map(async o=>{ try{ const r = await srvApi("media?id="+o.mediaId); o.dataUrl = r.dataUrl; }catch(e){} }));
+      await Promise.all(todo.slice(i, i+3).map(async o=>{ try{ const r = await srvApi("media?id="+o.mediaId); o.dataUrl = r.dataUrl; MEDIA_CACHE[o.mediaId] = r.dataUrl; }catch(e){} }));
     }
     if(todo.length && srvCanRender()) render();
   }finally{ SRV.fetching = false; }
@@ -3496,7 +3511,8 @@ function srvSettingsSoon(){
     SRV.settingsTimer = null;
     try{
       if(SRV.user.role==="directeur" || SRV.user.role==="admin"){
-        await srvApi("settings", "POST", {action:"put", settings:{employees:SETTINGS.employees, access:SETTINGS.access, company:SETTINGS.company, materielLib:SETTINGS.materielLib, invitations:SETTINGS.invitations, resets:SETTINGS.resets, custom:customObj()}});
+        await srvUploadCatPhotos();
+        await srvApi("settings", "POST", {action:"put", settings:{employees:SETTINGS.employees, access:SETTINGS.access, company:SETTINGS.company, materielLib:SETTINGS.materielLib, invitations:SETTINGS.invitations, resets:SETTINGS.resets, custom:customObj(true)}});
       } else {
         await srvApi("settings", "POST", {action:"materiel", lib:SETTINGS.materielLib});
       }
@@ -3671,6 +3687,7 @@ function modalCatEdit(m){
       <div class="form-field"><label>TVA</label><select id="ceTva">${tvas.map(t=>`<option value="${t}" ${item.tvaPct===t?"selected":""}>${t} %</option>`).join("")}</select></div>
       <div class="form-field"><label>Unité</label>${unitSelectHtml("ceUnite", item.unite||"")}</div>
     </div>
+    ${isNew ? `<p class="form-help">Enregistrez d’abord la fiche : vous pourrez ensuite lui associer une photo.</p>` : `<div class="form-field"><label>Photo (reprise automatiquement dans les nouveaux devis)</label><div class="line-photo">${item.photo&&item.photo.dataUrl?`<img src="${item.photo.dataUrl}" alt="Photo de la prestation"><button type="button" class="btn-ghost btn-sm" data-action="cat-photo-remove" data-kind="${kind}" data-idx="${m.idx}">Retirer la photo</button>`:""}<label class="btn-ghost btn-sm line-photo-btn">${item.photo&&item.photo.dataUrl?"Changer la photo":"Ajouter une photo"}<input type="file" accept="image/*" class="cat-photo-in" data-kind="${kind}" data-idx="${m.idx}" hidden></label></div><p class="form-help">Les devis déjà créés gardent leur photo. Les nouveaux devis prennent celle-ci.</p></div>`}
     <div class="modal-actions" style="flex-wrap:wrap">
       <button class="btn-primary" data-action="catedit-save" data-kind="${kind}" data-idx="${isNew?-1:m.idx}">Enregistrer</button>
       ${!isNew?`<button class="btn-ghost" data-action="catedit-del" data-kind="${kind}" data-idx="${m.idx}">Supprimer</button>`:""}
@@ -6683,6 +6700,11 @@ document.addEventListener("DOMContentLoaded", ()=>{
       render();
       return;
     }
+    if(action==="cat-photo-remove"){
+      const list = t.dataset.kind==="cat" ? SERVICE_CATALOG : MATERIEL_CATALOG, it = list[parseInt(t.dataset.idx,10)];
+      if(it){ delete it.photo; saveCustom(); render(); }
+      return;
+    }
     if(action==="line-photo-remove"){
       if(t.dataset.scope==="wz") wzFlush(); else saveDevisLinesFromDOM();
       const l = linePhotoTarget(t.dataset.scope, t.dataset.id, parseInt(t.dataset.idx,10));
@@ -7187,13 +7209,25 @@ document.addEventListener("DOMContentLoaded", ()=>{
       reformulatePoint(pointName, p);
       render();
     }
+    if(e.target.classList && e.target.classList.contains("cat-photo-in")){
+      const f = e.target.files && e.target.files[0]; if(!f) return;
+      const t = e.target.dataset, list = t.kind==="cat" ? SERVICE_CATALOG : MATERIEL_CATALOG, it = list[parseInt(t.idx,10)];
+      if(!it) return;
+      linePhotoShrink(f).then(url=>{ if(url){ it.photo = {dataUrl:url}; saveCustom(); render(); showToast("Photo enregistrée."); } });
+      return;
+    }
     if(e.target.classList && e.target.classList.contains("line-photo-in")){
       const f = e.target.files && e.target.files[0]; if(!f) return;
       const t = e.target.dataset;
       if(t.scope==="wz") wzFlush(); else saveDevisLinesFromDOM();
       linePhotoShrink(f).then(url=>{
         const l = linePhotoTarget(t.scope, t.id, parseInt(t.idx,10));
-        if(l && url){ l.photo = {name:f.name, dataUrl:url}; render(); }
+        if(l && url){
+          l.photo = {name:f.name, dataUrl:url};
+          const it = l.code && canEditMod("prestations") ? catalogFind(l.code) : null;
+          if(it){ it.photo = {dataUrl:url}; saveCustom(); showToast("Photo enregistrée : elle sera reprise dans vos prochains devis pour « "+it.label+" »."); }
+          else render();
+        }
       });
       return;
     }
