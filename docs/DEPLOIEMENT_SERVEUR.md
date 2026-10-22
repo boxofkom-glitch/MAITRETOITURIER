@@ -59,3 +59,7 @@ C'est tout. Rechargez `app-maitretoiturier.fr` (Ctrl+F5) : la page d'accueil vou
 - **Débogage** : si `/api/health` renvoie `"configured":false` après avoir suivi les étapes
   ci-dessus, revérifiez que la base a bien été connectée à l'environnement **Production** (pas
   seulement Preview) et redéployez.
+
+## Signature à distance des devis
+
+La fonction `api/sign.js` permet au client de signer un devis depuis son téléphone. Dans la fiche d'un devis (brouillon ou envoyé), le bouton « Faire signer à distance » crée un lien à usage unique, valable 30 jours (`/?sign=…`), à envoyer par WhatsApp, SMS ou e-mail. Le client lit le devis et les CGV, dessine sa signature et valide. À l'ouverture suivante de l'application (ou au prochain rafraîchissement automatique), le devis passe en « Accepté » et la signature apparaît dans le cadre « Bon pour accord » du PDF. Aucune configuration supplémentaire : la fonction utilise la même base Redis que le reste.

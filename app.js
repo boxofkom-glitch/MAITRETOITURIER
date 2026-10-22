@@ -663,6 +663,8 @@ const DEFAULT_MATERIEL_LIB = [
   {id:"velux", label:"Pose de fenêtre de toit", items:["Fenêtre de toit + kit d’habillage","Raccord d’étanchéité (solin)","Chevrons et liteaux","Scie sabre","Visseuse et vis","Isolant et pare-vapeur","Échelle ou nacelle","Harnais et EPI"]},
   {id:"controle", label:"Visite de contrôle / diagnostic", items:["Échelle homologuée","Harnais et casque","Smartphone ou tablette (rapport + photos)","Drone (si besoin)","Lampe frontale","Mètre laser","Jumelles"]}
 ];
+const DEFAULT_CGV = "Article 1 — Objet et champ d’application\nLes présentes conditions générales de vente s’appliquent à tous les devis acceptés et à tous les travaux de couverture, zinguerie, rénovation, entretien et nettoyage de toiture réalisés par l’entreprise pour le client. La signature du devis vaut acceptation pleine et entière des présentes conditions.\n\nArticle 2 — Devis et commande\nLe devis est gratuit, sauf mention contraire. Il est valable pendant la durée indiquée sur le document. Le contrat est conclu à la signature du devis par le client, précédée de la mention « Bon pour accord ». Toute modification demandée par le client après acceptation fait l’objet d’un avenant ou d’un nouveau devis signé avant exécution.\n\nArticle 3 — Prix\nLes prix sont indiqués en euros, hors taxes et toutes taxes comprises, avec le taux de TVA applicable. Ils sont fermes pour la durée de validité du devis. Les travaux supplémentaires, ou rendus nécessaires par un défaut caché constaté en cours de chantier (charpente dégradée, support non conforme, présence d’amiante…), ne sont pas compris dans le prix initial. Ils sont chiffrés et soumis à l’accord écrit du client avant leur réalisation.\n\nArticle 4 — Modalités de paiement\nLe règlement s’effectue selon l’échéancier indiqué sur le devis : acompte à la signature, éventuels paiements intermédiaires, puis solde à la fin des travaux, à réception de la facture. Les modes de paiement acceptés sont précisés sur le devis. Pour un contrat conclu à distance ou hors établissement, aucun paiement ne peut être exigé avant l’expiration d’un délai de sept jours suivant la conclusion du contrat.\n\nArticle 5 — Retard de paiement\nToute somme non payée à l’échéance porte intérêt de plein droit, au taux de trois fois le taux d’intérêt légal. Lorsque le client est un professionnel, une indemnité forfaitaire de 40 € pour frais de recouvrement est en outre due, sans préjudice d’une indemnisation complémentaire sur justificatifs. En cas de défaut de paiement, l’entreprise peut suspendre les travaux après mise en demeure restée sans effet.\n\nArticle 6 — Délais d’exécution\nLes dates de début et de durée des travaux sont données à titre indicatif. Elles dépendent notamment des conditions météorologiques, de la disponibilité des matériaux et de l’accessibilité du chantier. Un retard dû à ces causes, ou à un événement indépendant de la volonté de l’entreprise, ne donne lieu ni à pénalité ni à dommages et intérêts.\n\nArticle 7 — Obligations du client\nLe client garantit l’accès au chantier et aux points d’eau et d’électricité nécessaires, la libre disposition des lieux, et informe l’entreprise de tout élément pouvant influer sur les travaux (réseaux, présence d’amiante, servitudes, règles d’urbanisme). Les autorisations administratives nécessaires (déclaration préalable, permis, accord de copropriété) sont à la charge du client, sauf mention contraire au devis.\n\nArticle 8 — Réception des travaux\nLa réception intervient à la fin des travaux, en présence du client. Elle donne lieu à un procès-verbal signé, avec ou sans réserves. Le client dispose d’un délai pour lever ses réserves, qui sont reprises par l’entreprise dans un délai raisonnable. Le paiement du solde est exigible à la réception, sous réserve des sommes que le client peut légitimement retenir au titre des réserves formulées.\n\nArticle 9 — Garanties\nLes travaux sont couverts par les garanties légales : garantie de parfait achèvement (1 an), garantie de bon fonctionnement des éléments d’équipement dissociables (2 ans) et garantie décennale (10 ans) pour les désordres qui compromettent la solidité de l’ouvrage ou le rendent impropre à sa destination. L’entreprise est assurée en responsabilité civile et décennale ; les références de l’assureur et de la police figurent sur les documents contractuels. Les garanties ne couvrent pas les dommages dus à un défaut d’entretien, à une intervention d’un tiers ou à un événement exceptionnel (tempête, grêle, incendie).\n\nArticle 10 — Droit de rétractation\nPour un contrat conclu hors établissement (à domicile, à la suite d’un démarchage) ou à distance, le client consommateur dispose d’un délai de 14 jours à compter de la signature du devis pour se rétracter, sans avoir à justifier de motif, en adressant à l’entreprise une demande écrite non équivoque ou le formulaire de rétractation. Si le client demande expressément que les travaux commencent avant la fin de ce délai, il doit le faire par écrit sur papier ou sur support durable. S’il exerce ensuite son droit de rétractation, il paie à l’entreprise un montant proportionnel aux travaux déjà réalisés. Ce droit ne s’applique pas aux travaux d’entretien ou de réparation demandés expressément et en urgence par le client pour répondre à une situation d’urgence.\n\nArticle 11 — Résiliation\nEn cas de manquement grave de l’une des parties à ses obligations, non réparé dans un délai de 15 jours après mise en demeure par lettre recommandée, l’autre partie peut résilier le contrat. Les travaux réalisés jusqu’à la résiliation restent dus.\n\nArticle 12 — Données personnelles\nLes données personnelles du client sont utilisées pour l’établissement du devis, l’exécution du contrat, la facturation et le suivi de la relation commerciale. Elles ne sont pas cédées à des tiers, sauf obligation légale ou sous-traitants nécessaires à la prestation. Le client dispose d’un droit d’accès, de rectification, d’effacement et d’opposition, qu’il peut exercer en écrivant à l’entreprise.\n\nArticle 13 — Médiation et litiges\nEn cas de litige, le client consommateur peut recourir gratuitement à un médiateur de la consommation, après avoir d’abord adressé une réclamation écrite à l’entreprise. Les coordonnées du médiateur sont communiquées sur simple demande. À défaut d’accord amiable, le droit français est applicable et les tribunaux compétents sont ceux du lieu du domicile du défendeur ou du lieu d’exécution des travaux.";
+function companyCgv(){ return String(SETTINGS.company.cgv||"").trim() ? SETTINGS.company.cgv : DEFAULT_CGV; }
 function defaultSettings(){
   return {
     access: JSON.parse(JSON.stringify(DEFAULT_ACCESS)),
@@ -1051,6 +1053,7 @@ function render(){
   const savedScrollTop = oldContent ? oldContent.scrollTop : 0;
   const savedScrollY = window.scrollY;
   app.innerHTML = buildApp();
+  if(SIGN.token){ signInitPad(); return; }
   fitPointPages();
   if(document.fonts && document.fonts.status!=="loaded") document.fonts.ready.then(()=>fitPointPages());
   numberPdfPages();
@@ -1549,10 +1552,39 @@ function docTotalsHtml(lines){
 }
 
 // Ligne du PDF : le titre en gras, la désignation (détail) en dessous.
+// Photo facultative sur une ligne de devis (ex. une zinguerie sur une cheminée) : réduite, jointe au devis PDF.
+function linePhotoUi(scope, i, l, id){
+  const has = l.photo && l.photo.dataUrl;
+  return `<div class="line-photo">${has?`<img src="${l.photo.dataUrl}" alt="Photo de la ligne"><button type="button" class="btn-ghost btn-sm" data-action="line-photo-remove" data-scope="${scope}" data-idx="${i}" data-id="${esc(id||"")}">Retirer la photo</button>`:""}<label class="btn-ghost btn-sm line-photo-btn">${has?"Changer la photo":"Ajouter une photo"}<input type="file" accept="image/*" class="line-photo-in" data-scope="${scope}" data-idx="${i}" data-id="${esc(id||"")}" hidden></label></div>`;
+}
+function linePhotoShrink(file){
+  return new Promise(res=>{
+    const r = new FileReader();
+    r.onerror = ()=>res(null);
+    r.onload = ()=>{
+      const im = new Image();
+      im.onerror = ()=>res(null);
+      im.onload = ()=>{
+        const max = 900, k = Math.min(1, max/Math.max(im.naturalWidth, im.naturalHeight));
+        const c = document.createElement("canvas"); c.width = Math.round(im.naturalWidth*k); c.height = Math.round(im.naturalHeight*k);
+        c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+        res(c.toDataURL("image/jpeg", .78));
+      };
+      im.src = r.result;
+    };
+    r.readAsDataURL(file);
+  });
+}
+function linePhotoTarget(scope, id, idx){
+  if(scope==="wz"){ const w = state.wizard; return w && w.data.lignes[idx]; }
+  const d = byId(id), dv = d && latestDevis(d);
+  return dv && dv.lignes[idx];
+}
 function docLineCell(l){
   const t = l.titre ? `<b class="doc2-rt">${esc(l.titre)}</b>` : "";
   const dsg = l.designation ? `<div class="${l.titre?"doc2-rd":"doc2-rd0"}">${esc(l.designation)}</div>` : "";
-  return (t||dsg) ? t+dsg : "—";
+  const ph = l.photo && l.photo.dataUrl ? `<img class="doc2-ph" src="${l.photo.dataUrl}" alt="">` : "";
+  return (t||dsg||ph) ? t+dsg+ph : "—";
 }
 function docRowsFromDevis(dv){
   return dv.lignes.map(l=>`<tr><td>${docLineCell(l)}</td><td class="r">${l.qte}</td><td class="r">${fmtEuros(l.prixUnitaireCt)}</td><td class="r">${l.tvaPct} %</td><td class="r">${fmtEuros(lineTotalHTct(l))}</td></tr>`);
@@ -1642,7 +1674,8 @@ function docEndHtml(o){
   const rib = co.iban ? `<div class="doc2-rib"><b>Règlement par virement</b><br>IBAN : ${esc(co.iban)}${co.bic?" · BIC : "+esc(co.bic):""}${co.titulaire?"<br>Titulaire : "+esc(co.titulaire):""}</div>` : "";
   const conditions = o.bannerText ? `<div class="doc2-conditions"><div class="doc2-cond-label">${iconSvg("doc",14)}${esc(o.bannerLabel||"Conditions")}</div><p>${o.bannerText}</p>${rib}</div>` : "";
   const reserves = (o.reserves||"").trim() ? `<div class="doc2-reserves"><div class="doc2-cond-label">${iconSvg("doc",14)}Conditions particulières / réserves</div><p>${esc(o.reserves.trim()).replace(/\n/g,"<br>")}</p></div>` : "";
-  return `<div class="doc2-end"><div class="doc2-bottom">${conditions}<div class="doc2-totals">${o.totals}</div></div>${reserves}</div>`;
+  const sign = o.signature ? `<div class="doc2-sign"><div class="doc2-sign-box"><div class="doc2-sign-t">Bon pour accord</div><div class="doc2-sign-h">Date, mention « Bon pour accord » et signature du client</div>${o.signatureImg?`<img class="doc2-sign-img" src="${esc(o.signatureImg)}" alt="Signature du client">`:""}</div><div class="doc2-sign-box"><div class="doc2-sign-t">${esc(co.nom||"L’entreprise")}</div><div class="doc2-sign-h">Cachet et signature</div></div></div>` : "";
+  return `<div class="doc2-end"><div class="doc2-bottom">${conditions}<div class="doc2-totals">${o.totals}</div></div>${reserves}${sign}</div>`;
 }
 function docCgvParas(cgv){
   return String(cgv||"").split(/\r?\n/).map(s=>s.trim()).filter(Boolean)
@@ -1757,7 +1790,9 @@ function renderDevisDoc(d, dv){
     bannerText: `${esc(paiementSummary(dv))} Devis valable ${valid} jours. Pour accepter, il suffit de nous renvoyer ce document signé, précédé de la mention « Bon pour accord ».`,
     totals: docTotalsHtml(totals),
     reserves: dv.reserves || "",
-    cgv: SETTINGS.company.cgv || ""
+    signature: true,
+    signatureImg: dv.signature && dv.signature.dataUrl || "",
+    cgv: companyCgv()
   });
 }
 
@@ -1904,7 +1939,7 @@ const FLT_PERIODS = [["7","7 derniers jours"],["30","30 derniers jours"],["90","
 function fltBar(key, o){
   const f = fltState(key);
   const sels = (o.selects||[]).map(s=>`<select class="flt-sel ${f[s.field]?"on":""}" data-flt="${key}|${s.field}" aria-label="${esc(s.label)}"><option value="">${esc(s.label)}</option>${s.options.map(([v,l])=>`<option value="${esc(v)}" ${f[s.field]===v?"selected":""}>${esc(l)}</option>`).join("")}</select>`).join("");
-  const sort = o.sort ? `<select class="flt-sel flt-sort" data-flt="${key}|sort" aria-label="Trier"><option value="">Tri : par défaut</option>${o.sort.map(([v,l])=>`<option value="${esc(v)}" ${f.sort===v?"selected":""}>${esc(l)}</option>`).join("")}</select>` : "";
+  const sort = o.sort ? `<select class="flt-sel flt-sort" data-flt="${key}|sort" aria-label="Trier"><option value="">Tri : date, puis n°</option>${o.sort.map(([v,l])=>`<option value="${esc(v)}" ${f.sort===v?"selected":""}>${esc(l)}</option>`).join("")}</select>` : "";
   const active = fltActive(key) || f.sort;
   return `<div class="flt-bar">
     <div class="flt-search"><span class="flt-ic">⌕</span><input type="search" class="flt-q" data-flt="${key}|q" value="${esc(f.q||"")}" placeholder="${esc(o.placeholder||"Rechercher…")}" autocomplete="off"></div>
@@ -1990,8 +2025,11 @@ function renderDocuments(only){
       return true;
     });
     const dt = x=>{ const v = parseShortFrDate(x.dv.dateEnvoi||x.dv.dateCreation); return v ? v.getTime() : 0; };
-    if(f.sort==="recent") list = list.slice().sort((a,b)=>dt(b)-dt(a));
-    else if(f.sort==="montant") list = list.slice().sort((a,b)=>devisTotals(b.dv).ttcCt-devisTotals(a.dv).ttcCt);
+    const numCmp = (a,b)=>String(a||"").localeCompare(String(b||""),"fr",{numeric:true});
+    if(f.sort==="montant") list = list.slice().sort((a,b)=>devisTotals(b.dv).ttcCt-devisTotals(a.dv).ttcCt);
+    else if(f.sort==="ancien") list = list.slice().sort((a,b)=>dt(a)-dt(b)||numCmp(a.dv.numero,b.dv.numero));
+    else if(f.sort==="numero") list = list.slice().sort((a,b)=>numCmp(b.dv.numero,a.dv.numero));
+    else list = list.slice().sort((a,b)=>dt(b)-dt(a)||numCmp(b.dv.numero,a.dv.numero));
     return `<div class="card">
       <div class="card-header"><h3>Devis</h3><span class="badge gray">${devis.length}</span></div>
       ${fltBar("devis", {placeholder:"Rechercher un client, un n° de devis, un objet, un montant…", shown:list.length, total:devis.length,
@@ -2000,7 +2038,7 @@ function renderDocuments(only){
           {field:"periode", label:"Toutes les dates", options:FLT_PERIODS},
           {field:"montant", label:"Tous les montants", options:[["lt1","Moins de 1 000 €"],["1-5","1 000 à 5 000 €"],["gt5","Plus de 5 000 €"]]},
           {field:"equipe", label:"Toute l’équipe", options:staff.map(x=>[x,x])}],
-        sort:[["recent","Plus récents"],["montant","Montant décroissant"]]})}
+        sort:[["recent","Plus récents"],["ancien","Plus anciens"],["numero","N° de devis (décroissant)"],["montant","Montant décroissant"]]})}
       ${list.length ? list.map(x=>renderDocRow("devis", x.d, x.dv)).join("") : `<div class="empty-note">${devis.length ? "Aucun devis ne correspond à cette recherche." : "Aucun devis pour l’instant. Créez-en un avec « + Créer un devis »."}</div>`}
     </div>`; })() : ""}
   ${only!=="devis" && canView("factures") ? (()=>{
@@ -2020,8 +2058,11 @@ function renderDocuments(only){
       return true;
     });
     const dt = x=>{ const v = parseShortFrDate(x.f.date); return v ? v.getTime() : 0; };
-    if(f.sort==="recent") list = list.slice().sort((a,b)=>dt(b)-dt(a));
-    else if(f.sort==="montant") list = list.slice().sort((a,b)=>b.f.montantTtcCt-a.f.montantTtcCt);
+    const numCmp = (a,b)=>String(a||"").localeCompare(String(b||""),"fr",{numeric:true});
+    if(f.sort==="montant") list = list.slice().sort((a,b)=>b.f.montantTtcCt-a.f.montantTtcCt);
+    else if(f.sort==="ancien") list = list.slice().sort((a,b)=>dt(a)-dt(b)||numCmp(a.f.numero,b.f.numero));
+    else if(f.sort==="numero") list = list.slice().sort((a,b)=>numCmp(b.f.numero,a.f.numero));
+    else list = list.slice().sort((a,b)=>dt(b)-dt(a)||numCmp(b.f.numero,a.f.numero));
     return `<div class="card">
       <div class="card-header"><h3>Factures</h3><span class="badge gray">${factures.length}</span></div>
       ${fltBar("factures", {placeholder:"Rechercher un client, un n° de facture, un montant…", shown:list.length, total:factures.length,
@@ -2030,7 +2071,7 @@ function renderDocuments(only){
           {field:"echeance", label:"Toutes les échéances", options:[["retard","En retard"],["7j","À échéance sous 7 jours"]]},
           {field:"periode", label:"Toutes les dates", options:FLT_PERIODS},
           {field:"equipe", label:"Toute l’équipe", options:staff.map(x=>[x,x])}],
-        sort:[["recent","Plus récentes"],["montant","Montant décroissant"]]})}
+        sort:[["recent","Plus récentes"],["ancien","Plus anciennes"],["numero","N° de facture (décroissant)"],["montant","Montant décroissant"]]})}
       ${list.length ? list.map(x=>renderDocRow("facture", x.d, x.f)).join("") : `<div class="empty-note">${factures.length ? "Aucune facture ne correspond à cette recherche." : "Aucune facture pour l’instant."}</div>`}
     </div>`; })() : ""}`;
 }
@@ -2486,6 +2527,7 @@ return `<p class="wz-intro">Ajoutez les prestations et le matériel : chaque lig
           <div class="wz-desc">
             <input class="wz-line" data-idx="${i}" data-field="titre" value="${esc(l.titre||"")}" placeholder="Titre de la ligne (ex. Dépose de la couverture)">
             <textarea class="wz-line" data-idx="${i}" data-field="designation" rows="2" placeholder="Désignation : le détail s’affiche sous le titre">${esc(l.designation)}</textarea>
+            ${linePhotoUi("wz", i, l, "")}
           </div>
           <div class="wz-qte-unit">
             <input class="wz-line" data-idx="${i}" data-field="qte" type="number" min="0" step="1" value="${l.qte}">
@@ -3467,6 +3509,7 @@ async function srvPull(){
   if(!SRV.on || !SRV.user || SRV.pushing || document.hidden) return;
   try{
     if(await srvLoad(false) && srvCanRender()) render();
+    if(await remoteSignCheck() && srvCanRender()) render();
   }catch(e){}
 }
 function srvStartPolling(){
@@ -3801,8 +3844,8 @@ function paramEntreprise(){
       <div class="form-field"><label>Validité par défaut d’un devis</label><select id="co_devisValidite">${[15,30,60,90].map(n=>`<option value="${n}" ${c.devisValidite===n?"selected":""}>${n} jours</option>`).join("")}</select></div>
       <div class="form-field"><label>Acompte par défaut</label><select id="co_acomptePct">${[20,30,40,50].map(n=>`<option value="${n}" ${c.acomptePct===n?"selected":""}>${n} %</option>`).join("")}</select></div>
     </div>
-    <div class="form-field"><label>Conditions générales de vente (ajoutées en dernière page de chaque devis)</label>
-      <textarea id="co_cgv" rows="8" style="width:100%;font-family:inherit;line-height:1.4" placeholder="Collez ici vos conditions générales de vente. Laissez vide pour ne pas ajouter de page de CGV.">${esc(c.cgv||"")}</textarea></div>
+    <div class="form-field"><label>Conditions générales de vente (ajoutées en dernières pages de chaque devis ; modèle standard si vide)</label>
+      <textarea id="co_cgv" rows="8" style="width:100%;font-family:inherit;line-height:1.4" placeholder="Laissez vide pour utiliser les conditions générales de vente standard, ou collez ici les vôtres.">${esc(c.cgv||"")}</textarea></div>
     <div class="form-field"><label>Mentions / réserves par défaut (reprises sur chaque nouveau devis)</label>
       <textarea id="co_reservesDefaut" rows="3" style="width:100%;font-family:inherit;line-height:1.4" placeholder="Ex. Les travaux supplémentaires non prévus au devis feront l’objet d’un avenant.">${esc(c.reservesDefaut||"")}</textarea></div>
     <button class="btn-primary btn-sm" data-action="company-save">Enregistrer</button>
@@ -3835,7 +3878,139 @@ async function acceptRequest(rid){
   openMailSend("acces_accepte", {nom:r.nom.split(" ")[0], role:ROLES[role].label, lien:siteBase()}, r.email, r.telephone);
 }
 
+// ---------- Signature à distance (le client signe sur son téléphone) ----------
+function signSummary(d, dv){
+  const t = devisTotals(dv), co = SETTINGS.company||{};
+  return {
+    entreprise: co.nom||"Maître Toiturier", client: d.client, numero: dv.numero, objet: dv.objet||d.motif||"",
+    date: dv.dateEnvoi||dv.dateCreation||todayShort(), validite: (dv.validite||30)+" jours", paiement: paiementSummary(dv),
+    cgv: companyCgv(), reserves: dv.reserves||"",
+    totaux: {ht:fmtEuros(t.htCt), tva:fmtEuros(t.tvaCt), ttc:fmtEuros(t.ttcCt)},
+    lignes: dv.lignes.map(l=>({titre:l.titre||"", designation:l.designation||"", qte:String(l.qte), pu:fmtEuros(l.prixUnitaireCt), tva:l.tvaPct+" %", total:fmtEuros(lineTotalHTct(l))}))
+  };
+}
+function signLinkOf(token){ return siteBase()+"?sign="+token; }
+async function remoteSignOpen(d, dv){
+  if(!SRV.on){ showToast("La signature à distance fonctionne avec le serveur connecté (pas en mode démo)."); return; }
+  try{
+    if(!dv.signToken){
+      const r = await srvApi("sign", "POST", {action:"create", dossierId:d.id, devisId:dv.id, summary:signSummary(d, dv)});
+      dv.signToken = r.token;
+      if(dv.statut==="Brouillon"){ dv.statut = "Envoyé"; dv.dateEnvoi = dv.dateEnvoi || todayShort(); }
+      stampHist(d, "Lien de signature à distance créé pour le devis "+dv.numero+".");
+      srvSchedule();
+    }
+    state.modal = {type:"signlink", id:d.id, devisId:dv.id};
+    render();
+  }catch(e){ showToast(e.message); }
+}
+function modalSignLink(m){
+  const d = byId(m.id), dv = d && findDevis(d, m.devisId);
+  if(!dv || !dv.signToken) return "";
+  const link = signLinkOf(dv.signToken);
+  const msg = "Bonjour "+String(d.client).split(" ")[0]+", voici votre devis "+dv.numero+" à signer en ligne : "+link;
+  return modalWrap("Signature à distance", `
+    <p style="color:var(--muted);font-size:13px">Le client lit le devis, dessine sa signature au doigt et valide. Faites-la signer maintenant sur cet appareil s’il est devant vous, ou envoyez-lui ce lien (${esc(d.client)}) pour qu’il signe sur son téléphone. Le devis passe alors automatiquement en « Accepté ».</p>
+    <input type="text" id="signLinkInput" value="${esc(link)}" readonly style="width:100%;margin-top:8px">
+    <div class="modal-actions" style="flex-wrap:wrap">
+      <a class="btn-primary" target="_blank" rel="noopener" href="${esc(link)}">Signer maintenant sur cet appareil</a>
+      <button class="btn-secondary" data-action="copy-sign-link">Copier le lien</button>
+      <a class="btn-secondary" target="_blank" rel="noopener" href="https://wa.me/${esc(String(d.telephone||"").replace(/\D/g,"").replace(/^0/,"33"))}?text=${encodeURIComponent(msg)}">WhatsApp</a>
+      <a class="btn-secondary" href="sms:${esc(String(d.telephone||"").replace(/\s/g,""))}?&body=${encodeURIComponent(msg)}">SMS</a>
+      <a class="btn-secondary" href="mailto:${esc(d.email||"")}?subject=${encodeURIComponent("Votre devis "+dv.numero)}&body=${encodeURIComponent(msg)}">E-mail</a>
+      <button class="btn-ghost" data-action="modal-close">Fermer</button>
+    </div>
+    <p class="form-help" style="margin-top:8px">Le lien est valable 30 jours et ne peut servir qu’une fois.</p>`);
+}
+// Vérifie auprès du serveur si un client a signé : le devis est alors marqué gagné, signature jointe.
+async function remoteSignCheck(){
+  if(!SRV.on || !SRV.user) return false;
+  let changed = false;
+  for(const d of DOSSIERS){
+    for(const dv of (d.devis||[])){
+      if(!dv.signToken || dv.statut==="Accepté" || dv.statut==="Refusé") continue;
+      try{
+        const r = await srvApi("sign?action=status&token="+dv.signToken);
+        if(r.status==="signed" && r.image){
+          dv.signature = {dataUrl:r.image, nom:r.nom, date:new Date(r.signedAt).toLocaleString("fr-FR"), distance:true};
+          stampHist(d, "Devis "+dv.numero+" signé à distance par "+r.nom+".");
+          winDevis(d, dv.id);
+          changed = true;
+        }
+      }catch(e){}
+    }
+  }
+  if(changed){ srvSchedule(); showToast("Un client vient de signer son devis."); }
+  return changed;
+}
+
+// ---- page publique de signature (lien ?sign=…) ----
+const SIGN = {token:null, data:null, error:"", done:false, busy:false, drawn:false};
+function signToken(){ try{ const t = new URLSearchParams(location.search).get("sign"); return /^[a-f0-9]{32,64}$/.test(t||"") ? t : null; }catch(e){ return null; } }
+async function signLoad(){
+  try{
+    const r = await fetch("/api/sign?token="+SIGN.token);
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok) SIGN.error = j.error || "Impossible de charger le devis.";
+    else { SIGN.data = j; SIGN.done = j.status==="signed"; }
+  }catch(e){ SIGN.error = "Connexion impossible. Vérifiez votre réseau et réessayez."; }
+  render();
+}
+function buildSign(){
+  const wrap = inner=>`<div class="sign-page"><div class="sign-card">${inner}</div></div>`;
+  if(SIGN.error) return wrap(`<h2>Devis indisponible</h2><p class="sign-err">${esc(SIGN.error)}</p>`);
+  const j = SIGN.data;
+  if(!j) return wrap(`<p>Chargement du devis…</p>`);
+  const s = j.summary || {};
+  if(SIGN.done) return wrap(`<h2>Merci${j.nom?", "+esc(j.nom):""}</h2><p>Votre devis ${esc(s.numero)} est signé. ${esc(s.entreprise)} reçoit votre accord et revient vers vous pour la suite.</p>`);
+  return wrap(`
+    <div class="sign-brand">${esc(s.entreprise)}</div>
+    <h2>Devis ${esc(s.numero)}</h2>
+    <p class="sign-meta">Pour ${esc(s.client)} · ${esc(s.date)} · valable ${esc(s.validite)}</p>
+    ${s.objet?`<p><b>Objet :</b> ${esc(s.objet)}</p>`:""}
+    <div class="sign-lines">${(s.lignes||[]).map(l=>`<div class="sign-line"><div class="sign-lt">${l.titre?`<b>${esc(l.titre)}</b>`:""}${l.designation?`<div>${esc(l.designation)}</div>`:""}</div><div class="sign-lp">${esc(l.qte)} × ${esc(l.pu)} · TVA ${esc(l.tva)}<br><b>${esc(l.total)}</b> HT</div></div>`).join("")}</div>
+    <div class="sign-tot"><span>Total HT ${esc(s.totaux.ht)}</span><span>TVA ${esc(s.totaux.tva)}</span><b>Total TTC ${esc(s.totaux.ttc)}</b></div>
+    <p class="sign-meta">${esc(s.paiement)}</p>
+    ${s.reserves?`<p class="sign-meta"><b>Conditions particulières :</b> ${esc(s.reserves)}</p>`:""}
+    ${s.cgv?`<details class="sign-cgv"><summary>Conditions générales de vente</summary><div>${esc(s.cgv).replace(/\n\n/g,"<br><br>").replace(/\n/g,"<br>")}</div></details>`:""}
+    <label class="sign-lbl" for="signNom">Votre nom et prénom</label>
+    <input type="text" id="signNom" autocomplete="name" value="${esc(s.client)}">
+    <label class="sign-lbl">Signature (au doigt dans le cadre)</label>
+    <div class="sign-padwrap"><canvas id="signPad" width="600" height="220"></canvas><button type="button" class="btn-ghost btn-sm" data-action="sign-clear">Effacer</button></div>
+    <label class="sign-check"><input type="checkbox" id="signOk"> Bon pour accord : j’ai lu ce devis et les conditions générales de vente, et je les accepte.</label>
+    <p class="sign-err" id="signMsg"></p>
+    <button class="btn-primary sign-go" data-action="sign-submit" ${SIGN.busy?"disabled":""}>${SIGN.busy?"Envoi…":"Signer le devis"}</button>`);
+}
+function signInitPad(){
+  const c = document.getElementById("signPad");
+  if(!c || c.dataset.ready) return;
+  c.dataset.ready = "1";
+  const g = c.getContext("2d"); g.lineWidth = 3; g.lineCap = "round"; g.lineJoin = "round"; g.strokeStyle = "#111";
+  let down = false;
+  const pos = e=>{ const r = c.getBoundingClientRect(); return [(e.clientX-r.left)*c.width/r.width, (e.clientY-r.top)*c.height/r.height]; };
+  c.addEventListener("pointerdown", e=>{ down = true; c.setPointerCapture(e.pointerId); const [x,y] = pos(e); g.beginPath(); g.moveTo(x,y); g.lineTo(x+.1,y+.1); g.stroke(); SIGN.drawn = true; e.preventDefault(); });
+  c.addEventListener("pointermove", e=>{ if(!down) return; const [x,y] = pos(e); g.lineTo(x,y); g.stroke(); e.preventDefault(); });
+  ["pointerup","pointercancel"].forEach(ev=>c.addEventListener(ev, ()=>{ down = false; }));
+}
+async function signSubmit(){
+  const msg = document.getElementById("signMsg"), c = document.getElementById("signPad");
+  const nom = (document.getElementById("signNom").value||"").trim();
+  if(nom.length<2){ msg.textContent = "Indiquez votre nom."; return; }
+  if(!SIGN.drawn){ msg.textContent = "Dessinez votre signature dans le cadre."; return; }
+  if(!document.getElementById("signOk").checked){ msg.textContent = "Cochez la case « Bon pour accord »."; return; }
+  SIGN.busy = true; msg.textContent = "";
+  const btn = document.querySelector(".sign-go"); if(btn){ btn.disabled = true; btn.textContent = "Envoi…"; }
+  try{
+    const r = await fetch("/api/sign", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({action:"submit", token:SIGN.token, nom, image:c.toDataURL("image/png")})});
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(j.error || "Envoi impossible, réessayez.");
+    SIGN.done = true; SIGN.data.nom = nom;
+  }catch(e){ SIGN.busy = false; render(); const m2 = document.getElementById("signMsg"); if(m2) m2.textContent = e.message; return; }
+  SIGN.busy = false; render();
+}
+
 function buildApp(){
+  if(SIGN.token) return buildSign();
   if(state.appStage==="splash") return buildSplash();
   if(state.appStage==="login") return buildLogin();
   if(state.appStage==="loading") return buildLoading();
@@ -4150,7 +4325,7 @@ function filteredDossiers(){
     if(f.sort==="client") return a.client.localeCompare(b.client,"fr");
     if(f.sort==="montant") return dossierKpis(b).valeur - dossierKpis(a).valeur;
     if(f.sort==="visite"){ const va = parseShortFrDate(a.visiteDate), vb = parseShortFrDate(b.visiteDate); return (va?va.getTime():Infinity)-(vb?vb.getTime():Infinity); }
-    return 0;
+    return String(b.id||"").localeCompare(String(a.id||""),"fr",{numeric:true});
   });
 }
 function renderPager(total, page){
@@ -4180,7 +4355,7 @@ function renderDossiersList(){
     <select data-dl="etape"><option value="">Toutes les étapes</option>${PROCESS_STAGES.map(o=>`<option ${f.etape===o?"selected":""}>${o}</option>`).join("")}</select>
     <select data-dl="devis"><option value="">Devis : tous</option><option value="avec" ${f.devis==="avec"?"selected":""}>Avec devis</option><option value="sans" ${f.devis==="sans"?"selected":""}>Sans devis</option><option value="impaye" ${f.devis==="impaye"?"selected":""}>À encaisser</option></select>
     <select data-dl="ville"><option value="">Toutes les villes</option>${[...new Set(visibleDossiers().map(x=>x.ville).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"fr")).map(o=>`<option ${f.ville===o?"selected":""}>${esc(o)}</option>`).join("")}</select>
-    <select data-dl="sort"><option value="">Tri : par défaut</option><option value="client" ${f.sort==="client"?"selected":""}>Client A → Z</option><option value="montant" ${f.sort==="montant"?"selected":""}>Montant décroissant</option><option value="visite" ${f.sort==="visite"?"selected":""}>Prochaine visite</option></select>
+    <select data-dl="sort"><option value="">Tri : n° de dossier (récents en premier)</option><option value="client" ${f.sort==="client"?"selected":""}>Client A → Z</option><option value="montant" ${f.sort==="montant"?"selected":""}>Montant décroissant</option><option value="visite" ${f.sort==="visite"?"selected":""}>Prochaine visite</option></select>
     ${(f.q||f.stat||f.team||f.prio||f.etape||f.devis||f.ville||f.sort||f.scope==="mine")?`<button class="btn-ghost btn-sm flt-reset" data-action="dl-reset">✕ Effacer les filtres</button>`:""}
   </div>
   <div class="flt-count">${all.length} résultat${all.length>1?"s":""}${all.length!==visibleDossiers().length?` sur ${visibleDossiers().length}`:""}</div>
@@ -5213,7 +5388,7 @@ function renderDossierDevis(d){
             <tbody>
             ${dv.lignes.map((l,i)=>`
               <tr>
-                <td data-label="Titre et désignation">${canEditDv?`<div class="dv-desc"><input type="text" class="devis-line-input" data-idx="${i}" data-field="titre" value="${esc(l.titre||"")}" placeholder="Titre de la ligne" style="font-weight:600"><textarea class="devis-line-input" data-idx="${i}" data-field="designation" rows="2" placeholder="Désignation : le détail s’affiche sous le titre">${esc(l.designation)}</textarea></div>`:`${l.titre?`<b>${esc(l.titre)}</b><br>`:""}${esc(l.designation)}`}</td>
+                <td data-label="Titre et désignation">${canEditDv?`<div class="dv-desc"><input type="text" class="devis-line-input" data-idx="${i}" data-field="titre" value="${esc(l.titre||"")}" placeholder="Titre de la ligne" style="font-weight:600"><textarea class="devis-line-input" data-idx="${i}" data-field="designation" rows="2" placeholder="Désignation : le détail s’affiche sous le titre">${esc(l.designation)}</textarea>${linePhotoUi("dv", i, l, d.id)}</div>`:`${l.titre?`<b>${esc(l.titre)}</b><br>`:""}${esc(l.designation)}${l.photo&&l.photo.dataUrl?`<div class="line-photo"><img src="${l.photo.dataUrl}" alt="Photo de la ligne"></div>`:""}`}</td>
                 <td data-label="Quantité" style="width:64px">${canEditDv?`<input type="number" min="0" step="1" class="devis-line-input" data-idx="${i}" data-field="qte" value="${l.qte}">`:l.qte}</td>
                 <td data-label="Unité" style="width:80px">${canEditDv?`<select class="devis-line-input" data-idx="${i}" data-field="unite">${unitOptionsHtml(l.unite)}</select>`:esc(l.unite||"")}</td>
                 <td data-label="Prix unitaire HT" style="width:100px">${canEditDv?`<input type="number" min="0" step="0.01" class="devis-line-input" data-idx="${i}" data-field="prixUnitaire" value="${(l.prixUnitaireCt/100).toFixed(2)}">`:fmtEuros(l.prixUnitaireCt)}</td>
@@ -5241,6 +5416,7 @@ function renderDossierDevis(d){
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
           ${canEditDv?`<button class="btn-primary btn-sm" data-action="devis-save" data-id="${d.id}">Enregistrer</button>`:""}
           ${dv.statut==="Brouillon" && hasPermission("quote.update")?`<button class="btn-secondary btn-sm" data-action="devis-send" data-id="${d.id}">Marquer comme envoyé</button>`:""}
+          ${(dv.statut==="Brouillon"||dv.statut==="Envoyé") && hasPermission("quote.update")?`<button class="btn-secondary btn-sm" data-action="devis-remote-sign" data-id="${d.id}">${dv.signToken?"Lien de signature à distance":"Faire signer à distance"}</button>`:""}
           ${(dv.statut==="Envoyé"||dv.statut==="Brouillon") && hasPermission("quote.accept")?`<button class="btn-primary btn-sm" data-action="win-devis" data-id="${d.id}" data-doc="${dv.id}">✓ Gagné</button>`:""}${dv.statut==="Envoyé" && hasPermission("quote.update")?`<button class="btn-ghost btn-sm" data-action="devis-reject" data-id="${d.id}" data-doc="${dv.id}">Marquer refusé</button>`:""}
           ${hasPermission("quote.create")?`<button class="btn-ghost btn-sm" data-action="wizard-devis" data-id="${d.id}" data-from="${dv.id}">Dupliquer ce devis</button>`:""}
           <button class="btn-ghost btn-sm" data-action="doc-pdf" data-id="${d.id}" data-kind="devis" data-doc="${dv.id}">Télécharger le PDF</button>
@@ -5972,6 +6148,7 @@ function buildModal(){
   if(m.type==="matlib") return modalMatLib();
   if(m.type==="catedit") return modalCatEdit(m);
   if(m.type==="echedit") return modalEchEdit(m);
+  if(m.type==="signlink") return modalSignLink(m);
   return "";
 }
 
@@ -6110,7 +6287,9 @@ document.addEventListener("DOMContentLoaded", ()=>{
   loadCustom();
   ensurePoints();
   render();
-  srvBoot().then(()=>{ if(!SRV.on) loadPersisted().then(()=>render()); });
+  SIGN.token = signToken();
+  if(SIGN.token){ render(); signLoad(); }
+  else srvBoot().then(()=>{ if(!SRV.on) loadPersisted().then(()=>render()); });
   window.addEventListener("resize", applyPdfScale);
 
   document.getElementById("app").addEventListener("click", (e)=>{
@@ -6504,6 +6683,26 @@ document.addEventListener("DOMContentLoaded", ()=>{
       render();
       return;
     }
+    if(action==="line-photo-remove"){
+      if(t.dataset.scope==="wz") wzFlush(); else saveDevisLinesFromDOM();
+      const l = linePhotoTarget(t.dataset.scope, t.dataset.id, parseInt(t.dataset.idx,10));
+      if(l){ delete l.photo; render(); }
+      return;
+    }
+    if(action==="devis-remote-sign"){
+      saveDevisLinesFromDOM();
+      const d = byId(t.dataset.id), dv = d && latestDevis(d);
+      if(dv) remoteSignOpen(d, dv);
+      return;
+    }
+    if(action==="copy-sign-link"){
+      const inp = document.getElementById("signLinkInput");
+      if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(inp.value).then(()=>showToast("Lien copié.")).catch(()=>{ inp.select(); showToast("Sélectionnez puis copiez le lien."); });
+      else { inp.select(); showToast("Sélectionnez puis copiez le lien."); }
+      return;
+    }
+    if(action==="sign-clear"){ const c = document.getElementById("signPad"); if(c){ c.getContext("2d").clearRect(0,0,c.width,c.height); SIGN.drawn = false; } return; }
+    if(action==="sign-submit"){ signSubmit(); return; }
     if(action==="devis-add-line"){
       saveDevisLinesFromDOM();
       latestDevis(byId(t.dataset.id)).lignes.push(freshDevisLine());
@@ -6987,6 +7186,16 @@ document.addEventListener("DOMContentLoaded", ()=>{
       p.comment = e.target.value;
       reformulatePoint(pointName, p);
       render();
+    }
+    if(e.target.classList && e.target.classList.contains("line-photo-in")){
+      const f = e.target.files && e.target.files[0]; if(!f) return;
+      const t = e.target.dataset;
+      if(t.scope==="wz") wzFlush(); else saveDevisLinesFromDOM();
+      linePhotoShrink(f).then(url=>{
+        const l = linePhotoTarget(t.scope, t.id, parseInt(t.idx,10));
+        if(l && url){ l.photo = {name:f.name, dataUrl:url}; render(); }
+      });
+      return;
     }
     if(e.target.id && e.target.id.startsWith("chPhoto-")){
       const files = Array.from(e.target.files || []);
