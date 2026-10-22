@@ -3910,10 +3910,11 @@ function modalSignLink(m){
   const link = signLinkOf(dv.signToken);
   const msg = "Bonjour "+String(d.client).split(" ")[0]+", voici votre devis "+dv.numero+" à signer en ligne : "+link;
   return modalWrap("Signature à distance", `
-    <p style="color:var(--muted);font-size:13px">Envoyez ce lien à ${esc(d.client)}. Le client lit le devis, dessine sa signature au doigt sur son téléphone et valide. Le devis passe alors automatiquement en « Accepté ».</p>
+    <p style="color:var(--muted);font-size:13px">Le client lit le devis, dessine sa signature au doigt et valide. Faites-la signer maintenant sur cet appareil s’il est devant vous, ou envoyez-lui ce lien (${esc(d.client)}) pour qu’il signe sur son téléphone. Le devis passe alors automatiquement en « Accepté ».</p>
     <input type="text" id="signLinkInput" value="${esc(link)}" readonly style="width:100%;margin-top:8px">
     <div class="modal-actions" style="flex-wrap:wrap">
-      <button class="btn-primary" data-action="copy-sign-link">Copier le lien</button>
+      <a class="btn-primary" target="_blank" rel="noopener" href="${esc(link)}">Signer maintenant sur cet appareil</a>
+      <button class="btn-secondary" data-action="copy-sign-link">Copier le lien</button>
       <a class="btn-secondary" target="_blank" rel="noopener" href="https://wa.me/${esc(String(d.telephone||"").replace(/\D/g,"").replace(/^0/,"33"))}?text=${encodeURIComponent(msg)}">WhatsApp</a>
       <a class="btn-secondary" href="sms:${esc(String(d.telephone||"").replace(/\s/g,""))}?&body=${encodeURIComponent(msg)}">SMS</a>
       <a class="btn-secondary" href="mailto:${esc(d.email||"")}?subject=${encodeURIComponent("Votre devis "+dv.numero)}&body=${encodeURIComponent(msg)}">E-mail</a>
