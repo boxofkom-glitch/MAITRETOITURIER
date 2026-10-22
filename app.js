@@ -1904,7 +1904,7 @@ const FLT_PERIODS = [["7","7 derniers jours"],["30","30 derniers jours"],["90","
 function fltBar(key, o){
   const f = fltState(key);
   const sels = (o.selects||[]).map(s=>`<select class="flt-sel ${f[s.field]?"on":""}" data-flt="${key}|${s.field}" aria-label="${esc(s.label)}"><option value="">${esc(s.label)}</option>${s.options.map(([v,l])=>`<option value="${esc(v)}" ${f[s.field]===v?"selected":""}>${esc(l)}</option>`).join("")}</select>`).join("");
-  const sort = o.sort ? `<select class="flt-sel flt-sort" data-flt="${key}|sort" aria-label="Trier"><option value="">Tri : par défaut</option>${o.sort.map(([v,l])=>`<option value="${esc(v)}" ${f.sort===v?"selected":""}>${esc(l)}</option>`).join("")}</select>` : "";
+  const sort = o.sort ? `<select class="flt-sel flt-sort" data-flt="${key}|sort" aria-label="Trier"><option value="">Tri : date, puis n°</option>${o.sort.map(([v,l])=>`<option value="${esc(v)}" ${f.sort===v?"selected":""}>${esc(l)}</option>`).join("")}</select>` : "";
   const active = fltActive(key) || f.sort;
   return `<div class="flt-bar">
     <div class="flt-search"><span class="flt-ic">⌕</span><input type="search" class="flt-q" data-flt="${key}|q" value="${esc(f.q||"")}" placeholder="${esc(o.placeholder||"Rechercher…")}" autocomplete="off"></div>
@@ -1990,8 +1990,11 @@ function renderDocuments(only){
       return true;
     });
     const dt = x=>{ const v = parseShortFrDate(x.dv.dateEnvoi||x.dv.dateCreation); return v ? v.getTime() : 0; };
-    if(f.sort==="recent") list = list.slice().sort((a,b)=>dt(b)-dt(a));
-    else if(f.sort==="montant") list = list.slice().sort((a,b)=>devisTotals(b.dv).ttcCt-devisTotals(a.dv).ttcCt);
+    const numCmp = (a,b)=>String(a||"").localeCompare(String(b||""),"fr",{numeric:true});
+    if(f.sort==="montant") list = list.slice().sort((a,b)=>devisTotals(b.dv).ttcCt-devisTotals(a.dv).ttcCt);
+    else if(f.sort==="ancien") list = list.slice().sort((a,b)=>dt(a)-dt(b)||numCmp(a.dv.numero,b.dv.numero));
+    else if(f.sort==="numero") list = list.slice().sort((a,b)=>numCmp(b.dv.numero,a.dv.numero));
+    else list = list.slice().sort((a,b)=>dt(b)-dt(a)||numCmp(b.dv.numero,a.dv.numero));
     return `<div class="card">
       <div class="card-header"><h3>Devis</h3><span class="badge gray">${devis.length}</span></div>
       ${fltBar("devis", {placeholder:"Rechercher un client, un n° de devis, un objet, un montant…", shown:list.length, total:devis.length,
@@ -2000,7 +2003,7 @@ function renderDocuments(only){
           {field:"periode", label:"Toutes les dates", options:FLT_PERIODS},
           {field:"montant", label:"Tous les montants", options:[["lt1","Moins de 1 000 €"],["1-5","1 000 à 5 000 €"],["gt5","Plus de 5 000 €"]]},
           {field:"equipe", label:"Toute l’équipe", options:staff.map(x=>[x,x])}],
-        sort:[["recent","Plus récents"],["montant","Montant décroissant"]]})}
+        sort:[["recent","Plus récents"],["ancien","Plus anciens"],["numero","N° de devis (décroissant)"],["montant","Montant décroissant"]]})}
       ${list.length ? list.map(x=>renderDocRow("devis", x.d, x.dv)).join("") : `<div class="empty-note">${devis.length ? "Aucun devis ne correspond à cette recherche." : "Aucun devis pour l’instant. Créez-en un avec « + Créer un devis »."}</div>`}
     </div>`; })() : ""}
   ${only!=="devis" && canView("factures") ? (()=>{
@@ -2020,8 +2023,11 @@ function renderDocuments(only){
       return true;
     });
     const dt = x=>{ const v = parseShortFrDate(x.f.date); return v ? v.getTime() : 0; };
-    if(f.sort==="recent") list = list.slice().sort((a,b)=>dt(b)-dt(a));
-    else if(f.sort==="montant") list = list.slice().sort((a,b)=>b.f.montantTtcCt-a.f.montantTtcCt);
+    const numCmp = (a,b)=>String(a||"").localeCompare(String(b||""),"fr",{numeric:true});
+    if(f.sort==="montant") list = list.slice().sort((a,b)=>b.f.montantTtcCt-a.f.montantTtcCt);
+    else if(f.sort==="ancien") list = list.slice().sort((a,b)=>dt(a)-dt(b)||numCmp(a.f.numero,b.f.numero));
+    else if(f.sort==="numero") list = list.slice().sort((a,b)=>numCmp(b.f.numero,a.f.numero));
+    else list = list.slice().sort((a,b)=>dt(b)-dt(a)||numCmp(b.f.numero,a.f.numero));
     return `<div class="card">
       <div class="card-header"><h3>Factures</h3><span class="badge gray">${factures.length}</span></div>
       ${fltBar("factures", {placeholder:"Rechercher un client, un n° de facture, un montant…", shown:list.length, total:factures.length,
@@ -2030,7 +2036,7 @@ function renderDocuments(only){
           {field:"echeance", label:"Toutes les échéances", options:[["retard","En retard"],["7j","À échéance sous 7 jours"]]},
           {field:"periode", label:"Toutes les dates", options:FLT_PERIODS},
           {field:"equipe", label:"Toute l’équipe", options:staff.map(x=>[x,x])}],
-        sort:[["recent","Plus récentes"],["montant","Montant décroissant"]]})}
+        sort:[["recent","Plus récentes"],["ancien","Plus anciennes"],["numero","N° de facture (décroissant)"],["montant","Montant décroissant"]]})}
       ${list.length ? list.map(x=>renderDocRow("facture", x.d, x.f)).join("") : `<div class="empty-note">${factures.length ? "Aucune facture ne correspond à cette recherche." : "Aucune facture pour l’instant."}</div>`}
     </div>`; })() : ""}`;
 }
@@ -4150,7 +4156,7 @@ function filteredDossiers(){
     if(f.sort==="client") return a.client.localeCompare(b.client,"fr");
     if(f.sort==="montant") return dossierKpis(b).valeur - dossierKpis(a).valeur;
     if(f.sort==="visite"){ const va = parseShortFrDate(a.visiteDate), vb = parseShortFrDate(b.visiteDate); return (va?va.getTime():Infinity)-(vb?vb.getTime():Infinity); }
-    return 0;
+    return String(b.id||"").localeCompare(String(a.id||""),"fr",{numeric:true});
   });
 }
 function renderPager(total, page){
@@ -4180,7 +4186,7 @@ function renderDossiersList(){
     <select data-dl="etape"><option value="">Toutes les étapes</option>${PROCESS_STAGES.map(o=>`<option ${f.etape===o?"selected":""}>${o}</option>`).join("")}</select>
     <select data-dl="devis"><option value="">Devis : tous</option><option value="avec" ${f.devis==="avec"?"selected":""}>Avec devis</option><option value="sans" ${f.devis==="sans"?"selected":""}>Sans devis</option><option value="impaye" ${f.devis==="impaye"?"selected":""}>À encaisser</option></select>
     <select data-dl="ville"><option value="">Toutes les villes</option>${[...new Set(visibleDossiers().map(x=>x.ville).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"fr")).map(o=>`<option ${f.ville===o?"selected":""}>${esc(o)}</option>`).join("")}</select>
-    <select data-dl="sort"><option value="">Tri : par défaut</option><option value="client" ${f.sort==="client"?"selected":""}>Client A → Z</option><option value="montant" ${f.sort==="montant"?"selected":""}>Montant décroissant</option><option value="visite" ${f.sort==="visite"?"selected":""}>Prochaine visite</option></select>
+    <select data-dl="sort"><option value="">Tri : n° de dossier (récents en premier)</option><option value="client" ${f.sort==="client"?"selected":""}>Client A → Z</option><option value="montant" ${f.sort==="montant"?"selected":""}>Montant décroissant</option><option value="visite" ${f.sort==="visite"?"selected":""}>Prochaine visite</option></select>
     ${(f.q||f.stat||f.team||f.prio||f.etape||f.devis||f.ville||f.sort||f.scope==="mine")?`<button class="btn-ghost btn-sm flt-reset" data-action="dl-reset">✕ Effacer les filtres</button>`:""}
   </div>
   <div class="flt-count">${all.length} résultat${all.length>1?"s":""}${all.length!==visibleDossiers().length?` sur ${visibleDossiers().length}`:""}</div>
