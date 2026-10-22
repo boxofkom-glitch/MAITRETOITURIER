@@ -1053,6 +1053,7 @@ function render(){
   const savedScrollTop = oldContent ? oldContent.scrollTop : 0;
   const savedScrollY = window.scrollY;
   app.innerHTML = buildApp();
+  if(SIGN.token){ signInitPad(); return; }
   fitPointPages();
   if(document.fonts && document.fonts.status!=="loaded") document.fonts.ready.then(()=>fitPointPages());
   numberPdfPages();
@@ -1790,7 +1791,7 @@ function renderDevisDoc(d, dv){
     totals: docTotalsHtml(totals),
     reserves: dv.reserves || "",
     signature: true,
-    signatureImg: dv.signature && dv.signature.image || "",
+    signatureImg: dv.signature && dv.signature.dataUrl || "",
     cgv: companyCgv()
   });
 }
@@ -3508,6 +3509,7 @@ async function srvPull(){
   if(!SRV.on || !SRV.user || SRV.pushing || document.hidden) return;
   try{
     if(await srvLoad(false) && srvCanRender()) render();
+    if(await remoteSignCheck() && srvCanRender()) render();
   }catch(e){}
 }
 function srvStartPolling(){
@@ -3876,7 +3878,138 @@ async function acceptRequest(rid){
   openMailSend("acces_accepte", {nom:r.nom.split(" ")[0], role:ROLES[role].label, lien:siteBase()}, r.email, r.telephone);
 }
 
+// ---------- Signature à distance (le client signe sur son téléphone) ----------
+function signSummary(d, dv){
+  const t = devisTotals(dv), co = SETTINGS.company||{};
+  return {
+    entreprise: co.nom||"Maître Toiturier", client: d.client, numero: dv.numero, objet: dv.objet||d.motif||"",
+    date: dv.dateEnvoi||dv.dateCreation||todayShort(), validite: (dv.validite||30)+" jours", paiement: paiementSummary(dv),
+    cgv: companyCgv(), reserves: dv.reserves||"",
+    totaux: {ht:fmtEuros(t.htCt), tva:fmtEuros(t.tvaCt), ttc:fmtEuros(t.ttcCt)},
+    lignes: dv.lignes.map(l=>({titre:l.titre||"", designation:l.designation||"", qte:String(l.qte), pu:fmtEuros(l.prixUnitaireCt), tva:l.tvaPct+" %", total:fmtEuros(lineTotalHTct(l))}))
+  };
+}
+function signLinkOf(token){ return siteBase()+"?sign="+token; }
+async function remoteSignOpen(d, dv){
+  if(!SRV.on){ showToast("La signature à distance fonctionne avec le serveur connecté (pas en mode démo)."); return; }
+  try{
+    if(!dv.signToken){
+      const r = await srvApi("sign", "POST", {action:"create", dossierId:d.id, devisId:dv.id, summary:signSummary(d, dv)});
+      dv.signToken = r.token;
+      if(dv.statut==="Brouillon"){ dv.statut = "Envoyé"; dv.dateEnvoi = dv.dateEnvoi || todayShort(); }
+      stampHist(d, "Lien de signature à distance créé pour le devis "+dv.numero+".");
+      srvSchedule();
+    }
+    state.modal = {type:"signlink", id:d.id, devisId:dv.id};
+    render();
+  }catch(e){ showToast(e.message); }
+}
+function modalSignLink(m){
+  const d = byId(m.id), dv = d && findDevis(d, m.devisId);
+  if(!dv || !dv.signToken) return "";
+  const link = signLinkOf(dv.signToken);
+  const msg = "Bonjour "+String(d.client).split(" ")[0]+", voici votre devis "+dv.numero+" à signer en ligne : "+link;
+  return modalWrap("Signature à distance", `
+    <p style="color:var(--muted);font-size:13px">Envoyez ce lien à ${esc(d.client)}. Le client lit le devis, dessine sa signature au doigt sur son téléphone et valide. Le devis passe alors automatiquement en « Accepté ».</p>
+    <input type="text" id="signLinkInput" value="${esc(link)}" readonly style="width:100%;margin-top:8px">
+    <div class="modal-actions" style="flex-wrap:wrap">
+      <button class="btn-primary" data-action="copy-sign-link">Copier le lien</button>
+      <a class="btn-secondary" target="_blank" rel="noopener" href="https://wa.me/${esc(String(d.telephone||"").replace(/\D/g,"").replace(/^0/,"33"))}?text=${encodeURIComponent(msg)}">WhatsApp</a>
+      <a class="btn-secondary" href="sms:${esc(String(d.telephone||"").replace(/\s/g,""))}?&body=${encodeURIComponent(msg)}">SMS</a>
+      <a class="btn-secondary" href="mailto:${esc(d.email||"")}?subject=${encodeURIComponent("Votre devis "+dv.numero)}&body=${encodeURIComponent(msg)}">E-mail</a>
+      <button class="btn-ghost" data-action="modal-close">Fermer</button>
+    </div>
+    <p class="form-help" style="margin-top:8px">Le lien est valable 30 jours et ne peut servir qu’une fois.</p>`);
+}
+// Vérifie auprès du serveur si un client a signé : le devis est alors marqué gagné, signature jointe.
+async function remoteSignCheck(){
+  if(!SRV.on || !SRV.user) return false;
+  let changed = false;
+  for(const d of DOSSIERS){
+    for(const dv of (d.devis||[])){
+      if(!dv.signToken || dv.statut==="Accepté" || dv.statut==="Refusé") continue;
+      try{
+        const r = await srvApi("sign?action=status&token="+dv.signToken);
+        if(r.status==="signed" && r.image){
+          dv.signature = {dataUrl:r.image, nom:r.nom, date:new Date(r.signedAt).toLocaleString("fr-FR"), distance:true};
+          stampHist(d, "Devis "+dv.numero+" signé à distance par "+r.nom+".");
+          winDevis(d, dv.id);
+          changed = true;
+        }
+      }catch(e){}
+    }
+  }
+  if(changed){ srvSchedule(); showToast("Un client vient de signer son devis."); }
+  return changed;
+}
+
+// ---- page publique de signature (lien ?sign=…) ----
+const SIGN = {token:null, data:null, error:"", done:false, busy:false, drawn:false};
+function signToken(){ try{ const t = new URLSearchParams(location.search).get("sign"); return /^[a-f0-9]{32,64}$/.test(t||"") ? t : null; }catch(e){ return null; } }
+async function signLoad(){
+  try{
+    const r = await fetch("/api/sign?token="+SIGN.token);
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok) SIGN.error = j.error || "Impossible de charger le devis.";
+    else { SIGN.data = j; SIGN.done = j.status==="signed"; }
+  }catch(e){ SIGN.error = "Connexion impossible. Vérifiez votre réseau et réessayez."; }
+  render();
+}
+function buildSign(){
+  const wrap = inner=>`<div class="sign-page"><div class="sign-card">${inner}</div></div>`;
+  if(SIGN.error) return wrap(`<h2>Devis indisponible</h2><p class="sign-err">${esc(SIGN.error)}</p>`);
+  const j = SIGN.data;
+  if(!j) return wrap(`<p>Chargement du devis…</p>`);
+  const s = j.summary || {};
+  if(SIGN.done) return wrap(`<h2>Merci${j.nom?", "+esc(j.nom):""}</h2><p>Votre devis ${esc(s.numero)} est signé. ${esc(s.entreprise)} reçoit votre accord et revient vers vous pour la suite.</p>`);
+  return wrap(`
+    <div class="sign-brand">${esc(s.entreprise)}</div>
+    <h2>Devis ${esc(s.numero)}</h2>
+    <p class="sign-meta">Pour ${esc(s.client)} · ${esc(s.date)} · valable ${esc(s.validite)}</p>
+    ${s.objet?`<p><b>Objet :</b> ${esc(s.objet)}</p>`:""}
+    <div class="sign-lines">${(s.lignes||[]).map(l=>`<div class="sign-line"><div class="sign-lt">${l.titre?`<b>${esc(l.titre)}</b>`:""}${l.designation?`<div>${esc(l.designation)}</div>`:""}</div><div class="sign-lp">${esc(l.qte)} × ${esc(l.pu)} · TVA ${esc(l.tva)}<br><b>${esc(l.total)}</b> HT</div></div>`).join("")}</div>
+    <div class="sign-tot"><span>Total HT ${esc(s.totaux.ht)}</span><span>TVA ${esc(s.totaux.tva)}</span><b>Total TTC ${esc(s.totaux.ttc)}</b></div>
+    <p class="sign-meta">${esc(s.paiement)}</p>
+    ${s.reserves?`<p class="sign-meta"><b>Conditions particulières :</b> ${esc(s.reserves)}</p>`:""}
+    ${s.cgv?`<details class="sign-cgv"><summary>Conditions générales de vente</summary><div>${esc(s.cgv).replace(/\n\n/g,"<br><br>").replace(/\n/g,"<br>")}</div></details>`:""}
+    <label class="sign-lbl" for="signNom">Votre nom et prénom</label>
+    <input type="text" id="signNom" autocomplete="name" value="${esc(s.client)}">
+    <label class="sign-lbl">Signature (au doigt dans le cadre)</label>
+    <div class="sign-padwrap"><canvas id="signPad" width="600" height="220"></canvas><button type="button" class="btn-ghost btn-sm" data-action="sign-clear">Effacer</button></div>
+    <label class="sign-check"><input type="checkbox" id="signOk"> Bon pour accord : j’ai lu ce devis et les conditions générales de vente, et je les accepte.</label>
+    <p class="sign-err" id="signMsg"></p>
+    <button class="btn-primary sign-go" data-action="sign-submit" ${SIGN.busy?"disabled":""}>${SIGN.busy?"Envoi…":"Signer le devis"}</button>`);
+}
+function signInitPad(){
+  const c = document.getElementById("signPad");
+  if(!c || c.dataset.ready) return;
+  c.dataset.ready = "1";
+  const g = c.getContext("2d"); g.lineWidth = 3; g.lineCap = "round"; g.lineJoin = "round"; g.strokeStyle = "#111";
+  let down = false;
+  const pos = e=>{ const r = c.getBoundingClientRect(); return [(e.clientX-r.left)*c.width/r.width, (e.clientY-r.top)*c.height/r.height]; };
+  c.addEventListener("pointerdown", e=>{ down = true; c.setPointerCapture(e.pointerId); const [x,y] = pos(e); g.beginPath(); g.moveTo(x,y); g.lineTo(x+.1,y+.1); g.stroke(); SIGN.drawn = true; e.preventDefault(); });
+  c.addEventListener("pointermove", e=>{ if(!down) return; const [x,y] = pos(e); g.lineTo(x,y); g.stroke(); e.preventDefault(); });
+  ["pointerup","pointercancel"].forEach(ev=>c.addEventListener(ev, ()=>{ down = false; }));
+}
+async function signSubmit(){
+  const msg = document.getElementById("signMsg"), c = document.getElementById("signPad");
+  const nom = (document.getElementById("signNom").value||"").trim();
+  if(nom.length<2){ msg.textContent = "Indiquez votre nom."; return; }
+  if(!SIGN.drawn){ msg.textContent = "Dessinez votre signature dans le cadre."; return; }
+  if(!document.getElementById("signOk").checked){ msg.textContent = "Cochez la case « Bon pour accord »."; return; }
+  SIGN.busy = true; msg.textContent = "";
+  const btn = document.querySelector(".sign-go"); if(btn){ btn.disabled = true; btn.textContent = "Envoi…"; }
+  try{
+    const r = await fetch("/api/sign", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({action:"submit", token:SIGN.token, nom, image:c.toDataURL("image/png")})});
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(j.error || "Envoi impossible, réessayez.");
+    SIGN.done = true; SIGN.data.nom = nom;
+  }catch(e){ SIGN.busy = false; render(); const m2 = document.getElementById("signMsg"); if(m2) m2.textContent = e.message; return; }
+  SIGN.busy = false; render();
+}
+
 function buildApp(){
+  if(SIGN.token) return buildSign();
   if(state.appStage==="splash") return buildSplash();
   if(state.appStage==="login") return buildLogin();
   if(state.appStage==="loading") return buildLoading();
@@ -5282,6 +5415,7 @@ function renderDossierDevis(d){
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
           ${canEditDv?`<button class="btn-primary btn-sm" data-action="devis-save" data-id="${d.id}">Enregistrer</button>`:""}
           ${dv.statut==="Brouillon" && hasPermission("quote.update")?`<button class="btn-secondary btn-sm" data-action="devis-send" data-id="${d.id}">Marquer comme envoyé</button>`:""}
+          ${(dv.statut==="Brouillon"||dv.statut==="Envoyé") && hasPermission("quote.update")?`<button class="btn-secondary btn-sm" data-action="devis-remote-sign" data-id="${d.id}">${dv.signToken?"Lien de signature à distance":"Faire signer à distance"}</button>`:""}
           ${(dv.statut==="Envoyé"||dv.statut==="Brouillon") && hasPermission("quote.accept")?`<button class="btn-primary btn-sm" data-action="win-devis" data-id="${d.id}" data-doc="${dv.id}">✓ Gagné</button>`:""}${dv.statut==="Envoyé" && hasPermission("quote.update")?`<button class="btn-ghost btn-sm" data-action="devis-reject" data-id="${d.id}" data-doc="${dv.id}">Marquer refusé</button>`:""}
           ${hasPermission("quote.create")?`<button class="btn-ghost btn-sm" data-action="wizard-devis" data-id="${d.id}" data-from="${dv.id}">Dupliquer ce devis</button>`:""}
           <button class="btn-ghost btn-sm" data-action="doc-pdf" data-id="${d.id}" data-kind="devis" data-doc="${dv.id}">Télécharger le PDF</button>
@@ -6013,6 +6147,7 @@ function buildModal(){
   if(m.type==="matlib") return modalMatLib();
   if(m.type==="catedit") return modalCatEdit(m);
   if(m.type==="echedit") return modalEchEdit(m);
+  if(m.type==="signlink") return modalSignLink(m);
   return "";
 }
 
@@ -6151,7 +6286,9 @@ document.addEventListener("DOMContentLoaded", ()=>{
   loadCustom();
   ensurePoints();
   render();
-  srvBoot().then(()=>{ if(!SRV.on) loadPersisted().then(()=>render()); });
+  SIGN.token = signToken();
+  if(SIGN.token){ render(); signLoad(); }
+  else srvBoot().then(()=>{ if(!SRV.on) loadPersisted().then(()=>render()); });
   window.addEventListener("resize", applyPdfScale);
 
   document.getElementById("app").addEventListener("click", (e)=>{
@@ -6551,6 +6688,20 @@ document.addEventListener("DOMContentLoaded", ()=>{
       if(l){ delete l.photo; render(); }
       return;
     }
+    if(action==="devis-remote-sign"){
+      saveDevisLinesFromDOM();
+      const d = byId(t.dataset.id), dv = d && latestDevis(d);
+      if(dv) remoteSignOpen(d, dv);
+      return;
+    }
+    if(action==="copy-sign-link"){
+      const inp = document.getElementById("signLinkInput");
+      if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(inp.value).then(()=>showToast("Lien copié.")).catch(()=>{ inp.select(); showToast("Sélectionnez puis copiez le lien."); });
+      else { inp.select(); showToast("Sélectionnez puis copiez le lien."); }
+      return;
+    }
+    if(action==="sign-clear"){ const c = document.getElementById("signPad"); if(c){ c.getContext("2d").clearRect(0,0,c.width,c.height); SIGN.drawn = false; } return; }
+    if(action==="sign-submit"){ signSubmit(); return; }
     if(action==="devis-add-line"){
       saveDevisLinesFromDOM();
       latestDevis(byId(t.dataset.id)).lignes.push(freshDevisLine());
