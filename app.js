@@ -1642,7 +1642,8 @@ function docEndHtml(o){
   const rib = co.iban ? `<div class="doc2-rib"><b>Règlement par virement</b><br>IBAN : ${esc(co.iban)}${co.bic?" · BIC : "+esc(co.bic):""}${co.titulaire?"<br>Titulaire : "+esc(co.titulaire):""}</div>` : "";
   const conditions = o.bannerText ? `<div class="doc2-conditions"><div class="doc2-cond-label">${iconSvg("doc",14)}${esc(o.bannerLabel||"Conditions")}</div><p>${o.bannerText}</p>${rib}</div>` : "";
   const reserves = (o.reserves||"").trim() ? `<div class="doc2-reserves"><div class="doc2-cond-label">${iconSvg("doc",14)}Conditions particulières / réserves</div><p>${esc(o.reserves.trim()).replace(/\n/g,"<br>")}</p></div>` : "";
-  return `<div class="doc2-end"><div class="doc2-bottom">${conditions}<div class="doc2-totals">${o.totals}</div></div>${reserves}</div>`;
+  const sign = o.signature ? `<div class="doc2-sign"><div class="doc2-sign-box"><div class="doc2-sign-t">Bon pour accord</div><div class="doc2-sign-h">Date, mention « Bon pour accord » et signature du client</div>${o.signatureImg?`<img class="doc2-sign-img" src="${esc(o.signatureImg)}" alt="Signature du client">`:""}</div><div class="doc2-sign-box"><div class="doc2-sign-t">${esc(co.nom||"L’entreprise")}</div><div class="doc2-sign-h">Cachet et signature</div></div></div>` : "";
+  return `<div class="doc2-end"><div class="doc2-bottom">${conditions}<div class="doc2-totals">${o.totals}</div></div>${reserves}${sign}</div>`;
 }
 function docCgvParas(cgv){
   return String(cgv||"").split(/\r?\n/).map(s=>s.trim()).filter(Boolean)
@@ -1757,6 +1758,8 @@ function renderDevisDoc(d, dv){
     bannerText: `${esc(paiementSummary(dv))} Devis valable ${valid} jours. Pour accepter, il suffit de nous renvoyer ce document signé, précédé de la mention « Bon pour accord ».`,
     totals: docTotalsHtml(totals),
     reserves: dv.reserves || "",
+    signature: true,
+    signatureImg: dv.signature && dv.signature.image || "",
     cgv: SETTINGS.company.cgv || ""
   });
 }
