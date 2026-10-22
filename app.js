@@ -1551,10 +1551,39 @@ function docTotalsHtml(lines){
 }
 
 // Ligne du PDF : le titre en gras, la désignation (détail) en dessous.
+// Photo facultative sur une ligne de devis (ex. une zinguerie sur une cheminée) : réduite, jointe au devis PDF.
+function linePhotoUi(scope, i, l, id){
+  const has = l.photo && l.photo.dataUrl;
+  return `<div class="line-photo">${has?`<img src="${l.photo.dataUrl}" alt="Photo de la ligne"><button type="button" class="btn-ghost btn-sm" data-action="line-photo-remove" data-scope="${scope}" data-idx="${i}" data-id="${esc(id||"")}">Retirer la photo</button>`:""}<label class="btn-ghost btn-sm line-photo-btn">${has?"Changer la photo":"Ajouter une photo"}<input type="file" accept="image/*" class="line-photo-in" data-scope="${scope}" data-idx="${i}" data-id="${esc(id||"")}" hidden></label></div>`;
+}
+function linePhotoShrink(file){
+  return new Promise(res=>{
+    const r = new FileReader();
+    r.onerror = ()=>res(null);
+    r.onload = ()=>{
+      const im = new Image();
+      im.onerror = ()=>res(null);
+      im.onload = ()=>{
+        const max = 900, k = Math.min(1, max/Math.max(im.naturalWidth, im.naturalHeight));
+        const c = document.createElement("canvas"); c.width = Math.round(im.naturalWidth*k); c.height = Math.round(im.naturalHeight*k);
+        c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+        res(c.toDataURL("image/jpeg", .78));
+      };
+      im.src = r.result;
+    };
+    r.readAsDataURL(file);
+  });
+}
+function linePhotoTarget(scope, id, idx){
+  if(scope==="wz"){ const w = state.wizard; return w && w.data.lignes[idx]; }
+  const d = byId(id), dv = d && latestDevis(d);
+  return dv && dv.lignes[idx];
+}
 function docLineCell(l){
   const t = l.titre ? `<b class="doc2-rt">${esc(l.titre)}</b>` : "";
   const dsg = l.designation ? `<div class="${l.titre?"doc2-rd":"doc2-rd0"}">${esc(l.designation)}</div>` : "";
-  return (t||dsg) ? t+dsg : "—";
+  const ph = l.photo && l.photo.dataUrl ? `<img class="doc2-ph" src="${l.photo.dataUrl}" alt="">` : "";
+  return (t||dsg||ph) ? t+dsg+ph : "—";
 }
 function docRowsFromDevis(dv){
   return dv.lignes.map(l=>`<tr><td>${docLineCell(l)}</td><td class="r">${l.qte}</td><td class="r">${fmtEuros(l.prixUnitaireCt)}</td><td class="r">${l.tvaPct} %</td><td class="r">${fmtEuros(lineTotalHTct(l))}</td></tr>`);
@@ -2497,6 +2526,7 @@ return `<p class="wz-intro">Ajoutez les prestations et le matériel : chaque lig
           <div class="wz-desc">
             <input class="wz-line" data-idx="${i}" data-field="titre" value="${esc(l.titre||"")}" placeholder="Titre de la ligne (ex. Dépose de la couverture)">
             <textarea class="wz-line" data-idx="${i}" data-field="designation" rows="2" placeholder="Désignation : le détail s’affiche sous le titre">${esc(l.designation)}</textarea>
+            ${linePhotoUi("wz", i, l, "")}
           </div>
           <div class="wz-qte-unit">
             <input class="wz-line" data-idx="${i}" data-field="qte" type="number" min="0" step="1" value="${l.qte}">
@@ -5224,7 +5254,7 @@ function renderDossierDevis(d){
             <tbody>
             ${dv.lignes.map((l,i)=>`
               <tr>
-                <td data-label="Titre et désignation">${canEditDv?`<div class="dv-desc"><input type="text" class="devis-line-input" data-idx="${i}" data-field="titre" value="${esc(l.titre||"")}" placeholder="Titre de la ligne" style="font-weight:600"><textarea class="devis-line-input" data-idx="${i}" data-field="designation" rows="2" placeholder="Désignation : le détail s’affiche sous le titre">${esc(l.designation)}</textarea></div>`:`${l.titre?`<b>${esc(l.titre)}</b><br>`:""}${esc(l.designation)}`}</td>
+                <td data-label="Titre et désignation">${canEditDv?`<div class="dv-desc"><input type="text" class="devis-line-input" data-idx="${i}" data-field="titre" value="${esc(l.titre||"")}" placeholder="Titre de la ligne" style="font-weight:600"><textarea class="devis-line-input" data-idx="${i}" data-field="designation" rows="2" placeholder="Désignation : le détail s’affiche sous le titre">${esc(l.designation)}</textarea>${linePhotoUi("dv", i, l, d.id)}</div>`:`${l.titre?`<b>${esc(l.titre)}</b><br>`:""}${esc(l.designation)}${l.photo&&l.photo.dataUrl?`<div class="line-photo"><img src="${l.photo.dataUrl}" alt="Photo de la ligne"></div>`:""}`}</td>
                 <td data-label="Quantité" style="width:64px">${canEditDv?`<input type="number" min="0" step="1" class="devis-line-input" data-idx="${i}" data-field="qte" value="${l.qte}">`:l.qte}</td>
                 <td data-label="Unité" style="width:80px">${canEditDv?`<select class="devis-line-input" data-idx="${i}" data-field="unite">${unitOptionsHtml(l.unite)}</select>`:esc(l.unite||"")}</td>
                 <td data-label="Prix unitaire HT" style="width:100px">${canEditDv?`<input type="number" min="0" step="0.01" class="devis-line-input" data-idx="${i}" data-field="prixUnitaire" value="${(l.prixUnitaireCt/100).toFixed(2)}">`:fmtEuros(l.prixUnitaireCt)}</td>
@@ -6515,6 +6545,12 @@ document.addEventListener("DOMContentLoaded", ()=>{
       render();
       return;
     }
+    if(action==="line-photo-remove"){
+      if(t.dataset.scope==="wz") wzFlush(); else saveDevisLinesFromDOM();
+      const l = linePhotoTarget(t.dataset.scope, t.dataset.id, parseInt(t.dataset.idx,10));
+      if(l){ delete l.photo; render(); }
+      return;
+    }
     if(action==="devis-add-line"){
       saveDevisLinesFromDOM();
       latestDevis(byId(t.dataset.id)).lignes.push(freshDevisLine());
@@ -6998,6 +7034,16 @@ document.addEventListener("DOMContentLoaded", ()=>{
       p.comment = e.target.value;
       reformulatePoint(pointName, p);
       render();
+    }
+    if(e.target.classList && e.target.classList.contains("line-photo-in")){
+      const f = e.target.files && e.target.files[0]; if(!f) return;
+      const t = e.target.dataset;
+      if(t.scope==="wz") wzFlush(); else saveDevisLinesFromDOM();
+      linePhotoShrink(f).then(url=>{
+        const l = linePhotoTarget(t.scope, t.id, parseInt(t.idx,10));
+        if(l && url){ l.photo = {name:f.name, dataUrl:url}; render(); }
+      });
+      return;
     }
     if(e.target.id && e.target.id.startsWith("chPhoto-")){
       const files = Array.from(e.target.files || []);
