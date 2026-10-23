@@ -501,7 +501,11 @@ function catalogFind(code){ return SERVICE_CATALOG.find(x=>x.code===code) || MAT
 function catalogVenteCt(item){ return item.prixVenteCt!=null ? item.prixVenteCt : item.prixUnitaireCt; }
 // Une prestation du catalogue donne le titre de la ligne ; son éventuelle description (champ « Description »
 // de la fiche) devient la désignation affichée dessous. Une même prestation peut être ajoutée plusieurs fois.
-function catalogLineFrom(item){ return freshDevisLine({titre:item.label, designation:item.desc||"", qte:1, prixUnitaireCt:catalogVenteCt(item), tvaPct:item.tvaPct, code:item.code, coutUnitaireCt:item.prixAchatCt||0, unite:item.unite||"forfait"}); }
+function catalogLineFrom(item){
+  const l = freshDevisLine({titre:item.label, designation:item.desc||"", qte:1, prixUnitaireCt:catalogVenteCt(item), tvaPct:item.tvaPct, code:item.code, coutUnitaireCt:item.prixAchatCt||0, unite:item.unite||"forfait"});
+  if(item.photo && item.photo.dataUrl) l.photo = {name:item.photo.name||"", dataUrl:item.photo.dataUrl};
+  return l;
+}
 function lineIsBlank(l){ return !l.titre && !l.designation && !l.prixUnitaireCt; }
 function lineLabel(l){ return ((l.titre||"")+" "+(l.designation||"")).trim(); }
 function catalogOptionsHtml(exclude){
@@ -1557,7 +1561,7 @@ function linePhotoUi(scope, i, l, id){
   const has = l.photo && l.photo.dataUrl;
   return `<div class="line-photo">${has?`<img src="${l.photo.dataUrl}" alt="Photo de la ligne"><button type="button" class="btn-ghost btn-sm" data-action="line-photo-remove" data-scope="${scope}" data-idx="${i}" data-id="${esc(id||"")}">Retirer la photo</button>`:""}<label class="btn-ghost btn-sm line-photo-btn">${has?"Changer la photo":"Ajouter une photo"}<input type="file" accept="image/*" class="line-photo-in" data-scope="${scope}" data-idx="${i}" data-id="${esc(id||"")}" hidden></label></div>`;
 }
-function linePhotoShrink(file){
+function linePhotoShrink(file, maxPx, quality){
   return new Promise(res=>{
     const r = new FileReader();
     r.onerror = ()=>res(null);
@@ -1565,10 +1569,10 @@ function linePhotoShrink(file){
       const im = new Image();
       im.onerror = ()=>res(null);
       im.onload = ()=>{
-        const max = 900, k = Math.min(1, max/Math.max(im.naturalWidth, im.naturalHeight));
+        const max = maxPx||900, k = Math.min(1, max/Math.max(im.naturalWidth, im.naturalHeight));
         const c = document.createElement("canvas"); c.width = Math.round(im.naturalWidth*k); c.height = Math.round(im.naturalHeight*k);
         c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
-        res(c.toDataURL("image/jpeg", .78));
+        res(c.toDataURL("image/jpeg", quality||.78));
       };
       im.src = r.result;
     };
@@ -3597,7 +3601,7 @@ function catalogListRow(kind, item, i, canEdit){
   const achat = item.prixAchatCt||0;
   const pct = vente>0 ? Math.round((vente-achat)/vente*1000)/10 : null;
   return `<div class="row-item cat-item" data-search="${esc(item.label.toLowerCase())}"${canEdit?` data-action="cat-edit-open" data-kind="${kind}" data-idx="${i}"`:""}>
-    <div style="min-width:0"><div class="row-title">${esc(item.label)}</div><div class="row-sub">${esc(item.unite||(kind==="cat"?"forfait":"u"))} · TVA ${item.tvaPct} %</div></div>
+    <div style="min-width:0;display:flex;align-items:center;gap:10px">${item.photo&&item.photo.dataUrl?`<img class="cat-thumb" src="${item.photo.dataUrl}" alt="">`:""}<div style="min-width:0"><div class="row-title">${esc(item.label)}</div><div class="row-sub">${esc(item.unite||(kind==="cat"?"forfait":"u"))} · TVA ${item.tvaPct} %</div></div></div>
     <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
       ${canEdit && pct!=null ? badge(pct+" %", margeBadgeCls(pct)) : ""}
       <div class="doc-row-amount">${fmtEuros(vente)}</div>
@@ -3662,6 +3666,10 @@ function modalCatEdit(m){
   return modalWrap(isNew ? (kind==="cat"?"Nouvelle prestation":"Nouveau matériau") : item.label, `
     <div class="form-field"><label>Titre de la ligne</label><input type="text" id="ceLabel" value="${esc(item.label)}"></div>
     <div class="form-field"><label>Désignation (détail affiché sous le titre dans le devis, facultatif)</label><textarea id="ceDesc" rows="3" style="width:100%;font-family:inherit">${esc(item.desc||"")}</textarea></div>
+    ${(()=>{ const ph = m.photo===undefined ? item.photo : m.photo; return `<div class="form-field"><label>Photo (facultative, reprise automatiquement sur la ligne du devis)</label>
+      <div class="line-photo"><img id="cePhotoPrev" ${ph&&ph.dataUrl?`src="${ph.dataUrl}"`:`style="display:none"`} alt="Photo">
+        <button type="button" class="btn-ghost btn-sm" id="cePhotoDel" data-action="ce-photo-remove" ${ph&&ph.dataUrl?"":`style="display:none"`}>Retirer la photo</button>
+        <label class="btn-ghost btn-sm line-photo-btn">${ph&&ph.dataUrl?"Changer la photo":"Ajouter une photo"}<input type="file" accept="image/*" id="cePhotoIn" hidden></label></div></div>`; })()}
     <div class="wz-grid">
       <div class="form-field"><label>Prix d’achat HT (coût, interne)</label><input type="number" min="0" step="0.01" id="ceAchat" value="${(achat/100).toFixed(2)}" oninput="ceLive()"></div>
       <div class="form-field"><label>Prix de vente HT</label><input type="number" min="0" step="0.01" id="ceVente" value="${(vente/100).toFixed(2)}" oninput="ceLive()"></div>
@@ -6807,6 +6815,12 @@ document.addEventListener("DOMContentLoaded", ()=>{
       showToast("Conditions de paiement enregistrées.");
       return;
     }
+    if(action==="ce-photo-remove"){
+      state.modal.photo = null;
+      const im = document.getElementById("cePhotoPrev"); if(im){ im.removeAttribute("src"); im.style.display = "none"; }
+      t.style.display = "none";
+      return;
+    }
     if(action==="catedit-save"){
       const kind = t.dataset.kind, idx = parseInt(t.dataset.idx,10);
       const label = document.getElementById("ceLabel").value.trim();
@@ -6817,14 +6831,17 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const unite = document.getElementById("ceUnite").value.trim() || (kind==="cat"?"forfait":"u");
       const desc = (document.getElementById("ceDesc")||{value:""}).value.trim();
       const list = kind==="cat" ? SERVICE_CATALOG : MATERIEL_CATALOG;
+      const mp = state.modal && state.modal.photo; // undefined = inchangée, null = retirée
       if(idx<0){
         const code = (kind==="cat"?"CUS-":"CUSM-")+Date.now().toString(36).toUpperCase();
-        if(kind==="cat") list.push({code, label, desc, prixAchatCt:achatCt, prixUnitaireCt:venteCt, tvaPct, unite});
-        else list.push({code, label, desc, prixAchatCt:achatCt, prixVenteCt:venteCt, tvaPct, unite});
+        const it = kind==="cat" ? {code, label, desc, prixAchatCt:achatCt, prixUnitaireCt:venteCt, tvaPct, unite} : {code, label, desc, prixAchatCt:achatCt, prixVenteCt:venteCt, tvaPct, unite};
+        if(mp) it.photo = mp;
+        list.push(it);
       } else {
         const item = list[idx];
         item.label = label; item.desc = desc; item.prixAchatCt = achatCt; item.tvaPct = tvaPct; item.unite = unite;
         if(kind==="cat") item.prixUnitaireCt = venteCt; else item.prixVenteCt = venteCt;
+        if(state.modal && state.modal.photo!==undefined){ if(mp) item.photo = mp; else delete item.photo; }
       }
       saveCustom(); state.modal = null; render(); showToast("Enregistré."); return;
     }
@@ -7186,6 +7203,16 @@ document.addEventListener("DOMContentLoaded", ()=>{
       p.comment = e.target.value;
       reformulatePoint(pointName, p);
       render();
+    }
+    if(e.target.id==="cePhotoIn"){
+      const f = e.target.files && e.target.files[0]; if(!f) return;
+      linePhotoShrink(f, 520, .72).then(url=>{
+        if(!url || !state.modal) return;
+        state.modal.photo = {name:f.name, dataUrl:url};
+        const im = document.getElementById("cePhotoPrev"); if(im){ im.src = url; im.style.display = ""; }
+        const del = document.getElementById("cePhotoDel"); if(del) del.style.display = "";
+      });
+      return;
     }
     if(e.target.classList && e.target.classList.contains("line-photo-in")){
       const f = e.target.files && e.target.files[0]; if(!f) return;
